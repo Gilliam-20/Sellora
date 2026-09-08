@@ -22,7 +22,9 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
           child: ResponsiveCenter(
             maxWidth: 900,
             child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(
+                  horizontal: context.pageHorizontalPadding,
+                  vertical: AppSpacing.md),
               children: [
                 GridView.extent(
                   // A fixed 2-column count stayed 2-up all the way to a
@@ -35,19 +37,35 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
                   mainAxisSpacing: AppSpacing.sm,
                   childAspectRatio: 1.5,
                   children: [
-                    ManifestStatCard(label: 'Total GMV', value: Formatters.currency(controller.totalGmv, code: 'KES'), accentColor: AppColors.manifestGold),
-                    ManifestStatCard(label: 'Active sellers', value: '${controller.activeSellerCount}', accentColor: AppColors.horizonTeal),
-                    ManifestStatCard(label: 'Pending approval', value: '${controller.pendingSellerCount}', accentColor: AppColors.adminAccent),
-                    ManifestStatCard(label: 'Total orders', value: '${controller.orders.length}', accentColor: AppColors.info),
+                    ManifestStatCard(
+                        label: 'Total GMV',
+                        value: Formatters.currency(controller.totalGmv,
+                            code: 'KES'),
+                        accentColor: AppColors.manifestGold),
+                    ManifestStatCard(
+                        label: 'Active sellers',
+                        value: '${controller.activeSellerCount}',
+                        accentColor: AppColors.horizonTeal),
+                    ManifestStatCard(
+                        label: 'Pending approval',
+                        value: '${controller.pendingSellerCount}',
+                        accentColor: AppColors.adminAccent),
+                    ManifestStatCard(
+                        label: 'Total orders',
+                        value: '${controller.orders.length}',
+                        accentColor: AppColors.info),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text('Recent orders across all sellers', style: Theme.of(context).textTheme.titleMedium),
+                Text('Recent orders across all sellers',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 if (controller.orders.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                    child: Text('No orders on the platform yet.', style: Theme.of(context).textTheme.bodySmall),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                    child: Text('No orders on the platform yet.',
+                        style: Theme.of(context).textTheme.bodySmall),
                   )
                 else
                   ...controller.orders.take(6).map(
@@ -55,9 +73,12 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
                           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                           child: ManifestStub(
                             code: order.code,
-                            title: Formatters.currency(order.total, code: order.currency),
-                            subtitle: 'Seller: ${order.sellerId} · ${Formatters.relative(order.createdAt)}',
-                            accentColor: AppColors.statusColor(order.status.name),
+                            title: Formatters.currency(order.total,
+                                code: order.currency),
+                            subtitle:
+                                'Seller: ${order.sellerId} · ${Formatters.relative(order.createdAt)}',
+                            accentColor:
+                                AppColors.statusColor(order.status.name),
                           ),
                         ),
                       ),

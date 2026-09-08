@@ -1,4 +1,5 @@
 import '../models/product_model.dart';
+import '../models/store_model.dart';
 import '../models/subscription_plan_model.dart';
 
 /// Sample catalog + plans used when [AppConstants.useMockData] is true.
@@ -103,6 +104,35 @@ class MockSeedData {
           rating: 4.3,
           stock: 320,
           discountPercent: 20,
+        ),
+      ];
+
+  /// Two distinct tenants so the store boundary is actually testable in
+  /// demo mode: different sellers, different products (see
+  /// MockProductRepository), separate buyers, carts and order history.
+  /// `store-aminas`' sellerId matches the existing "sign in with an email
+  /// containing 'seller'" quick-login shortcut in MockAuthRepository, so
+  /// that shortcut now lands on a real store instead of a floating uid.
+  static List<StoreModel> stores() => [
+        StoreModel(
+          id: 'store-aminas',
+          slug: 'aminas-picks',
+          sellerId: 'mock-seller',
+          name: "Amina's Curated Picks",
+          tagline: 'Curated home & tech finds, shipped fast.',
+          primaryColorHex: '#16213E', // Cargo Navy
+          currencyCode: 'KES',
+          createdAt: DateTime.now().subtract(const Duration(days: 120)),
+        ),
+        StoreModel(
+          id: 'store-jengo',
+          slug: 'jengo-electronics',
+          sellerId: 'mock-seller-2',
+          name: 'Jengo Electronics',
+          tagline: 'Everyday gadgets and accessories at honest prices.',
+          primaryColorHex: '#2EC4B6', // Horizon Teal
+          currencyCode: 'KES',
+          createdAt: DateTime.now().subtract(const Duration(days: 45)),
         ),
       ];
 

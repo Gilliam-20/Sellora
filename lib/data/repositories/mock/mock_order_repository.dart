@@ -19,6 +19,15 @@ class MockOrderRepository extends GetxService implements OrderRepository {
   }
 
   @override
+  Future<List<OrderModel>> buyerStoreOrders(
+      String buyerId, String storeId) async {
+    await Future.delayed(const Duration(milliseconds: 250));
+    return _orders
+        .where((o) => o.buyerId == buyerId && o.storeId == storeId)
+        .toList();
+  }
+
+  @override
   Future<List<OrderModel>> sellerOrders(String sellerId) async {
     await Future.delayed(const Duration(milliseconds: 250));
     return _orders.where((o) => o.sellerId == sellerId).toList();
@@ -41,6 +50,7 @@ class MockOrderRepository extends GetxService implements OrderRepository {
         code: o.code,
         buyerId: o.buyerId,
         sellerId: o.sellerId,
+        storeId: o.storeId,
         items: o.items,
         status: status,
         total: o.total,

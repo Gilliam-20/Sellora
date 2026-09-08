@@ -57,6 +57,7 @@ class OrderModel {
     required this.code,
     required this.buyerId,
     required this.sellerId,
+    this.storeId,
     required this.items,
     required this.status,
     required this.total,
@@ -72,6 +73,10 @@ class OrderModel {
   final String code; // human-readable manifest code, e.g. SLR-2049
   final String buyerId;
   final String sellerId;
+
+  /// The store (see StoreModel) this order was placed against. Nullable
+  /// for orders placed before stores existed; new orders always set it.
+  final String? storeId;
   final List<OrderItem> items;
   final OrderStatus status;
   final double total;
@@ -88,15 +93,20 @@ class OrderModel {
       code: map['code'] as String? ?? '',
       buyerId: map['buyerId'] as String,
       sellerId: map['sellerId'] as String,
-      items: (map['items'] as List? ?? []).map((e) => OrderItem.fromMap(Map<String, dynamic>.from(e))).toList(),
-      status: OrderStatus.values.firstWhere((s) => s.name == map['status'], orElse: () => OrderStatus.pending),
+      storeId: map['storeId'] as String?,
+      items: (map['items'] as List? ?? [])
+          .map((e) => OrderItem.fromMap(Map<String, dynamic>.from(e)))
+          .toList(),
+      status: OrderStatus.values.firstWhere((s) => s.name == map['status'],
+          orElse: () => OrderStatus.pending),
       total: (map['total'] as num?)?.toDouble() ?? 0,
       currency: map['currency'] as String? ?? 'USD',
       shippingAddress: map['shippingAddress'] as String? ?? '',
       paymentMethod: map['paymentMethod'] as String? ?? 'IntaSend',
       paymentReference: map['paymentReference'] as String?,
       trackingNumber: map['trackingNumber'] as String?,
-      createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -105,6 +115,7 @@ class OrderModel {
         'code': code,
         'buyerId': buyerId,
         'sellerId': sellerId,
+        'storeId': storeId,
         'items': items.map((e) => e.toMap()).toList(),
         'status': status.name,
         'total': total,

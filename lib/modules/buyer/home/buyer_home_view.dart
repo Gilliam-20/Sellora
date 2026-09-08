@@ -18,14 +18,23 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Sellora', style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 22, color: AppColors.cargoNavy)),
+        title: Obx(
+          () => Text(
+            controller.storeName.value,
+            style: Theme.of(context)
+                .textTheme
+                .displaySmall
+                ?.copyWith(fontSize: 22, color: AppColors.cargoNavy),
+          ),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: controller.loadFeed,
         child: CustomScrollView(
           slivers: [
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(sliverPadding.horizontal / 2, AppSpacing.sm, sliverPadding.horizontal / 2, 0),
+              padding: EdgeInsets.fromLTRB(sliverPadding.horizontal / 2,
+                  AppSpacing.sm, sliverPadding.horizontal / 2, 0),
               sliver: SliverToBoxAdapter(
                 child: TextField(
                   onSubmitted: controller.search,
@@ -44,18 +53,25 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
                   child: Obx(
                     () => ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      padding: EdgeInsets.symmetric(horizontal: sliverPadding.horizontal / 2),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: sliverPadding.horizontal / 2),
                       itemCount: controller.categories.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: AppSpacing.sm),
                       itemBuilder: (context, index) {
                         final category = controller.categories[index];
-                        final isSelected = controller.selectedCategory.value == category;
+                        final isSelected =
+                            controller.selectedCategory.value == category;
                         return ChoiceChip(
                           label: Text(category),
                           selected: isSelected,
                           selectedColor: AppColors.cargoNavy,
-                          labelStyle: TextStyle(color: isSelected ? AppColors.cloud : AppColors.ink, fontWeight: FontWeight.w600),
-                          onSelected: (_) => controller.selectCategory(category),
+                          labelStyle: TextStyle(
+                              color:
+                                  isSelected ? AppColors.cloud : AppColors.ink,
+                              fontWeight: FontWeight.w600),
+                          onSelected: (_) =>
+                              controller.selectCategory(category),
                         );
                       },
                     ),
@@ -88,7 +104,8 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
                       final product = controller.products[index];
                       return ProductCard(
                         product: product,
-                        onTap: () => Get.toNamed(Routes.buyerProductDetails, arguments: product),
+                        onTap: () => Get.toNamed(Routes.buyerProductDetails,
+                            arguments: product),
                       );
                     },
                     childCount: controller.products.length,

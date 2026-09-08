@@ -16,7 +16,8 @@ class CheckoutController extends GetxController {
   final isPlacingOrder = false.obs;
   final errorMessage = RxnString();
 
-  Future<void> placeOrder({required String address, required String mpesaPhone}) async {
+  Future<void> placeOrder(
+      {required String address, required String mpesaPhone}) async {
     final user = _authRepo.cachedUser;
     if (user == null || cartRepo.items.isEmpty) return;
 
@@ -39,12 +40,14 @@ class CheckoutController extends GetxController {
 
       // A real multi-seller cart would split into one order per seller.
       // Simplified here to a single order against the first item's seller.
-      final sellerId = cartRepo.items.first.product.sellerId ?? 'unknown-seller';
+      final sellerId =
+          cartRepo.items.first.product.sellerId ?? 'unknown-seller';
       final order = OrderModel(
         id: 'order-${DateTime.now().millisecondsSinceEpoch}',
         code: 'SLR-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}',
         buyerId: user.uid,
         sellerId: sellerId,
+        storeId: cartRepo.storeId,
         items: cartRepo.items
             .map((i) => OrderItem(
                   productId: i.product.id,
@@ -67,9 +70,11 @@ class CheckoutController extends GetxController {
       await _orderRepo.placeOrder(order);
       cartRepo.clear();
       Get.offAllNamed(Routes.buyerShell, arguments: {'tab': 2});
-      Get.snackbar('Order placed', 'Your order ${order.code} is on its way to processing.');
+      Get.snackbar('Order placed',
+          'Your order ${order.code} is on its way to processing.');
     } catch (e) {
-      errorMessage.value = 'Payment didn\'t go through. Check the number and try again.';
+      errorMessage.value =
+          'Payment didn\'t go through. Check the number and try again.';
     } finally {
       isPlacingOrder.value = false;
     }

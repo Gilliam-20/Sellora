@@ -45,7 +45,8 @@ class MockAdminRepository extends GetxService implements AdminRepository {
   Future<void> setSellerStatus(String sellerId, SellerStatus status) async {
     await Future.delayed(const Duration(milliseconds: 300));
     final index = _sellers.indexWhere((s) => s.uid == sellerId);
-    if (index != -1) _sellers[index] = _sellers[index].copyWith(sellerStatus: status);
+    if (index != -1)
+      _sellers[index] = _sellers[index].copyWith(sellerStatus: status);
   }
 
   @override

@@ -7,7 +7,8 @@ import '../utils/responsive.dart';
 /// [NavigationRailDestination] depending on viewport width, so every
 /// portal shell (buyer/seller/admin) only has to list its tabs once.
 class ShellDestination {
-  const ShellDestination({required this.icon, required this.label, this.selectedIcon});
+  const ShellDestination(
+      {required this.icon, required this.label, this.selectedIcon});
 
   final Widget icon;
   final Widget? selectedIcon;
@@ -46,7 +47,11 @@ class AdaptiveShellScaffold extends StatelessWidget {
           onTap: onDestinationSelected,
           type: BottomNavigationBarType.fixed,
           items: [
-            for (final d in destinations) BottomNavigationBarItem(icon: d.icon, activeIcon: d.selectedIcon ?? d.icon, label: d.label),
+            for (final d in destinations)
+              BottomNavigationBarItem(
+                  icon: d.icon,
+                  activeIcon: d.selectedIcon ?? d.icon,
+                  label: d.label),
           ],
         ),
       );
@@ -61,15 +66,24 @@ class AdaptiveShellScaffold extends StatelessWidget {
             onDestinationSelected: onDestinationSelected,
             labelType: NavigationRailLabelType.all,
             backgroundColor: AppColors.cargoNavy,
-            selectedIconTheme: const IconThemeData(color: AppColors.manifestGold),
-            unselectedIconTheme: const IconThemeData(color: AppColors.slateLight),
-            selectedLabelTextStyle: const TextStyle(color: AppColors.manifestGold, fontWeight: FontWeight.w600),
-            unselectedLabelTextStyle: const TextStyle(color: AppColors.slateLight),
+            selectedIconTheme:
+                const IconThemeData(color: AppColors.manifestGold),
+            unselectedIconTheme:
+                const IconThemeData(color: AppColors.slateLight),
+            selectedLabelTextStyle: const TextStyle(
+                color: AppColors.manifestGold, fontWeight: FontWeight.w600),
+            unselectedLabelTextStyle:
+                const TextStyle(color: AppColors.slateLight),
             destinations: [
-              for (final d in destinations) NavigationRailDestination(icon: d.icon, selectedIcon: d.selectedIcon ?? d.icon, label: Text(d.label)),
+              for (final d in destinations)
+                NavigationRailDestination(
+                    icon: d.icon,
+                    selectedIcon: d.selectedIcon ?? d.icon,
+                    label: Text(d.label)),
             ],
           ),
-          const VerticalDivider(width: 1, thickness: 1, color: AppColors.hairline),
+          const VerticalDivider(
+              width: 1, thickness: 1, color: AppColors.hairline),
           Expanded(child: body),
         ],
       ),

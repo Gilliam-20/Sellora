@@ -32,7 +32,11 @@ class SellerDashboardController extends GetxController {
     recentOrders.value = orders.take(5).toList();
     listingCount.value = listings.where((l) => l.isListed).length;
     totalRevenue.value = orders.fold(0.0, (sum, o) => sum + o.total);
-    pendingCount.value = orders.where((o) => o.status == OrderStatus.pending || o.status == OrderStatus.processing).length;
+    pendingCount.value = orders
+        .where((o) =>
+            o.status == OrderStatus.pending ||
+            o.status == OrderStatus.processing)
+        .length;
 
     isLoading.value = false;
   }

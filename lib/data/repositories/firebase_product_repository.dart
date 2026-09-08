@@ -7,23 +7,27 @@ import 'product_repository.dart';
 /// Production implementation: catalog browsing goes through
 /// [CjDropshippingService] (Cloud Functions -> CJ Dropshipping API);
 /// listings and storefront reads/writes go through Firestore.
-class FirebaseProductRepository extends GetxService implements ProductRepository {
+class FirebaseProductRepository extends GetxService
+    implements ProductRepository {
   final FirestoreService _fs = Get.find<FirestoreService>();
   final CjDropshippingService _cj = Get.find<CjDropshippingService>();
 
   @override
-  Future<List<ProductModel>> browseCatalog({String? keyword, String? category}) {
+  Future<List<ProductModel>> browseCatalog(
+      {String? keyword, String? category}) {
     return _cj.searchProducts(keyword: keyword, category: category);
   }
 
   @override
   Future<List<ProductModel>> sellerListings(String sellerId) async {
-    final snap = await _fs.listings.where('sellerId', isEqualTo: sellerId).get();
+    final snap =
+        await _fs.listings.where('sellerId', isEqualTo: sellerId).get();
     return snap.docs.map((d) => ProductModel.fromMap(d.data())).toList();
   }
 
   @override
-  Future<List<ProductModel>> storefrontFeed({String? keyword, String? category}) async {
+  Future<List<ProductModel>> storefrontFeed(
+      {String? keyword, String? category}) async {
     var query = _fs.listings.where('isListed', isEqualTo: true);
     if (category != null && category != 'All') {
       query = query.where('category', isEqualTo: category);
@@ -31,7 +35,9 @@ class FirebaseProductRepository extends GetxService implements ProductRepository
     final snap = await query.get();
     var results = snap.docs.map((d) => ProductModel.fromMap(d.data())).toList();
     if (keyword != null && keyword.isNotEmpty) {
-      results = results.where((p) => p.title.toLowerCase().contains(keyword.toLowerCase())).toList();
+      results = results
+          .where((p) => p.title.toLowerCase().contains(keyword.toLowerCase()))
+          .toList();
     }
     return results;
   }
@@ -44,9 +50,15 @@ class FirebaseProductRepository extends GetxService implements ProductRepository
   }
 
   @override
-  Future<void> listProduct({required ProductModel catalogProduct, required String sellerId, required double sellPrice}) async {
-    final listed = catalogProduct.copyWith(sellerId: sellerId, isListed: true, sellPrice: sellPrice);
-    await _fs.listings.doc('${sellerId}_${catalogProduct.id}').set(listed.toMap());
+  Future<void> listProduct(
+      {required ProductModel catalogProduct,
+      required String sellerId,
+      required double sellPrice}) async {
+    final listed = catalogProduct.copyWith(
+        sellerId: sellerId, isListed: true, sellPrice: sellPrice);
+    await _fs.listings
+        .doc('${sellerId}_${catalogProduct.id}')
+        .set(listed.toMap());
   }
 
   @override

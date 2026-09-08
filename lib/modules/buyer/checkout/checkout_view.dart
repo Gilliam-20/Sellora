@@ -37,7 +37,8 @@ class _CheckoutViewState extends State<CheckoutView> {
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+        padding: EdgeInsets.symmetric(
+            horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
         child: ResponsiveCenter(
           maxWidth: 560,
           child: Form(
@@ -45,7 +46,8 @@ class _CheckoutViewState extends State<CheckoutView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Order summary', style: Theme.of(context).textTheme.titleMedium),
+                Text('Order summary',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 Obx(
                   () => Column(
@@ -55,7 +57,11 @@ class _CheckoutViewState extends State<CheckoutView> {
                             padding: const EdgeInsets.only(bottom: 6),
                             child: Row(
                               children: [
-                                Expanded(child: Text('${item.quantity}x ${item.product.title}', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                Expanded(
+                                    child: Text(
+                                        '${item.quantity}x ${item.product.title}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis)),
                                 Text(Formatters.currency(item.lineTotal)),
                               ],
                             ),
@@ -68,23 +74,28 @@ class _CheckoutViewState extends State<CheckoutView> {
                 Obx(
                   () => Row(
                     children: [
-                      Text('Total', style: Theme.of(context).textTheme.titleMedium),
+                      Text('Total',
+                          style: Theme.of(context).textTheme.titleMedium),
                       const Spacer(),
-                      Text(Formatters.currency(controller.cartRepo.subtotal), style: Theme.of(context).textTheme.titleLarge),
+                      Text(Formatters.currency(controller.cartRepo.subtotal),
+                          style: Theme.of(context).textTheme.titleLarge),
                     ],
                   ),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text('Shipping address', style: Theme.of(context).textTheme.titleMedium),
+                Text('Shipping address',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 TextFormField(
                   controller: _addressCtrl,
                   maxLines: 2,
-                  decoration: const InputDecoration(hintText: 'Street, city, country'),
+                  decoration:
+                      const InputDecoration(hintText: 'Street, city, country'),
                   validator: (v) => Validators.notEmpty(v, label: 'Address'),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text('Pay with M-Pesa', style: Theme.of(context).textTheme.titleMedium),
+                Text('Pay with M-Pesa',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
                 TextFormField(
                   controller: _phoneCtrl,
@@ -96,7 +107,8 @@ class _CheckoutViewState extends State<CheckoutView> {
                 Obx(() {
                   final error = controller.errorMessage.value;
                   if (error == null) return const SizedBox.shrink();
-                  return Text(error, style: const TextStyle(color: AppColors.danger));
+                  return Text(error,
+                      style: const TextStyle(color: AppColors.danger));
                 }),
               ],
             ),
@@ -110,7 +122,9 @@ class _CheckoutViewState extends State<CheckoutView> {
           trailingText: Formatters.currency(controller.cartRepo.subtotal),
           onPressed: () {
             if (_formKey.currentState!.validate()) {
-              controller.placeOrder(address: _addressCtrl.text.trim(), mpesaPhone: _phoneCtrl.text.trim());
+              controller.placeOrder(
+                  address: _addressCtrl.text.trim(),
+                  mpesaPhone: _phoneCtrl.text.trim());
             }
           },
         ),

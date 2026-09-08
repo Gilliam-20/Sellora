@@ -8,7 +8,8 @@ class SplashView extends GetView<AuthController> {
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => controller.checkSession());
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => controller.checkSession());
 
     return const Scaffold(
       backgroundColor: AppColors.cargoNavy,
@@ -18,12 +19,18 @@ class SplashView extends GetView<AuthController> {
           children: [
             Text(
               'Sellora',
-              style: TextStyle(color: AppColors.manifestGold, fontSize: 34, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: AppColors.manifestGold,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w600),
             ),
             SizedBox(height: 12),
             Text(
               'source anywhere. sell everywhere.',
-              style: TextStyle(color: AppColors.slateLight, fontSize: 13, letterSpacing: 0.2),
+              style: TextStyle(
+                  color: AppColors.slateLight,
+                  fontSize: 13,
+                  letterSpacing: 0.2),
             ),
           ],
         ),

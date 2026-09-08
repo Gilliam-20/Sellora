@@ -25,9 +25,15 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
           child: ResponsiveCenter(
             maxWidth: 900,
             child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(
+                  horizontal: context.pageHorizontalPadding,
+                  vertical: AppSpacing.md),
               children: [
-                Text('Welcome back', style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 22)),
+                Text('Welcome back',
+                    style: Theme.of(context)
+                        .textTheme
+                        .displaySmall
+                        ?.copyWith(fontSize: 22)),
                 const SizedBox(height: 4),
                 Text(
                   user?.hasActiveSubscription == true
@@ -47,12 +53,27 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
                   mainAxisSpacing: AppSpacing.sm,
                   childAspectRatio: 1.5,
                   children: [
-                    ManifestStatCard(label: 'Revenue', value: Formatters.currency(controller.totalRevenue.value, code: 'KES'), accentColor: AppColors.manifestGold),
-                    ManifestStatCard(label: 'Active listings', value: '${controller.listingCount.value}', accentColor: AppColors.horizonTeal),
-                    ManifestStatCard(label: 'Orders to fulfill', value: '${controller.pendingCount.value}', accentColor: AppColors.info),
+                    ManifestStatCard(
+                        label: 'Revenue',
+                        value: Formatters.currency(
+                            controller.totalRevenue.value,
+                            code: 'KES'),
+                        accentColor: AppColors.manifestGold),
+                    ManifestStatCard(
+                        label: 'Active listings',
+                        value: '${controller.listingCount.value}',
+                        accentColor: AppColors.horizonTeal),
+                    ManifestStatCard(
+                        label: 'Orders to fulfill',
+                        value: '${controller.pendingCount.value}',
+                        accentColor: AppColors.info),
                     GestureDetector(
                       onTap: () => Get.toNamed(Routes.sellerSubscription),
-                      child: ManifestStatCard(label: 'Plan', value: user?.subscriptionPlanId?.capitalizeFirst ?? '—', accentColor: AppColors.adminAccent),
+                      child: ManifestStatCard(
+                          label: 'Plan',
+                          value:
+                              user?.subscriptionPlanId?.capitalizeFirst ?? '—',
+                          accentColor: AppColors.adminAccent),
                     ),
                   ],
                 ),
@@ -61,8 +82,10 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
                 const SizedBox(height: AppSpacing.sm),
                 if (controller.recentOrders.isEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                    child: Text('Orders from buyers will show up here.', style: Theme.of(context).textTheme.bodySmall),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                    child: Text('Orders from buyers will show up here.',
+                        style: Theme.of(context).textTheme.bodySmall),
                   )
                 else
                   ...controller.recentOrders.map(
@@ -70,7 +93,8 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
                       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                       child: ManifestStub(
                         code: order.code,
-                        title: Formatters.currency(order.total, code: order.currency),
+                        title: Formatters.currency(order.total,
+                            code: order.currency),
                         subtitle: Formatters.relative(order.createdAt),
                         accentColor: AppColors.statusColor(order.status.name),
                       ),

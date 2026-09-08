@@ -18,7 +18,9 @@ class SellerOnboardingView extends GetView<SellerOnboardingController> {
       appBar: AppBar(title: const Text('Choose your plan')),
       body: Obx(() {
         if (controller.isLoadingPlans.value) return const SelloraLoader();
-        return controller.step.value == OnboardingStep.choosePlan ? const _PlanStep() : const _PaymentStep();
+        return controller.step.value == OnboardingStep.choosePlan
+            ? const _PlanStep()
+            : const _PaymentStep();
       }),
     );
   }
@@ -35,9 +37,12 @@ class _PlanStep extends GetView<SellerOnboardingController> {
           child: ResponsiveCenter(
             maxWidth: 640,
             child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+              padding: EdgeInsets.symmetric(
+                  horizontal: context.pageHorizontalPadding,
+                  vertical: AppSpacing.lg),
               itemCount: controller.plans.length,
-              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppSpacing.md),
               itemBuilder: (context, index) {
                 final plan = controller.plans[index];
                 return Obx(() => _PlanCard(
@@ -49,14 +54,16 @@ class _PlanStep extends GetView<SellerOnboardingController> {
             ),
           ),
         ),
-        BottomActionBar(label: 'Continue to payment', onPressed: controller.goToPayment),
+        BottomActionBar(
+            label: 'Continue to payment', onPressed: controller.goToPayment),
       ],
     );
   }
 }
 
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.plan, required this.isSelected, required this.onTap});
+  const _PlanCard(
+      {required this.plan, required this.isSelected, required this.onTap});
 
   final SubscriptionPlanModel plan;
   final bool isSelected;
@@ -74,22 +81,39 @@ class _PlanCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadii.card),
-            border: Border.all(color: isSelected ? AppColors.manifestGold : AppColors.hairline, width: isSelected ? 2 : 1),
+            border: Border.all(
+                color: isSelected ? AppColors.manifestGold : AppColors.hairline,
+                width: isSelected ? 2 : 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Text(plan.name, style: Theme.of(context).textTheme.titleLarge),
+                  Text(plan.name,
+                      style: Theme.of(context).textTheme.titleLarge),
                   const Spacer(),
                   if (plan.isPopular)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: AppColors.manifestGold, borderRadius: BorderRadius.circular(AppRadii.control)),
-                      child: Text('Most popular', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.ink, fontWeight: FontWeight.w700)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                          color: AppColors.manifestGold,
+                          borderRadius:
+                              BorderRadius.circular(AppRadii.control)),
+                      child: Text('Most popular',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(
+                                  color: AppColors.ink,
+                                  fontWeight: FontWeight.w700)),
                     ),
-                  if (isSelected) const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.check_circle, color: AppColors.manifestGoldDeep)),
+                  if (isSelected)
+                    const Padding(
+                        padding: EdgeInsets.only(left: 8),
+                        child: Icon(Icons.check_circle,
+                            color: AppColors.manifestGoldDeep)),
                 ],
               ),
               const SizedBox(height: 6),
@@ -97,8 +121,13 @@ class _PlanCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(Formatters.currency(plan.priceKes, code: 'KES'), style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 22)),
-                  Text(' / month', style: Theme.of(context).textTheme.bodySmall),
+                  Text(Formatters.currency(plan.priceKes, code: 'KES'),
+                      style: Theme.of(context)
+                          .textTheme
+                          .displaySmall
+                          ?.copyWith(fontSize: 22)),
+                  Text(' / month',
+                      style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -107,9 +136,12 @@ class _PlanCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(
                     children: [
-                      const Icon(Icons.check, size: 16, color: AppColors.horizonTealDeep),
+                      const Icon(Icons.check,
+                          size: 16, color: AppColors.horizonTealDeep),
                       const SizedBox(width: 6),
-                      Expanded(child: Text(perk, style: Theme.of(context).textTheme.bodySmall)),
+                      Expanded(
+                          child: Text(perk,
+                              style: Theme.of(context).textTheme.bodySmall)),
                     ],
                   ),
                 ),
@@ -154,7 +186,9 @@ class _PaymentStepState extends State<_PaymentStep> {
       children: [
         Expanded(
           child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+            padding: EdgeInsets.symmetric(
+                horizontal: context.pageHorizontalPadding,
+                vertical: AppSpacing.lg),
             child: ResponsiveCenter(
               maxWidth: 440,
               child: Form(
@@ -162,7 +196,8 @@ class _PaymentStepState extends State<_PaymentStep> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Pay with M-Pesa', style: Theme.of(context).textTheme.displaySmall),
+                    Text('Pay with M-Pesa',
+                        style: Theme.of(context).textTheme.displaySmall),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'You\'ll get an STK push from IntaSend for ${Formatters.currency(plan?.priceKes ?? 0, code: 'KES')} — enter your PIN to confirm.',
@@ -172,14 +207,17 @@ class _PaymentStepState extends State<_PaymentStep> {
                     TextFormField(
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'M-Pesa phone number', hintText: '07XXXXXXXX'),
+                      decoration: const InputDecoration(
+                          labelText: 'M-Pesa phone number',
+                          hintText: '07XXXXXXXX'),
                       validator: Validators.mpesaPhone,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Obx(() {
                       final error = controller.errorMessage.value;
                       if (error == null) return const SizedBox.shrink();
-                      return Text(error, style: const TextStyle(color: AppColors.danger));
+                      return Text(error,
+                          style: const TextStyle(color: AppColors.danger));
                     }),
                   ],
                 ),

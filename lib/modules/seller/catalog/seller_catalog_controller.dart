@@ -20,7 +20,8 @@ class SellerCatalogController extends GetxController {
 
   Future<void> load() async {
     isLoading.value = true;
-    catalog.value = await _productRepo.browseCatalog(keyword: searchQuery.value.isEmpty ? null : searchQuery.value);
+    catalog.value = await _productRepo.browseCatalog(
+        keyword: searchQuery.value.isEmpty ? null : searchQuery.value);
     isLoading.value = false;
   }
 
@@ -34,7 +35,8 @@ class SellerCatalogController extends GetxController {
     if (user == null) return false;
     isListing.value = true;
     try {
-      await _productRepo.listProduct(catalogProduct: product, sellerId: user.uid, sellPrice: sellPrice);
+      await _productRepo.listProduct(
+          catalogProduct: product, sellerId: user.uid, sellPrice: sellPrice);
       return true;
     } finally {
       isListing.value = false;

@@ -38,22 +38,27 @@ class ProductCard extends StatelessWidget {
                     placeholder: (_, __) => Container(color: AppColors.mist),
                     errorWidget: (_, __, ___) => Container(
                       color: AppColors.mist,
-                      child: const Icon(Icons.inventory_2_outlined, color: AppColors.slateLight),
+                      child: const Icon(Icons.inventory_2_outlined,
+                          color: AppColors.slateLight),
                     ),
                   ),
-                  if (product.discountPercent != null && product.discountPercent! > 0)
+                  if (product.discountPercent != null &&
+                      product.discountPercent! > 0)
                     Positioned(
                       top: AppSpacing.sm,
                       left: AppSpacing.sm,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: AppColors.manifestGold,
                           borderRadius: BorderRadius.circular(AppRadii.control),
                         ),
                         child: Text(
                           '-${product.discountPercent}%',
-                          style: AppTypography.textTheme.labelSmall?.copyWith(color: AppColors.ink, fontWeight: FontWeight.w700),
+                          style: AppTypography.textTheme.labelSmall?.copyWith(
+                              color: AppColors.ink,
+                              fontWeight: FontWeight.w700),
                         ),
                       ),
                     ),
@@ -70,24 +75,33 @@ class ProductCard extends StatelessWidget {
                     product.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Text(Formatters.currency(product.sellPrice), style: AppTypography.price(size: 16)),
+                      Text(Formatters.currency(product.sellPrice),
+                          style: AppTypography.price(size: 16)),
                       if (product.compareAtPrice != null) ...[
                         const SizedBox(width: 6),
                         Text(
                           Formatters.currency(product.compareAtPrice!),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(decoration: TextDecoration.lineThrough),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  decoration: TextDecoration.lineThrough),
                         ),
                       ],
                     ],
                   ),
                   if (product.soldCount > 0) ...[
                     const SizedBox(height: 2),
-                    Text('${product.soldCount} sold', style: Theme.of(context).textTheme.labelSmall),
+                    Text('${product.soldCount} sold',
+                        style: Theme.of(context).textTheme.labelSmall),
                   ],
                 ],
               ),

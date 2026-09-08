@@ -12,8 +12,11 @@ class AdminDashboardController extends GetxController {
   final sellers = <UserModel>[].obs;
   final orders = <OrderModel>[].obs;
 
-  int get activeSellerCount => sellers.where((s) => s.sellerStatus == SellerStatus.active).length;
-  int get pendingSellerCount => sellers.where((s) => s.sellerStatus == SellerStatus.pendingApproval).length;
+  int get activeSellerCount =>
+      sellers.where((s) => s.sellerStatus == SellerStatus.active).length;
+  int get pendingSellerCount => sellers
+      .where((s) => s.sellerStatus == SellerStatus.pendingApproval)
+      .length;
   double get totalGmv => orders.fold(0.0, (sum, o) => sum + o.total);
 
   @override

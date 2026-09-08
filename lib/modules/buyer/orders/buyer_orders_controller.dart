@@ -20,7 +20,9 @@ class BuyerOrdersController extends GetxController {
     final user = _authRepo.cachedUser;
     if (user == null) return;
     isLoading.value = true;
-    orders.value = await _orderRepo.buyerOrders(user.uid);
+    orders.value = user.storeId != null
+        ? await _orderRepo.buyerStoreOrders(user.uid, user.storeId!)
+        : await _orderRepo.buyerOrders(user.uid);
     isLoading.value = false;
   }
 }

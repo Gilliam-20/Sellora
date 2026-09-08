@@ -8,7 +8,15 @@ abstract class AuthRepository {
   UserModel? get cachedUser;
 
   Future<UserModel> signIn({required String email, required String password});
-  Future<UserModel> signUpBuyer({required String name, required String email, required String password});
+
+  /// [storeId] is the store (see StoreModel) the buyer is registering as
+  /// a customer of — every buyer belongs to exactly one store.
+  Future<UserModel> signUpBuyer({
+    required String name,
+    required String email,
+    required String password,
+    required String storeId,
+  });
   Future<UserModel> signUpSeller({
     required String name,
     required String email,
@@ -52,7 +60,8 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
   }
 
   @override
-  Future<UserModel> signIn({required String email, required String password}) async {
+  Future<UserModel> signIn(
+      {required String email, required String password}) async {
     final cred = await _auth.signIn(email: email, password: password);
     final doc = await _fs.users.doc(cred.user!.uid).get();
     _cached = UserModel.fromMap(doc.data()!);
@@ -60,16 +69,26 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
   }
 
   @override
-  Future<UserModel> signUpBuyer({required String name, required String email, required String password}) async {
+  Future<UserModel> signUpBuyer({
+    required String name,
+    required String email,
+    required String password,
+    required String storeId,
+  }) async {
     final cred = await _auth.signUp(email: email, password: password);
     final user = UserModel(
       uid: cred.user!.uid,
       name: name,
       email: email,
       role: UserRole.buyer,
+      storeId: storeId,
       createdAt: DateTime.now(),
     );
+    // Global identity doc (role bootstrap, same as every other role) plus
+    // a mirror under the store's own tenant tree, so Firestore rules can
+    // authorize store-scoped reads without ever touching `users`.
     await _fs.users.doc(user.uid).set(user.toMap());
+    await _fs.storeCustomers(storeId).doc(user.uid).set(user.toMap());
     _cached = user;
     return user;
   }
@@ -99,7 +118,8 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
   }
 
   @override
-  Future<void> sendPasswordReset(String email) => _auth.sendPasswordReset(email);
+  Future<void> sendPasswordReset(String email) =>
+      _auth.sendPasswordReset(email);
 
   @override
   Future<void> signOut() => _auth.signOut();

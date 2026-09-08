@@ -6,10 +6,25 @@ import 'package:get/get.dart';
 class FirestoreService extends GetxService {
   FirebaseFirestore get _db => FirebaseFirestore.instance;
 
-  CollectionReference<Map<String, dynamic>> get users => _db.collection('users');
-  CollectionReference<Map<String, dynamic>> get catalog => _db.collection('catalog'); // shared CJ-sourced products
-  CollectionReference<Map<String, dynamic>> get listings => _db.collection('listings'); // seller-specific listings
-  CollectionReference<Map<String, dynamic>> get orders => _db.collection('orders');
-  CollectionReference<Map<String, dynamic>> get plans => _db.collection('subscription_plans');
-  CollectionReference<Map<String, dynamic>> get billingHistory => _db.collection('billing_history');
+  CollectionReference<Map<String, dynamic>> get users =>
+      _db.collection('users');
+  CollectionReference<Map<String, dynamic>> get catalog =>
+      _db.collection('catalog'); // shared CJ-sourced products
+  CollectionReference<Map<String, dynamic>> get listings =>
+      _db.collection('listings'); // seller-specific listings
+  CollectionReference<Map<String, dynamic>> get orders =>
+      _db.collection('orders');
+  CollectionReference<Map<String, dynamic>> get plans =>
+      _db.collection('subscription_plans');
+  CollectionReference<Map<String, dynamic>> get billingHistory =>
+      _db.collection('billing_history');
+  CollectionReference<Map<String, dynamic>> get stores =>
+      _db.collection('stores');
+
+  /// A store's buyers, as `stores/{storeId}/customers/{uid}` — kept as
+  /// its own subcollection (not a field on `users`) so a store's seller
+  /// can be granted read access to their own customers without touching
+  /// the platform-wide `users` collection. See WORKLOG.md.
+  CollectionReference<Map<String, dynamic>> storeCustomers(String storeId) =>
+      stores.doc(storeId).collection('customers');
 }

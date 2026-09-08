@@ -28,9 +28,11 @@ class Validators {
 
   /// Kenyan M-Pesa numbers via IntaSend expect formats like 2547XXXXXXXX.
   static String? mpesaPhone(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Enter your M-Pesa number';
+    if (value == null || value.trim().isEmpty)
+      return 'Enter your M-Pesa number';
     final digits = value.replaceAll(RegExp(r'[^0-9]'), '');
-    final normalized = digits.startsWith('0') ? '254${digits.substring(1)}' : digits;
+    final normalized =
+        digits.startsWith('0') ? '254${digits.substring(1)}' : digits;
     if (!RegExp(r'^254(7|1)\d{8}$').hasMatch(normalized)) {
       return 'Enter a valid Safaricom number, e.g. 0712345678';
     }

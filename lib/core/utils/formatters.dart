@@ -20,7 +20,8 @@ class Formatters {
 
   static String date(DateTime date) => DateFormat('MMM d, y').format(date);
 
-  static String dateTime(DateTime date) => DateFormat('MMM d, y · h:mm a').format(date);
+  static String dateTime(DateTime date) =>
+      DateFormat('MMM d, y · h:mm a').format(date);
 
   static String relative(DateTime date) {
     final diff = DateTime.now().difference(date);

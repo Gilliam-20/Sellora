@@ -23,7 +23,8 @@ class MyListingsView extends GetView<MyListingsController> {
           return const EmptyState(
             icon: Icons.storefront_outlined,
             title: 'Nothing listed yet',
-            message: 'List products from the CJ Dropshipping catalog to start selling.',
+            message:
+                'List products from the CJ Dropshipping catalog to start selling.',
           );
         }
         return RefreshIndicator(
@@ -31,9 +32,12 @@ class MyListingsView extends GetView<MyListingsController> {
           child: ResponsiveCenter(
             maxWidth: 720,
             child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(
+                  horizontal: context.pageHorizontalPadding,
+                  vertical: AppSpacing.md),
               itemCount: controller.listings.length,
-              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) {
                 final product = controller.listings[index];
                 return Container(
@@ -47,20 +51,31 @@ class MyListingsView extends GetView<MyListingsController> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(AppRadii.stub),
-                        child: CachedNetworkImage(imageUrl: product.imageUrl, width: 56, height: 56, fit: BoxFit.cover),
+                        child: CachedNetworkImage(
+                            imageUrl: product.imageUrl,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover),
                       ),
                       const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(product.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
+                            Text(product.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium),
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Text(Formatters.currency(product.sellPrice), style: AppTypography.price(size: 14)),
+                                Text(Formatters.currency(product.sellPrice),
+                                    style: AppTypography.price(size: 14)),
                                 const SizedBox(width: 8),
-                                Text('margin ${product.marginPercent.toStringAsFixed(0)}%', style: Theme.of(context).textTheme.labelSmall),
+                                Text(
+                                    'margin ${product.marginPercent.toStringAsFixed(0)}%',
+                                    style:
+                                        Theme.of(context).textTheme.labelSmall),
                               ],
                             ),
                           ],
@@ -71,7 +86,9 @@ class MyListingsView extends GetView<MyListingsController> {
                         activeColor: AppColors.horizonTeal,
                         // Was unconditionally unlisting — a seller could
                         // never flip a paused listing back on from here.
-                        onChanged: (turnedOn) => turnedOn ? controller.relist(product.id) : controller.unlist(product.id),
+                        onChanged: (turnedOn) => turnedOn
+                            ? controller.relist(product.id)
+                            : controller.unlist(product.id),
                       ),
                     ],
                   ),

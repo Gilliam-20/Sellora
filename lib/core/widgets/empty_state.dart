@@ -30,11 +30,14 @@ class EmptyState extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: const BoxDecoration(color: AppColors.mist, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                  color: AppColors.mist, shape: BoxShape.circle),
               child: Icon(icon, size: 32, color: AppColors.slate),
             ),
             const SizedBox(height: AppSpacing.md),
-            Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(title,
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.xs),
             ConstrainedBox(
               // Caps the line length so the message stays readable

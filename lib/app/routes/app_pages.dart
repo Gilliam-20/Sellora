@@ -8,6 +8,7 @@ import '../../modules/auth/views/register_buyer_view.dart';
 import '../../modules/auth/views/register_seller_view.dart';
 import '../../modules/auth/views/role_select_view.dart';
 import '../../modules/auth/views/splash_view.dart';
+import '../../modules/auth/views/store_select_view.dart';
 import '../../modules/buyer/buyer_binding.dart';
 import '../../modules/buyer/checkout/checkout_view.dart';
 import '../../modules/buyer/product_details/product_details_view.dart';
@@ -24,11 +25,27 @@ class AppPages {
   AppPages._();
 
   static final pages = <GetPage>[
-    GetPage(name: Routes.splash, page: () => const SplashView(), binding: AuthBinding()),
+    GetPage(
+        name: Routes.splash,
+        page: () => const SplashView(),
+        binding: AuthBinding()),
     GetPage(name: Routes.roleSelect, page: () => const RoleSelectView()),
-    GetPage(name: Routes.login, page: () => const LoginView(), binding: AuthBinding()),
-    GetPage(name: Routes.registerBuyer, page: () => const RegisterBuyerView(), binding: AuthBinding()),
-    GetPage(name: Routes.registerSeller, page: () => const RegisterSellerView(), binding: AuthBinding()),
+    GetPage(
+        name: Routes.login,
+        page: () => const LoginView(),
+        binding: AuthBinding()),
+    GetPage(
+        name: Routes.storeSelect,
+        page: () => const StoreSelectView(),
+        binding: AuthBinding()),
+    GetPage(
+        name: Routes.registerBuyer,
+        page: () => const RegisterBuyerView(),
+        binding: AuthBinding()),
+    GetPage(
+        name: Routes.registerSeller,
+        page: () => const RegisterSellerView(),
+        binding: AuthBinding()),
 
     GetPage(
       name: Routes.sellerOnboarding,

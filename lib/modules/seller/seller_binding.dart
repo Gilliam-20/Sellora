@@ -20,6 +20,7 @@ class SellerBinding extends Bindings {
 class SellerSubscriptionBinding extends Bindings {
   @override
   void dependencies() {
-    Get.lazyPut<SellerSubscriptionController>(() => SellerSubscriptionController());
+    Get.lazyPut<SellerSubscriptionController>(
+        () => SellerSubscriptionController());
   }
 }

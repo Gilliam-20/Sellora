@@ -9,7 +9,8 @@ class AppConstants {
   /// lib/data/services and InitialBinding. See README.md.
   static const bool useMockData = true;
 
-  static const double defaultCommissionPercent = 5.0; // platform cut per order, on top of the subscription
+  static const double defaultCommissionPercent =
+      5.0; // platform cut per order, on top of the subscription
 }
 
 /// Backend endpoints. In production these point at Firebase Cloud
@@ -19,14 +20,16 @@ class AppConstants {
 class ApiEndpoints {
   ApiEndpoints._();
 
-  static const String baseFunctionsUrl = 'https://us-central1-sellora-20.cloudfunctions.net';
+  static const String baseFunctionsUrl =
+      'https://us-central1-sellora-20.cloudfunctions.net';
 
   static const String cjSearchProducts = '$baseFunctionsUrl/cjSearchProducts';
   static const String cjProductDetail = '$baseFunctionsUrl/cjProductDetail';
   static const String cjCreateOrder = '$baseFunctionsUrl/cjCreateOrder';
   static const String cjTrackShipment = '$baseFunctionsUrl/cjTrackShipment';
 
-  static const String intasendCollectMpesa = '$baseFunctionsUrl/intasendCollectMpesa';
+  static const String intasendCollectMpesa =
+      '$baseFunctionsUrl/intasendCollectMpesa';
   static const String intasendCheckout = '$baseFunctionsUrl/intasendCheckout';
   static const String intasendStatus = '$baseFunctionsUrl/intasendStatus';
 }

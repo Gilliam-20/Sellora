@@ -3,7 +3,8 @@ import '../../../data/models/subscription_plan_model.dart';
 import '../../../data/repositories/subscription_repository.dart';
 
 class AdminPlansController extends GetxController {
-  final SubscriptionRepository _subscriptionRepo = Get.find<SubscriptionRepository>();
+  final SubscriptionRepository _subscriptionRepo =
+      Get.find<SubscriptionRepository>();
 
   final plans = <SubscriptionPlanModel>[].obs;
   final isLoading = true.obs;
@@ -21,7 +22,8 @@ class AdminPlansController extends GetxController {
     isLoading.value = false;
   }
 
-  Future<void> updatePrice(SubscriptionPlanModel plan, double newPriceKes, double newPriceUsd) async {
+  Future<void> updatePrice(SubscriptionPlanModel plan, double newPriceKes,
+      double newPriceUsd) async {
     isSaving.value = true;
     try {
       final updated = SubscriptionPlanModel(

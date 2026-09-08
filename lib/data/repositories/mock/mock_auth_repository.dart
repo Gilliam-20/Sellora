@@ -28,7 +28,8 @@ class MockAuthRepository extends GetxService implements AuthRepository {
   }
 
   @override
-  Future<UserModel> signIn({required String email, required String password}) async {
+  Future<UserModel> signIn(
+      {required String email, required String password}) async {
     await Future.delayed(const Duration(milliseconds: 600));
     // Demo convenience: an email containing "seller" or "admin" logs in
     // to that portal so reviewers can explore all three without a
@@ -41,13 +42,17 @@ class MockAuthRepository extends GetxService implements AuthRepository {
 
     final user = UserModel(
       uid: 'mock-${role.name}',
-      name: role == UserRole.admin ? 'Sellora Admin' : (role == UserRole.seller ? 'Amina\'s Store' : 'Jane Buyer'),
+      name: role == UserRole.admin
+          ? 'Sellora Admin'
+          : (role == UserRole.seller ? 'Amina\'s Store' : 'Jane Buyer'),
       email: email,
       role: role,
       storeName: role == UserRole.seller ? "Amina's Curated Picks" : null,
       sellerStatus: role == UserRole.seller ? SellerStatus.active : null,
       subscriptionPlanId: role == UserRole.seller ? 'growth' : null,
-      subscriptionActiveUntil: role == UserRole.seller ? DateTime.now().add(const Duration(days: 18)) : null,
+      subscriptionActiveUntil: role == UserRole.seller
+          ? DateTime.now().add(const Duration(days: 18))
+          : null,
       currencyCode: 'KES',
       createdAt: DateTime.now(),
     );
@@ -57,7 +62,12 @@ class MockAuthRepository extends GetxService implements AuthRepository {
   }
 
   @override
-  Future<UserModel> signUpBuyer({required String name, required String email, required String password}) async {
+  Future<UserModel> signUpBuyer({
+    required String name,
+    required String email,
+    required String password,
+    required String storeId,
+  }) async {
     await Future.delayed(const Duration(milliseconds: 600));
     final user = UserModel(
       uid: 'mock-buyer-${DateTime.now().millisecondsSinceEpoch}',
@@ -65,6 +75,7 @@ class MockAuthRepository extends GetxService implements AuthRepository {
       email: email,
       role: UserRole.buyer,
       currencyCode: 'KES',
+      storeId: storeId,
       createdAt: DateTime.now(),
     );
     _current = user;

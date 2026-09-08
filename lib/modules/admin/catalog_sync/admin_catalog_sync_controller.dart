@@ -25,7 +25,8 @@ class AdminCatalogSyncController extends GetxController {
       final count = await _adminRepo.syncCjCatalog();
       lastSyncCount.value = count;
       lastSyncedAt.value = _adminRepo.lastSyncedAt;
-      Get.snackbar('Sync complete', '$count products pulled from CJ Dropshipping.');
+      Get.snackbar(
+          'Sync complete', '$count products pulled from CJ Dropshipping.');
     } finally {
       isSyncing.value = false;
     }

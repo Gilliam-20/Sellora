@@ -5,10 +5,12 @@ import '../../core/network/dio_client.dart';
 enum PaymentStatus { pending, completed, failed }
 
 class PaymentResult {
-  PaymentResult({required this.reference, required this.status, this.checkoutUrl});
+  PaymentResult(
+      {required this.reference, required this.status, this.checkoutUrl});
   final String reference;
   final PaymentStatus status;
-  final String? checkoutUrl; // for card/hosted checkout, opened via url_launcher
+  final String?
+      checkoutUrl; // for card/hosted checkout, opened via url_launcher
 }
 
 /// Wraps IntaSend for both seller subscription billing and buyer
@@ -32,7 +34,8 @@ class IntasendService extends GetxService {
       'narrative': narrative,
     });
     return PaymentResult(
-      reference: res['invoice_id']?.toString() ?? res['reference']?.toString() ?? '',
+      reference:
+          res['invoice_id']?.toString() ?? res['reference']?.toString() ?? '',
       status: _statusFrom(res['state']?.toString()),
     );
   }
@@ -59,7 +62,8 @@ class IntasendService extends GetxService {
   }
 
   Future<PaymentStatus> checkStatus(String reference) async {
-    final res = await _dio.get(ApiEndpoints.intasendStatus, query: {'reference': reference});
+    final res = await _dio
+        .get(ApiEndpoints.intasendStatus, query: {'reference': reference});
     return _statusFrom(res['state']?.toString());
   }
 

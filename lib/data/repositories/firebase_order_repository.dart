@@ -18,19 +18,39 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
 
   @override
   Future<List<OrderModel>> buyerOrders(String buyerId) async {
-    final snap = await _fs.orders.where('buyerId', isEqualTo: buyerId).orderBy('createdAt', descending: true).get();
+    final snap = await _fs.orders
+        .where('buyerId', isEqualTo: buyerId)
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+  }
+
+  @override
+  Future<List<OrderModel>> buyerStoreOrders(
+      String buyerId, String storeId) async {
+    final snap = await _fs.orders
+        .where('buyerId', isEqualTo: buyerId)
+        .where('storeId', isEqualTo: storeId)
+        .orderBy('createdAt', descending: true)
+        .get();
     return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
   }
 
   @override
   Future<List<OrderModel>> sellerOrders(String sellerId) async {
-    final snap = await _fs.orders.where('sellerId', isEqualTo: sellerId).orderBy('createdAt', descending: true).get();
+    final snap = await _fs.orders
+        .where('sellerId', isEqualTo: sellerId)
+        .orderBy('createdAt', descending: true)
+        .get();
     return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
   }
 
   @override
   Future<List<OrderModel>> allOrders() async {
-    final snap = await _fs.orders.orderBy('createdAt', descending: true).limit(200).get();
+    final snap = await _fs.orders
+        .orderBy('createdAt', descending: true)
+        .limit(200)
+        .get();
     return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
   }
 

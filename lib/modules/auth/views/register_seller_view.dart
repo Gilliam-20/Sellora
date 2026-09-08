@@ -39,7 +39,9 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
       appBar: AppBar(title: const Text('Create your store')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(
+              horizontal: context.pageHorizontalPadding,
+              vertical: AppSpacing.lg),
           child: ResponsiveCenter(
             maxWidth: 440,
             child: Form(
@@ -47,7 +49,8 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Start selling on Sellora', style: Theme.of(context).textTheme.displaySmall),
+                  Text('Start selling on Sellora',
+                      style: Theme.of(context).textTheme.displaySmall),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'Pick a plan next — you can list products the moment your subscription is active.',
@@ -56,14 +59,16 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(
                     controller: _nameCtrl,
-                    decoration: const InputDecoration(labelText: 'Your full name'),
+                    decoration:
+                        const InputDecoration(labelText: 'Your full name'),
                     validator: (v) => Validators.notEmpty(v, label: 'Name'),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextFormField(
                     controller: _storeCtrl,
                     decoration: const InputDecoration(labelText: 'Store name'),
-                    validator: (v) => Validators.notEmpty(v, label: 'Store name'),
+                    validator: (v) =>
+                        Validators.notEmpty(v, label: 'Store name'),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextFormField(
@@ -76,7 +81,9 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
                   TextFormField(
                     controller: _phoneCtrl,
                     keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'M-Pesa phone number', hintText: '07XXXXXXXX'),
+                    decoration: const InputDecoration(
+                        labelText: 'M-Pesa phone number',
+                        hintText: '07XXXXXXXX'),
                     validator: Validators.mpesaPhone,
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -92,7 +99,8 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
                     if (error == null) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: Text(error, style: const TextStyle(color: AppColors.danger)),
+                      child: Text(error,
+                          style: const TextStyle(color: AppColors.danger)),
                     );
                   }),
                   Obx(
@@ -116,7 +124,8 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
                             ? const SizedBox(
                                 height: 18,
                                 width: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: AppColors.ink),
                               )
                             : const Text('Continue to plans'),
                       ),

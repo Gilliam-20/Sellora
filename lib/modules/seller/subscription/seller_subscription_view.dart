@@ -24,7 +24,9 @@ class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
         return ResponsiveCenter(
           maxWidth: 640,
           child: ListView(
-            padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+            padding: EdgeInsets.symmetric(
+                horizontal: context.pageHorizontalPadding,
+                vertical: AppSpacing.lg),
             children: [
               Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
@@ -35,25 +37,38 @@ class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Current plan', style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.slateLight)),
+                    Text('Current plan',
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: AppColors.slateLight)),
                     const SizedBox(height: 4),
-                    Text(current?.name ?? 'None', style: Theme.of(context).textTheme.displaySmall?.copyWith(color: AppColors.cloud, fontSize: 24)),
+                    Text(current?.name ?? 'None',
+                        style: Theme.of(context)
+                            .textTheme
+                            .displaySmall
+                            ?.copyWith(color: AppColors.cloud, fontSize: 24)),
                     const SizedBox(height: 4),
                     if (user?.subscriptionActiveUntil != null)
                       Text(
                         'Renews ${Formatters.date(user!.subscriptionActiveUntil!)}',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.slateLight),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.slateLight),
                       ),
                   ],
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
-              Text('Available plans', style: Theme.of(context).textTheme.titleMedium),
+              Text('Available plans',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: AppSpacing.sm),
               ...controller.plans.map(
                 (plan) => Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: _PlanRow(plan: plan, isCurrent: plan.id == current?.id),
+                  child:
+                      _PlanRow(plan: plan, isCurrent: plan.id == current?.id),
                 ),
               ),
             ],
@@ -76,7 +91,9 @@ class _PlanRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.cloud,
         borderRadius: BorderRadius.circular(AppRadii.card),
-        border: Border.all(color: isCurrent ? AppColors.manifestGold : AppColors.hairline, width: isCurrent ? 2 : 1),
+        border: Border.all(
+            color: isCurrent ? AppColors.manifestGold : AppColors.hairline,
+            width: isCurrent ? 2 : 1),
       ),
       child: Row(
         children: [
@@ -85,14 +102,22 @@ class _PlanRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(plan.name, style: Theme.of(context).textTheme.titleMedium),
-                Text('${Formatters.currency(plan.priceKes, code: 'KES')} / month', style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                    '${Formatters.currency(plan.priceKes, code: 'KES')} / month',
+                    style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
           if (isCurrent)
-            const Text('Active', style: TextStyle(color: AppColors.horizonTealDeep, fontWeight: FontWeight.w700))
+            const Text('Active',
+                style: TextStyle(
+                    color: AppColors.horizonTealDeep,
+                    fontWeight: FontWeight.w700))
           else
-            OutlinedButton(onPressed: () => Get.bottomSheet(_SwitchPlanSheet(plan: plan), isScrollControlled: true), child: const Text('Switch')),
+            OutlinedButton(
+                onPressed: () => Get.bottomSheet(_SwitchPlanSheet(plan: plan),
+                    isScrollControlled: true),
+                child: const Text('Switch')),
         ],
       ),
     );
@@ -131,15 +156,23 @@ class _SwitchPlanSheetState extends State<_SwitchPlanSheet> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Container(
-              padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom),
-              decoration: const BoxDecoration(color: AppColors.cloud, borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.sheet))),
+              padding: EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom),
+              decoration: const BoxDecoration(
+                  color: AppColors.cloud,
+                  borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(AppRadii.sheet))),
               child: Form(
                 key: _formKey,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Switch to ${widget.plan.name}', style: Theme.of(context).textTheme.titleMedium),
+                    Text('Switch to ${widget.plan.name}',
+                        style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'You\'ll be charged ${Formatters.currency(widget.plan.priceKes, code: 'KES')} now via M-Pesa.',
@@ -149,7 +182,9 @@ class _SwitchPlanSheetState extends State<_SwitchPlanSheet> {
                     TextFormField(
                       controller: _phoneCtrl,
                       keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'M-Pesa phone number', hintText: '07XXXXXXXX'),
+                      decoration: const InputDecoration(
+                          labelText: 'M-Pesa phone number',
+                          hintText: '07XXXXXXXX'),
                       validator: Validators.mpesaPhone,
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -161,11 +196,16 @@ class _SwitchPlanSheetState extends State<_SwitchPlanSheet> {
                               ? null
                               : () {
                                   if (_formKey.currentState!.validate()) {
-                                    controller.switchPlan(widget.plan, _phoneCtrl.text.trim());
+                                    controller.switchPlan(
+                                        widget.plan, _phoneCtrl.text.trim());
                                   }
                                 },
                           child: controller.isPaying.value
-                              ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink))
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: AppColors.ink))
                               : const Text('Pay & switch'),
                         ),
                       ),

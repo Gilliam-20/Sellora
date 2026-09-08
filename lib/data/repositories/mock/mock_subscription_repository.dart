@@ -3,7 +3,8 @@ import '../../mock/mock_seed_data.dart';
 import '../../models/subscription_plan_model.dart';
 import '../subscription_repository.dart';
 
-class MockSubscriptionRepository extends GetxService implements SubscriptionRepository {
+class MockSubscriptionRepository extends GetxService
+    implements SubscriptionRepository {
   final List<SubscriptionPlanModel> _plans = MockSeedData.plans();
 
   @override
@@ -13,7 +14,10 @@ class MockSubscriptionRepository extends GetxService implements SubscriptionRepo
   }
 
   @override
-  Future<void> subscribeSeller({required String sellerId, required String planId, required String paymentReference}) async {
+  Future<void> subscribeSeller(
+      {required String sellerId,
+      required String planId,
+      required String paymentReference}) async {
     await Future.delayed(const Duration(milliseconds: 500));
     // In mock mode this is a no-op beyond the delay — AuthController
     // updates the cached mock user's plan directly after this resolves.

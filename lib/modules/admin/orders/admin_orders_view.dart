@@ -26,9 +26,14 @@ class AdminOrdersView extends GetView<AdminOrdersController> {
               child: Obx(
                 () => ListView(
                   scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.sm),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: context.pageHorizontalPadding,
+                      vertical: AppSpacing.sm),
                   children: [
-                    _FilterChip(label: 'All', selected: controller.statusFilter.value == null, onTap: () => controller.setFilter(null)),
+                    _FilterChip(
+                        label: 'All',
+                        selected: controller.statusFilter.value == null,
+                        onTap: () => controller.setFilter(null)),
                     const SizedBox(width: AppSpacing.sm),
                     ...OrderStatus.values.map(
                       (status) => Padding(
@@ -49,22 +54,31 @@ class AdminOrdersView extends GetView<AdminOrdersController> {
                 if (controller.isLoading.value) return const SelloraLoader();
                 final orders = controller.filtered;
                 if (orders.isEmpty) {
-                  return const EmptyState(icon: Icons.receipt_long_outlined, title: 'No orders', message: 'Nothing matches this filter yet.');
+                  return const EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'No orders',
+                      message: 'Nothing matches this filter yet.');
                 }
                 return RefreshIndicator(
                   onRefresh: controller.load,
                   child: ListView.separated(
-                    padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+                    padding: EdgeInsets.symmetric(
+                        horizontal: context.pageHorizontalPadding,
+                        vertical: AppSpacing.md),
                     itemCount: orders.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.sm),
                     itemBuilder: (context, index) {
                       final order = orders[index];
                       return ManifestStub(
                         code: order.code,
-                        title: Formatters.currency(order.total, code: order.currency),
-                        subtitle: 'Seller: ${order.sellerId} · Buyer: ${order.buyerId}',
+                        title: Formatters.currency(order.total,
+                            code: order.currency),
+                        subtitle:
+                            'Seller: ${order.sellerId} · Buyer: ${order.buyerId}',
                         accentColor: AppColors.statusColor(order.status.name),
-                        trailing: Text(order.status.label, style: Theme.of(context).textTheme.labelMedium),
+                        trailing: Text(order.status.label,
+                            style: Theme.of(context).textTheme.labelMedium),
                       );
                     },
                   ),
@@ -79,7 +93,8 @@ class AdminOrdersView extends GetView<AdminOrdersController> {
 }
 
 class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
+  const _FilterChip(
+      {required this.label, required this.selected, required this.onTap});
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -90,7 +105,9 @@ class _FilterChip extends StatelessWidget {
       label: Text(label),
       selected: selected,
       selectedColor: AppColors.cargoNavy,
-      labelStyle: TextStyle(color: selected ? AppColors.cloud : AppColors.ink, fontWeight: FontWeight.w600),
+      labelStyle: TextStyle(
+          color: selected ? AppColors.cloud : AppColors.ink,
+          fontWeight: FontWeight.w600),
       onSelected: (_) => onTap(),
     );
   }

@@ -20,10 +20,13 @@ class AdminPlansView extends GetView<AdminPlansController> {
         return ResponsiveCenter(
           maxWidth: 720,
           child: ListView.separated(
-            padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+            padding: EdgeInsets.symmetric(
+                horizontal: context.pageHorizontalPadding,
+                vertical: AppSpacing.lg),
             itemCount: controller.plans.length,
             separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-            itemBuilder: (context, index) => _PlanEditCard(plan: controller.plans[index]),
+            itemBuilder: (context, index) =>
+                _PlanEditCard(plan: controller.plans[index]),
           ),
         );
       }),
@@ -40,8 +43,10 @@ class _PlanEditCard extends StatefulWidget {
 }
 
 class _PlanEditCardState extends State<_PlanEditCard> {
-  late final TextEditingController _kesCtrl = TextEditingController(text: widget.plan.priceKes.toStringAsFixed(0));
-  late final TextEditingController _usdCtrl = TextEditingController(text: widget.plan.priceUsd.toStringAsFixed(0));
+  late final TextEditingController _kesCtrl =
+      TextEditingController(text: widget.plan.priceKes.toStringAsFixed(0));
+  late final TextEditingController _usdCtrl =
+      TextEditingController(text: widget.plan.priceUsd.toStringAsFixed(0));
 
   @override
   void dispose() {
@@ -65,9 +70,12 @@ class _PlanEditCardState extends State<_PlanEditCard> {
         children: [
           Row(
             children: [
-              Text(widget.plan.name, style: Theme.of(context).textTheme.titleMedium),
+              Text(widget.plan.name,
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(width: AppSpacing.sm),
-              Text('${widget.plan.commissionPercent.toStringAsFixed(0)}% commission', style: Theme.of(context).textTheme.bodySmall),
+              Text(
+                  '${widget.plan.commissionPercent.toStringAsFixed(0)}% commission',
+                  style: Theme.of(context).textTheme.bodySmall),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -77,7 +85,8 @@ class _PlanEditCardState extends State<_PlanEditCard> {
                 child: TextField(
                   controller: _kesCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Price (KES / month)'),
+                  decoration:
+                      const InputDecoration(labelText: 'Price (KES / month)'),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -85,7 +94,8 @@ class _PlanEditCardState extends State<_PlanEditCard> {
                 child: TextField(
                   controller: _usdCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Price (USD / month)'),
+                  decoration:
+                      const InputDecoration(labelText: 'Price (USD / month)'),
                 ),
               ),
             ],
@@ -98,10 +108,13 @@ class _PlanEditCardState extends State<_PlanEditCard> {
                 onPressed: controller.isSaving.value
                     ? null
                     : () {
-                        final kes = double.tryParse(_kesCtrl.text) ?? widget.plan.priceKes;
-                        final usd = double.tryParse(_usdCtrl.text) ?? widget.plan.priceUsd;
+                        final kes = double.tryParse(_kesCtrl.text) ??
+                            widget.plan.priceKes;
+                        final usd = double.tryParse(_usdCtrl.text) ??
+                            widget.plan.priceUsd;
                         controller.updatePrice(widget.plan, kes, usd);
-                        Get.snackbar('Saved', '${widget.plan.name} pricing updated to ${Formatters.currency(kes, code: 'KES')}.');
+                        Get.snackbar('Saved',
+                            '${widget.plan.name} pricing updated to ${Formatters.currency(kes, code: 'KES')}.');
                       },
                 child: const Text('Save'),
               ),

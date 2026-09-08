@@ -15,6 +15,10 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    function storeSellerId(storeId) {
+      return get(/databases/$(database)/documents/stores/$(storeId)).data.sellerId;
+    }
+
     // ---- users ------------------------------------------------------
     // A user can read/update their own document. Role changes and
     // sellerStatus/subscription fields should really be admin- or
@@ -25,6 +29,30 @@ service cloud.firestore {
       allow create: if isOwner(uid);
       allow update: if isOwner(uid) || role() == 'admin';
       allow delete: if false;
+    }
+
+    // ---- stores (multi-tenant storefronts) -----------------------------
+    // Publicly readable, same as `listings` below — a prospective buyer
+    // has to be able to browse stores before they have an account. Only
+    // the owning seller (or admin) can create/update their own store.
+    match /stores/{storeId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');
+      allow delete: if false;
+
+      // ---- per-store customers (buyer-as-tenant profile) ---------------
+      // Deliberately its own subcollection rather than a field on the
+      // global `users` doc, so a seller can be granted read access to
+      // their own store's customers without ever touching the
+      // platform-wide `users` collection (see WORKLOG.md — this is what
+      // decision #2 in the multi-tenant design doc is for).
+      match /customers/{uid} {
+        allow read: if isOwner(uid) || (isSignedIn() && storeSellerId(storeId) == request.auth.uid) || role() == 'admin';
+        allow create: if isOwner(uid);
+        allow update: if isOwner(uid) || role() == 'admin';
+        allow delete: if false;
+      }
     }
 
     // ---- shared CJ catalog -------------------------------------------

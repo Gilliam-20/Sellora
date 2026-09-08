@@ -23,7 +23,8 @@ class SellerOrdersView extends GetView<SellerOrdersController> {
           return const EmptyState(
             icon: Icons.local_shipping_outlined,
             title: 'No orders yet',
-            message: 'Orders buyers place from your listings will show up here.',
+            message:
+                'Orders buyers place from your listings will show up here.',
           );
         }
         return RefreshIndicator(
@@ -31,17 +32,22 @@ class SellerOrdersView extends GetView<SellerOrdersController> {
           child: ResponsiveCenter(
             maxWidth: 720,
             child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(
+                  horizontal: context.pageHorizontalPadding,
+                  vertical: AppSpacing.md),
               itemCount: controller.orders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) {
                 final order = controller.orders[index];
                 return ManifestStub(
                   code: order.code,
                   title: Formatters.currency(order.total, code: order.currency),
-                  subtitle: '${order.items.length} item${order.items.length == 1 ? '' : 's'} · ${order.status.label}',
+                  subtitle:
+                      '${order.items.length} item${order.items.length == 1 ? '' : 's'} · ${order.status.label}',
                   accentColor: AppColors.statusColor(order.status.name),
-                  trailing: order.status == OrderStatus.delivered || order.status == OrderStatus.cancelled
+                  trailing: order.status == OrderStatus.delivered ||
+                          order.status == OrderStatus.cancelled
                       ? null
                       : TextButton(
                           onPressed: () => controller.advanceStatus(order),

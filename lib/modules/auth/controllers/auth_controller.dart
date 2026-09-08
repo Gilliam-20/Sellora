@@ -2,11 +2,13 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/cart_repository.dart';
 import '../../../data/services/storage_service.dart';
 
 class AuthController extends GetxController {
   final AuthRepository _authRepo = Get.find<AuthRepository>();
   final StorageService _storage = Get.find<StorageService>();
+  final CartRepository _cartRepo = Get.find<CartRepository>();
 
   final isLoading = false.obs;
   final errorMessage = RxnString();
@@ -43,13 +45,19 @@ class AuthController extends GetxController {
     }
   }
 
-  Future<void> registerBuyer({required String name, required String email, required String password}) async {
+  Future<void> registerBuyer({
+    required String name,
+    required String email,
+    required String password,
+    required String storeId,
+  }) async {
     isLoading.value = true;
     errorMessage.value = null;
     try {
-      final user = await _authRepo.signUpBuyer(name: name, email: email, password: password);
+      final user = await _authRepo.signUpBuyer(
+          name: name, email: email, password: password, storeId: storeId);
       _storage.lastRole = user.role.name;
-      Get.offAllNamed(Routes.buyerShell);
+      _goToHome(user);
     } catch (e) {
       errorMessage.value = _friendlyError(e);
     } finally {
@@ -93,16 +101,20 @@ class AuthController extends GetxController {
 
   Future<void> signOut() async {
     await _authRepo.signOut();
+    _cartRepo.setStore(null);
     Get.offAllNamed(Routes.roleSelect);
   }
 
   void _goToHome(UserModel user) {
     switch (user.role) {
       case UserRole.buyer:
+        _cartRepo.setStore(user.storeId);
         Get.offAllNamed(Routes.buyerShell);
         break;
       case UserRole.seller:
-        Get.offAllNamed(user.hasActiveSubscription ? Routes.sellerShell : Routes.sellerOnboarding);
+        Get.offAllNamed(user.hasActiveSubscription
+            ? Routes.sellerShell
+            : Routes.sellerOnboarding);
         break;
       case UserRole.admin:
         Get.offAllNamed(Routes.adminShell);
@@ -112,7 +124,8 @@ class AuthController extends GetxController {
 
   String _friendlyError(Object e) {
     final message = e.toString();
-    if (message.contains('user-not-found') || message.contains('wrong-password')) {
+    if (message.contains('user-not-found') ||
+        message.contains('wrong-password')) {
       return 'That email and password combination doesn\'t match an account.';
     }
     if (message.contains('email-already-in-use')) {

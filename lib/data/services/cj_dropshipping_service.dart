@@ -16,18 +16,22 @@ import '../models/product_model.dart';
 class CjDropshippingService extends GetxService {
   final DioClient _dio = Get.find<DioClient>();
 
-  Future<List<ProductModel>> searchProducts({String? keyword, String? category, int page = 1}) async {
+  Future<List<ProductModel>> searchProducts(
+      {String? keyword, String? category, int page = 1}) async {
     final res = await _dio.get(ApiEndpoints.cjSearchProducts, query: {
       if (keyword != null) 'keyword': keyword,
       if (category != null) 'category': category,
       'page': page,
     });
     final items = (res['products'] as List? ?? []);
-    return items.map((e) => ProductModel.fromMap(Map<String, dynamic>.from(e))).toList();
+    return items
+        .map((e) => ProductModel.fromMap(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   Future<ProductModel> productDetail(String cjProductId) async {
-    final res = await _dio.get(ApiEndpoints.cjProductDetail, query: {'id': cjProductId});
+    final res = await _dio
+        .get(ApiEndpoints.cjProductDetail, query: {'id': cjProductId});
     return ProductModel.fromMap(res);
   }
 
@@ -49,7 +53,8 @@ class CjDropshippingService extends GetxService {
   }
 
   Future<String> trackShipment(String cjOrderId) async {
-    final res = await _dio.get(ApiEndpoints.cjTrackShipment, query: {'id': cjOrderId});
+    final res =
+        await _dio.get(ApiEndpoints.cjTrackShipment, query: {'id': cjOrderId});
     return res['status'] as String? ?? 'processing';
   }
 }

@@ -23,10 +23,14 @@ class SellerCatalogView extends GetView<SellerCatalogController> {
         child: Column(
           children: [
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(
+                  horizontal: context.pageHorizontalPadding,
+                  vertical: AppSpacing.md),
               child: TextField(
                 onSubmitted: controller.search,
-                decoration: const InputDecoration(hintText: 'Search the catalog', prefixIcon: Icon(Icons.search)),
+                decoration: const InputDecoration(
+                    hintText: 'Search the catalog',
+                    prefixIcon: Icon(Icons.search)),
               ),
             ),
             Expanded(
@@ -40,10 +44,13 @@ class SellerCatalogView extends GetView<SellerCatalogController> {
                   );
                 }
                 return ListView.separated(
-                  padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding),
+                  padding: EdgeInsets.symmetric(
+                      horizontal: context.pageHorizontalPadding),
                   itemCount: controller.catalog.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-                  itemBuilder: (context, index) => _CatalogTile(product: controller.catalog[index]),
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.sm),
+                  itemBuilder: (context, index) =>
+                      _CatalogTile(product: controller.catalog[index]),
                 );
               }),
             ),
@@ -71,20 +78,30 @@ class _CatalogTile extends StatelessWidget {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(AppRadii.stub),
-            child: CachedNetworkImage(imageUrl: product.imageUrl, width: 64, height: 64, fit: BoxFit.cover),
+            child: CachedNetworkImage(
+                imageUrl: product.imageUrl,
+                width: 64,
+                height: 64,
+                fit: BoxFit.cover),
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(product.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
+                Text(product.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium),
                 const SizedBox(height: 4),
-                Text('CJ cost: ${Formatters.currency(product.costPrice)}', style: Theme.of(context).textTheme.bodySmall),
+                Text('CJ cost: ${Formatters.currency(product.costPrice)}',
+                    style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
-          TextButton(onPressed: () => _showListSheet(context, product), child: const Text('List')),
+          TextButton(
+              onPressed: () => _showListSheet(context, product),
+              child: const Text('List')),
         ],
       ),
     );
@@ -107,7 +124,8 @@ class _ListProductSheet extends StatefulWidget {
 }
 
 class _ListProductSheetState extends State<_ListProductSheet> {
-  late final TextEditingController _priceCtrl = TextEditingController(text: (widget.product.costPrice * 2.2).toStringAsFixed(2));
+  late final TextEditingController _priceCtrl = TextEditingController(
+      text: (widget.product.costPrice * 2.2).toStringAsFixed(2));
   final _formKey = GlobalKey<FormState>();
 
   @override
@@ -133,10 +151,15 @@ class _ListProductSheetState extends State<_ListProductSheet> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: Container(
-              padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom),
+              padding: EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg + MediaQuery.of(context).viewInsets.bottom),
               decoration: const BoxDecoration(
                 color: AppColors.cloud,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.sheet)),
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(AppRadii.sheet)),
               ),
               child: Form(
                 key: _formKey,
@@ -144,14 +167,21 @@ class _ListProductSheetState extends State<_ListProductSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('List "${widget.product.title}"', style: Theme.of(context).textTheme.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text('List "${widget.product.title}"',
+                        style: Theme.of(context).textTheme.titleMedium,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
                     const SizedBox(height: AppSpacing.sm),
-                    Text('CJ cost price: ${Formatters.currency(widget.product.costPrice)}', style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                        'CJ cost price: ${Formatters.currency(widget.product.costPrice)}',
+                        style: Theme.of(context).textTheme.bodySmall),
                     const SizedBox(height: AppSpacing.md),
                     TextFormField(
                       controller: _priceCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Your sell price'),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Your sell price'),
                       validator: Validators.price,
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -162,16 +192,24 @@ class _ListProductSheetState extends State<_ListProductSheet> {
                           onPressed: controller.isListing.value
                               ? null
                               : () async {
-                                  if (!_formKey.currentState!.validate()) return;
-                                  final price = double.parse(_priceCtrl.text.trim());
-                                  final success = await controller.listProduct(widget.product, price);
+                                  if (!_formKey.currentState!.validate())
+                                    return;
+                                  final price =
+                                      double.parse(_priceCtrl.text.trim());
+                                  final success = await controller.listProduct(
+                                      widget.product, price);
                                   Get.back();
                                   if (success) {
-                                    Get.snackbar('Listed', '${widget.product.title} is now live in your store.');
+                                    Get.snackbar('Listed',
+                                        '${widget.product.title} is now live in your store.');
                                   }
                                 },
                           child: controller.isListing.value
-                              ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink))
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: AppColors.ink))
                               : const Text('Confirm listing'),
                         ),
                       ),

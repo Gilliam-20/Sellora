@@ -8,14 +8,16 @@ import '../../../data/repositories/subscription_repository.dart';
 import '../../../data/services/intasend_service.dart';
 
 class SellerSubscriptionController extends GetxController {
-  final SubscriptionRepository _subscriptionRepo = Get.find<SubscriptionRepository>();
+  final SubscriptionRepository _subscriptionRepo =
+      Get.find<SubscriptionRepository>();
   final AuthRepository authRepo = Get.find<AuthRepository>();
 
   final plans = <SubscriptionPlanModel>[].obs;
   final isLoading = true.obs;
   final isPaying = false.obs;
 
-  SubscriptionPlanModel? get currentPlan => plans.firstWhereOrNull((p) => p.id == authRepo.cachedUser?.subscriptionPlanId);
+  SubscriptionPlanModel? get currentPlan => plans
+      .firstWhereOrNull((p) => p.id == authRepo.cachedUser?.subscriptionPlanId);
 
   @override
   void onInit() {
@@ -47,7 +49,8 @@ class SellerSubscriptionController extends GetxController {
         );
         reference = result.reference;
       }
-      await _subscriptionRepo.subscribeSeller(sellerId: user.uid, planId: plan.id, paymentReference: reference);
+      await _subscriptionRepo.subscribeSeller(
+          sellerId: user.uid, planId: plan.id, paymentReference: reference);
 
       final updated = UserModel(
         uid: user.uid,
@@ -59,7 +62,8 @@ class SellerSubscriptionController extends GetxController {
         sellerStatus: SellerStatus.active,
         storeName: user.storeName,
         subscriptionPlanId: plan.id,
-        subscriptionActiveUntil: DateTime.now().add(Duration(days: plan.billingPeriodDays)),
+        subscriptionActiveUntil:
+            DateTime.now().add(Duration(days: plan.billingPeriodDays)),
         currencyCode: user.currencyCode,
         createdAt: user.createdAt,
       );

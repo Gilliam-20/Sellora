@@ -39,25 +39,31 @@ class DioClient extends GetxService {
     );
   }
 
-  Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? data}) async {
+  Future<Map<String, dynamic>> post(String path,
+      {Map<String, dynamic>? data}) async {
     try {
       final response = await dio.post(path, data: data);
       return Map<String, dynamic>.from(response.data ?? {});
     } on DioException catch (e) {
       throw ApiException(
-        e.response?.data?['message']?.toString() ?? e.message ?? 'Network error',
+        e.response?.data?['message']?.toString() ??
+            e.message ??
+            'Network error',
         statusCode: e.response?.statusCode,
       );
     }
   }
 
-  Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? query}) async {
+  Future<Map<String, dynamic>> get(String path,
+      {Map<String, dynamic>? query}) async {
     try {
       final response = await dio.get(path, queryParameters: query);
       return Map<String, dynamic>.from(response.data ?? {});
     } on DioException catch (e) {
       throw ApiException(
-        e.response?.data?['message']?.toString() ?? e.message ?? 'Network error',
+        e.response?.data?['message']?.toString() ??
+            e.message ??
+            'Network error',
         statusCode: e.response?.statusCode,
       );
     }

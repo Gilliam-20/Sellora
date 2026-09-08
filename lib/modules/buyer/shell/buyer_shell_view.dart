@@ -12,7 +12,12 @@ import 'buyer_shell_controller.dart';
 class BuyerShellView extends GetView<BuyerShellController> {
   const BuyerShellView({super.key});
 
-  static const _tabs = [BuyerHomeView(), CartView(), BuyerOrdersView(), BuyerProfileView()];
+  static const _tabs = [
+    BuyerHomeView(),
+    CartView(),
+    BuyerOrdersView(),
+    BuyerProfileView()
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +29,8 @@ class BuyerShellView extends GetView<BuyerShellController> {
         onDestinationSelected: controller.changeTab,
         tabs: _tabs,
         destinations: [
-          const ShellDestination(icon: Icon(Icons.storefront_outlined), label: 'Shop'),
+          const ShellDestination(
+              icon: Icon(Icons.storefront_outlined), label: 'Shop'),
           ShellDestination(
             icon: Obx(
               () => Badge(
@@ -37,8 +43,10 @@ class BuyerShellView extends GetView<BuyerShellController> {
             ),
             label: 'Cart',
           ),
-          const ShellDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
-          const ShellDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
+          const ShellDestination(
+              icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
+          const ShellDestination(
+              icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
       ),
     );

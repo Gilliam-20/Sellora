@@ -8,12 +8,16 @@ abstract class ProductRepository {
   Future<List<ProductModel>> sellerListings(String sellerId);
 
   /// All active listings across all sellers, for the buyer storefront.
-  Future<List<ProductModel>> storefrontFeed({String? keyword, String? category});
+  Future<List<ProductModel>> storefrontFeed(
+      {String? keyword, String? category});
 
   Future<ProductModel> productDetail(String productId);
 
   /// A seller lists a catalog product in their store at their own price.
-  Future<void> listProduct({required ProductModel catalogProduct, required String sellerId, required double sellPrice});
+  Future<void> listProduct(
+      {required ProductModel catalogProduct,
+      required String sellerId,
+      required double sellPrice});
 
   Future<void> updateListing(ProductModel product);
 

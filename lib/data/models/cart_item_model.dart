@@ -1,7 +1,8 @@
 import 'product_model.dart';
 
 class CartItemModel {
-  CartItemModel({required this.product, this.quantity = 1, this.selectedVariant});
+  CartItemModel(
+      {required this.product, this.quantity = 1, this.selectedVariant});
 
   final ProductModel product;
   int quantity;

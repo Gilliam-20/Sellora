@@ -15,7 +15,8 @@ class SelloraLoader extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
-        child: const CircularProgressIndicator(strokeWidth: 2.6, color: AppColors.manifestGold),
+        child: const CircularProgressIndicator(
+            strokeWidth: 2.6, color: AppColors.manifestGold),
       ),
     );
   }
@@ -40,8 +41,14 @@ class RoleBadge extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(AppRadii.control)),
-      child: Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(AppRadii.control)),
+      child: Text(label,
+          style: Theme.of(context)
+              .textTheme
+              .labelSmall
+              ?.copyWith(color: color, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -49,7 +56,8 @@ class RoleBadge extends StatelessWidget {
 /// Section header used to introduce a group of content without resorting
 /// to a tracked-out all-caps eyebrow label.
 class SectionHeader extends StatelessWidget {
-  const SectionHeader({super.key, required this.title, this.action, this.onAction});
+  const SectionHeader(
+      {super.key, required this.title, this.action, this.onAction});
   final String title;
   final String? action;
   final VoidCallback? onAction;
@@ -60,7 +68,8 @@ class SectionHeader extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(title, style: Theme.of(context).textTheme.titleMedium),
-        if (action != null) TextButton(onPressed: onAction, child: Text(action!)),
+        if (action != null)
+          TextButton(onPressed: onAction, child: Text(action!)),
       ],
     );
   }
@@ -85,7 +94,8 @@ class BottomActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.md + MediaQuery.of(context).padding.bottom),
+      padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md,
+          AppSpacing.md + MediaQuery.of(context).padding.bottom),
       decoration: const BoxDecoration(
         color: AppColors.cloud,
         border: Border(top: BorderSide(color: AppColors.hairline)),
@@ -109,14 +119,19 @@ class BottomActionBar extends StatelessWidget {
                 child: Row(
                   children: [
                     if (trailingText != null) ...[
-                      Text(trailingText!, style: Theme.of(context).textTheme.titleMedium),
+                      Text(trailingText!,
+                          style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(width: AppSpacing.md),
                     ],
                     Expanded(
                       child: ElevatedButton(
                         onPressed: isLoading ? null : onPressed,
                         child: isLoading
-                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink))
+                            ? const SizedBox(
+                                height: 18,
+                                width: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: AppColors.ink))
                             : Text(label),
                       ),
                     ),

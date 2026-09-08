@@ -9,8 +9,9 @@ class AdminOrdersController extends GetxController {
   final isLoading = true.obs;
   final statusFilter = Rxn<OrderStatus>();
 
-  List<OrderModel> get filtered =>
-      statusFilter.value == null ? orders : orders.where((o) => o.status == statusFilter.value).toList();
+  List<OrderModel> get filtered => statusFilter.value == null
+      ? orders
+      : orders.where((o) => o.status == statusFilter.value).toList();
 
   @override
   void onInit() {

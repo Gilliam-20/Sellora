@@ -19,16 +19,22 @@ class AdminSellersView extends GetView<AdminSellersController> {
       body: Obx(() {
         if (controller.isLoading.value) return const SelloraLoader();
         if (controller.sellers.isEmpty) {
-          return const EmptyState(icon: Icons.storefront_outlined, title: 'No sellers yet', message: 'New signups will show up here for approval.');
+          return const EmptyState(
+              icon: Icons.storefront_outlined,
+              title: 'No sellers yet',
+              message: 'New signups will show up here for approval.');
         }
         return RefreshIndicator(
           onRefresh: controller.load,
           child: ResponsiveCenter(
             maxWidth: 720,
             child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(
+                  horizontal: context.pageHorizontalPadding,
+                  vertical: AppSpacing.md),
               itemCount: controller.sellers.length,
-              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+              separatorBuilder: (_, __) =>
+                  const SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) {
                 final seller = controller.sellers[index];
                 return ManifestStub(
@@ -37,14 +43,19 @@ class AdminSellersView extends GetView<AdminSellersController> {
                   subtitle: _statusLabel(seller.sellerStatus),
                   accentColor: _statusColor(seller.sellerStatus),
                   trailing: seller.sellerStatus == SellerStatus.pendingApproval
-                      ? ElevatedButton(onPressed: () => controller.approve(seller.uid), child: const Text('Approve'))
+                      ? ElevatedButton(
+                          onPressed: () => controller.approve(seller.uid),
+                          child: const Text('Approve'))
                       : seller.sellerStatus == SellerStatus.active
                           ? TextButton(
                               onPressed: () => controller.suspend(seller.uid),
-                              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.danger),
                               child: const Text('Suspend'),
                             )
-                          : OutlinedButton(onPressed: () => controller.approve(seller.uid), child: const Text('Reinstate')),
+                          : OutlinedButton(
+                              onPressed: () => controller.approve(seller.uid),
+                              child: const Text('Reinstate')),
                 );
               },
             ),

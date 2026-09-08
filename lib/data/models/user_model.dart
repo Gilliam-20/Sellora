@@ -22,6 +22,7 @@ class UserModel {
     this.subscriptionPlanId,
     this.subscriptionActiveUntil,
     this.currencyCode = 'USD',
+    this.storeId,
     this.createdAt,
   });
 
@@ -39,10 +40,16 @@ class UserModel {
   final DateTime? subscriptionActiveUntil;
   final String currencyCode;
 
+  // Buyer-only: the store (see StoreModel) they registered as a customer
+  // of. A buyer shops exactly one store — this is what scopes their cart
+  // and order history.
+  final String? storeId;
+
   final DateTime? createdAt;
 
   bool get hasActiveSubscription =>
-      subscriptionActiveUntil != null && subscriptionActiveUntil!.isAfter(DateTime.now());
+      subscriptionActiveUntil != null &&
+      subscriptionActiveUntil!.isAfter(DateTime.now());
 
   UserModel copyWith({
     String? name,
@@ -64,7 +71,8 @@ class UserModel {
       sellerStatus: sellerStatus ?? this.sellerStatus,
       storeName: storeName ?? this.storeName,
       subscriptionPlanId: subscriptionPlanId ?? this.subscriptionPlanId,
-      subscriptionActiveUntil: subscriptionActiveUntil ?? this.subscriptionActiveUntil,
+      subscriptionActiveUntil:
+          subscriptionActiveUntil ?? this.subscriptionActiveUntil,
       currencyCode: currencyCode ?? this.currencyCode,
       createdAt: createdAt,
     );
@@ -79,14 +87,19 @@ class UserModel {
       phone: map['phone'] as String?,
       photoUrl: map['photoUrl'] as String?,
       sellerStatus: map['sellerStatus'] != null
-          ? SellerStatus.values.firstWhere((s) => s.name == map['sellerStatus'], orElse: () => SellerStatus.pendingApproval)
+          ? SellerStatus.values.firstWhere((s) => s.name == map['sellerStatus'],
+              orElse: () => SellerStatus.pendingApproval)
           : null,
       storeName: map['storeName'] as String?,
       subscriptionPlanId: map['subscriptionPlanId'] as String?,
-      subscriptionActiveUntil:
-          map['subscriptionActiveUntil'] != null ? DateTime.tryParse(map['subscriptionActiveUntil'] as String) : null,
+      subscriptionActiveUntil: map['subscriptionActiveUntil'] != null
+          ? DateTime.tryParse(map['subscriptionActiveUntil'] as String)
+          : null,
       currencyCode: map['currencyCode'] as String? ?? 'USD',
-      createdAt: map['createdAt'] != null ? DateTime.tryParse(map['createdAt'] as String) : null,
+      storeId: map['storeId'] as String?,
+      createdAt: map['createdAt'] != null
+          ? DateTime.tryParse(map['createdAt'] as String)
+          : null,
     );
   }
 
@@ -103,6 +116,7 @@ class UserModel {
       'subscriptionPlanId': subscriptionPlanId,
       'subscriptionActiveUntil': subscriptionActiveUntil?.toIso8601String(),
       'currencyCode': currencyCode,
+      'storeId': storeId,
       'createdAt': createdAt?.toIso8601String(),
     };
   }

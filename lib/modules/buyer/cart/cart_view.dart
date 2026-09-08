@@ -30,64 +30,84 @@ class CartView extends GetView<CartController> {
         return ResponsiveCenter(
           maxWidth: 720,
           child: ListView.separated(
-          padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
-          itemCount: items.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: AppColors.cloud,
-                borderRadius: BorderRadius.circular(AppRadii.card),
-                border: Border.all(color: AppColors.hairline),
-              ),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadii.stub),
-                    child: CachedNetworkImage(imageUrl: item.product.imageUrl, width: 64, height: 64, fit: BoxFit.cover),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.product.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium),
-                        const SizedBox(height: 4),
-                        Text(Formatters.currency(item.product.sellPrice), style: AppTypography.price(size: 14)),
-                      ],
+            padding: EdgeInsets.symmetric(
+                horizontal: context.pageHorizontalPadding,
+                vertical: AppSpacing.md),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.cloud,
+                  borderRadius: BorderRadius.circular(AppRadii.card),
+                  border: Border.all(color: AppColors.hairline),
+                ),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadii.stub),
+                      child: CachedNetworkImage(
+                          imageUrl: item.product.imageUrl,
+                          width: 64,
+                          height: 64,
+                          fit: BoxFit.cover),
                     ),
-                  ),
-                  Column(
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => controller.cartRepo.updateQuantity(item.product.id, item.quantity - 1),
-                            icon: const Icon(Icons.remove_circle_outline, size: 20),
-                          ),
-                          Text('${item.quantity}'),
-                          IconButton(
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => controller.cartRepo.updateQuantity(item.product.id, item.quantity + 1),
-                            icon: const Icon(Icons.add_circle_outline, size: 20),
-                          ),
+                          Text(item.product.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium),
+                          const SizedBox(height: 4),
+                          Text(Formatters.currency(item.product.sellPrice),
+                              style: AppTypography.price(size: 14)),
                         ],
                       ),
-                      TextButton(
-                        onPressed: () => controller.cartRepo.remove(item.product.id),
-                        style: TextButton.styleFrom(foregroundColor: AppColors.danger, padding: EdgeInsets.zero, minimumSize: const Size(0, 32)),
-                        child: const Text('Remove'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
+                    ),
+                    Column(
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => controller.cartRepo
+                                  .updateQuantity(
+                                      item.product.id, item.quantity - 1),
+                              icon: const Icon(Icons.remove_circle_outline,
+                                  size: 20),
+                            ),
+                            Text('${item.quantity}'),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => controller.cartRepo
+                                  .updateQuantity(
+                                      item.product.id, item.quantity + 1),
+                              icon: const Icon(Icons.add_circle_outline,
+                                  size: 20),
+                            ),
+                          ],
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              controller.cartRepo.remove(item.product.id),
+                          style: TextButton.styleFrom(
+                              foregroundColor: AppColors.danger,
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 32)),
+                          child: const Text('Remove'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         );
       }),

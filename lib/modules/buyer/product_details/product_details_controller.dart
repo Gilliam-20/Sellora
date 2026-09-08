@@ -24,7 +24,8 @@ class ProductDetailsController extends GetxController {
   }
 
   void addToCart() {
-    _cartRepo.add(product, variant: selectedVariant.value, quantity: quantity.value);
+    _cartRepo.add(product,
+        variant: selectedVariant.value, quantity: quantity.value);
     Get.snackbar('Added to cart', '${product.title} · qty ${quantity.value}');
   }
 }

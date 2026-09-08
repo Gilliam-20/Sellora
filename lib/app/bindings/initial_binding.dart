@@ -7,14 +7,17 @@ import '../../data/repositories/cart_repository.dart';
 import '../../data/repositories/firebase_admin_repository.dart';
 import '../../data/repositories/firebase_order_repository.dart';
 import '../../data/repositories/firebase_product_repository.dart';
+import '../../data/repositories/firebase_store_repository.dart';
 import '../../data/repositories/firebase_subscription_repository.dart';
 import '../../data/repositories/mock/mock_admin_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_order_repository.dart';
 import '../../data/repositories/mock/mock_product_repository.dart';
+import '../../data/repositories/mock/mock_store_repository.dart';
 import '../../data/repositories/mock/mock_subscription_repository.dart';
 import '../../data/repositories/order_repository.dart';
 import '../../data/repositories/product_repository.dart';
+import '../../data/repositories/store_repository.dart';
 import '../../data/repositories/subscription_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cj_dropshipping_service.dart';
@@ -43,8 +46,10 @@ class InitialBinding extends Bindings {
       Get.put<AuthRepository>(MockAuthRepository(), permanent: true);
       Get.put<ProductRepository>(MockProductRepository(), permanent: true);
       Get.put<OrderRepository>(MockOrderRepository(), permanent: true);
-      Get.put<SubscriptionRepository>(MockSubscriptionRepository(), permanent: true);
+      Get.put<SubscriptionRepository>(MockSubscriptionRepository(),
+          permanent: true);
       Get.put<AdminRepository>(MockAdminRepository(), permanent: true);
+      Get.put<StoreRepository>(MockStoreRepository(), permanent: true);
     } else {
       Get.put(AuthService(), permanent: true);
       Get.put(FirestoreService(), permanent: true);
@@ -54,8 +59,10 @@ class InitialBinding extends Bindings {
       Get.put<AuthRepository>(FirebaseAuthRepository(), permanent: true);
       Get.put<ProductRepository>(FirebaseProductRepository(), permanent: true);
       Get.put<OrderRepository>(FirebaseOrderRepository(), permanent: true);
-      Get.put<SubscriptionRepository>(FirebaseSubscriptionRepository(), permanent: true);
+      Get.put<SubscriptionRepository>(FirebaseSubscriptionRepository(),
+          permanent: true);
       Get.put<AdminRepository>(FirebaseAdminRepository(), permanent: true);
+      Get.put<StoreRepository>(FirebaseStoreRepository(), permanent: true);
     }
   }
 }

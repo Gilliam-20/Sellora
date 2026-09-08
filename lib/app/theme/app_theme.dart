@@ -43,7 +43,8 @@ class AppTheme {
           foregroundColor: AppColors.ink,
           disabledBackgroundColor: AppColors.slateLight,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 16),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.control),
           ),
@@ -54,7 +55,8 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.cargoNavy,
           side: const BorderSide(color: AppColors.cargoNavy, width: 1.4),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 16),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.control),
           ),
@@ -70,8 +72,10 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.cloud,
-        contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 14),
-        hintStyle: AppTypography.textTheme.bodyMedium?.copyWith(color: AppColors.slateLight),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 14),
+        hintStyle: AppTypography.textTheme.bodyMedium
+            ?.copyWith(color: AppColors.slateLight),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadii.stub + 8),
           borderSide: const BorderSide(color: AppColors.hairline),
@@ -93,15 +97,18 @@ class AppTheme {
         backgroundColor: AppColors.mist,
         side: const BorderSide(color: AppColors.hairline),
         labelStyle: AppTypography.textTheme.labelMedium,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.control)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.control)),
       ),
-      dividerTheme: const DividerThemeData(color: AppColors.hairline, thickness: 1, space: 1),
+      dividerTheme: const DividerThemeData(
+          color: AppColors.hairline, thickness: 1, space: 1),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: AppColors.cargoNavy,
         selectedItemColor: AppColors.manifestGold,
         unselectedItemColor: AppColors.slateLight,
         type: BottomNavigationBarType.fixed,
-        selectedLabelStyle: AppTypography.textTheme.labelSmall?.copyWith(color: AppColors.manifestGold),
+        selectedLabelStyle: AppTypography.textTheme.labelSmall
+            ?.copyWith(color: AppColors.manifestGold),
         unselectedLabelStyle: AppTypography.textTheme.labelSmall,
         showUnselectedLabels: true,
         elevation: 0,

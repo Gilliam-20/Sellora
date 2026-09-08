@@ -48,7 +48,8 @@ extension ResponsiveContext on BuildContext {
   /// Horizontal page padding that grows a little with the viewport, so
   /// content doesn't hug the edge of a tablet or desktop window the way
   /// it should on a phone.
-  double get pageHorizontalPadding => responsiveValue(mobile: AppSpacing.md, tablet: AppSpacing.lg, desktop: AppSpacing.xl);
+  double get pageHorizontalPadding => responsiveValue(
+      mobile: AppSpacing.md, tablet: AppSpacing.lg, desktop: AppSpacing.xl);
 }
 
 /// Centers page content and caps its width once the viewport is wider
@@ -73,7 +74,8 @@ class ResponsiveCenter extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: padding == null ? child : Padding(padding: padding!, child: child),
+        child:
+            padding == null ? child : Padding(padding: padding!, child: child),
       ),
     );
   }
@@ -89,7 +91,8 @@ EdgeInsets centeredSliverPadding(
   double minHorizontal = AppSpacing.md,
 }) {
   final width = context.screenWidth;
-  if (width <= maxContentWidth) return EdgeInsets.symmetric(horizontal: minHorizontal);
+  if (width <= maxContentWidth)
+    return EdgeInsets.symmetric(horizontal: minHorizontal);
   final extra = (width - maxContentWidth) / 2;
   return EdgeInsets.symmetric(horizontal: minHorizontal + extra);
 }

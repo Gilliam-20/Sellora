@@ -6,6 +6,42 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-09 — Payment design finalized: IntaSend Split Payments mechanics
+
+**Status:** design complete, still awaiting overall sign-off. No implementation code written.
+
+Section 04 fully specified per explicit direction: buyer funds collect into Sellora's IntaSend
+account and split automatically at collection via IntaSend Split Payments (sub-accounts) — seller's
+net share to their own sub-account, CJ-cost-plus-fee stays with Sellora. Design document updated in
+place: <https://claude.ai/code/artifact/0b1113cb-1fc9-4176-9dc7-7df3bfda170f>
+
+New content:
+- **Split calculation** — computed fresh per order (not a stored ratio), since product mix varies:
+  `orderTotal / costOfGoods / platformFee / sellerNet`, in minor units, rounding remainder to
+  Sellora never the seller.
+- **Paying CJ** — explicit that CJ isn't an IntaSend party, so this is a second, Sellora-initiated
+  payment funded from its own settled balance, not a live per-order transfer. Sellora keeps a small
+  bounded float in its CJ wallet so fulfilment doesn't wait on settlement timing — a materially
+  smaller exposure than the original direct-to-seller design's open "who fronts CJ" problem.
+- **Payout hold policy** — recommended holding seller payouts until delivery is confirmed (standard
+  marketplace practice). Flagged a real gap in the current codebase: `OrderStatus.delivered` is
+  seller-self-reported with nothing independent behind it, which is a conflict of interest as a
+  payout trigger — recommended wiring the hold timer to CJ's own tracking data
+  (`cjTrackShipment`, already stubbed) instead of trusting self-report alone.
+- Data model: `orders/{id}` gains a `settlement` map; new `stores/{id}/payouts` subcollection; new
+  isolation tests for both. `stores/{id}/private/payments` gains `intasendSubAccountId`/`kycStatus`.
+- Commission model reverts back to "live split at collection" (from the prior revision's "invoiced
+  arrears," which was specific to the direct-to-seller design this supersedes).
+- Sharpened the open question that used to be "does IntaSend support this" (now decided) into five
+  concrete API specifics to confirm before Phase 4: split precision (fixed amount vs. percentage),
+  sub-account KYC turnaround, Payouts API minimums/fees, settlement schedule, and refund behavior on
+  an already-split transaction.
+
+**Next step:** unchanged from the prior entry — Phase 0 sign-off, then Q1–Q5 (Q3 now the five-item
+IntaSend checklist above).
+
+---
+
 ## 2026-09-08 — Bug fixes + responsiveness pass (current marketplace UI)
 
 **Status:** done. First real code changes in this repo (everything above was design-only). Scoped

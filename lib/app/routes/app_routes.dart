@@ -4,6 +4,7 @@ abstract class Routes {
   static const splash = '/';
   static const roleSelect = '/role-select';
   static const login = '/login';
+  static const storeSelect = '/select-store';
   static const registerBuyer = '/register/buyer';
   static const registerSeller = '/register/seller';
 

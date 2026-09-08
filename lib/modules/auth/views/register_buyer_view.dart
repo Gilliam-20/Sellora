@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
@@ -29,12 +30,26 @@ class _RegisterBuyerViewState extends State<RegisterBuyerView> {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<AuthController>();
+    final args = Get.arguments as Map?;
+    final storeId = args?['storeId'] as String?;
+    final storeName = args?['storeName'] as String?;
+
+    // Reached this screen without picking a store first (e.g. a stale
+    // deep link) — send them to the picker rather than register a buyer
+    // with nowhere to shop.
+    if (storeId == null) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => Get.offNamed(Routes.storeSelect));
+      return const Scaffold(body: SizedBox.shrink());
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Create your account')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(
+              horizontal: context.pageHorizontalPadding,
+              vertical: AppSpacing.lg),
           child: ResponsiveCenter(
             maxWidth: 440,
             child: Form(
@@ -42,9 +57,11 @@ class _RegisterBuyerViewState extends State<RegisterBuyerView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Join Sellora', style: Theme.of(context).textTheme.displaySmall),
+                  Text('Join ${storeName ?? 'the store'}',
+                      style: Theme.of(context).textTheme.displaySmall),
                   const SizedBox(height: AppSpacing.xs),
-                  Text('Shop products sourced from sellers worldwide.', style: Theme.of(context).textTheme.bodyMedium),
+                  Text('Create a buyer account to shop here.',
+                      style: Theme.of(context).textTheme.bodyMedium),
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(
                     controller: _nameCtrl,
@@ -71,7 +88,9 @@ class _RegisterBuyerViewState extends State<RegisterBuyerView> {
                     if (error == null) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      child: Text(error,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error)),
                     );
                   }),
                   Obx(
@@ -86,6 +105,7 @@ class _RegisterBuyerViewState extends State<RegisterBuyerView> {
                                     name: _nameCtrl.text.trim(),
                                     email: _emailCtrl.text.trim(),
                                     password: _passwordCtrl.text,
+                                    storeId: storeId,
                                   );
                                 }
                               },
@@ -93,7 +113,8 @@ class _RegisterBuyerViewState extends State<RegisterBuyerView> {
                             ? const SizedBox(
                                 height: 18,
                                 width: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
                               )
                             : const Text('Create account'),
                       ),

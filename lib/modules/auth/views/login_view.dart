@@ -39,7 +39,9 @@ class _LoginViewState extends State<LoginView> {
       appBar: AppBar(title: const Text('Sign in')),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(
+              horizontal: context.pageHorizontalPadding,
+              vertical: AppSpacing.lg),
           child: ResponsiveCenter(
             maxWidth: 440,
             child: Form(
@@ -47,10 +49,13 @@ class _LoginViewState extends State<LoginView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Welcome back', style: Theme.of(context).textTheme.displaySmall),
+                  Text('Welcome back',
+                      style: Theme.of(context).textTheme.displaySmall),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    intent == 'seller' ? 'Sign in to manage your storefront.' : 'Sign in to keep shopping.',
+                    intent == 'seller'
+                        ? 'Sign in to manage your storefront.'
+                        : 'Sign in to keep shopping.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: AppSpacing.lg),
@@ -71,12 +76,15 @@ class _LoginViewState extends State<LoginView> {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: () async {
-                        if (_emailCtrl.text.trim().isEmpty || Validators.email(_emailCtrl.text) != null) {
-                          Get.snackbar('Enter your email first', 'Then tap "Forgot password" again.');
+                        if (_emailCtrl.text.trim().isEmpty ||
+                            Validators.email(_emailCtrl.text) != null) {
+                          Get.snackbar('Enter your email first',
+                              'Then tap "Forgot password" again.');
                           return;
                         }
                         await controller.sendReset(_emailCtrl.text.trim());
-                        Get.snackbar('Check your email', 'We sent a password reset link to ${_emailCtrl.text.trim()}.');
+                        Get.snackbar('Check your email',
+                            'We sent a password reset link to ${_emailCtrl.text.trim()}.');
                       },
                       child: const Text('Forgot password?'),
                     ),
@@ -87,7 +95,9 @@ class _LoginViewState extends State<LoginView> {
                     if (error == null) return const SizedBox.shrink();
                     return Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: Text(error, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                      child: Text(error,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error)),
                     );
                   }),
                   Obx(
@@ -98,14 +108,17 @@ class _LoginViewState extends State<LoginView> {
                             ? null
                             : () {
                                 if (_formKey.currentState!.validate()) {
-                                  controller.signIn(email: _emailCtrl.text.trim(), password: _passwordCtrl.text);
+                                  controller.signIn(
+                                      email: _emailCtrl.text.trim(),
+                                      password: _passwordCtrl.text);
                                 }
                               },
                         child: controller.isLoading.value
                             ? const SizedBox(
                                 height: 18,
                                 width: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
                               )
                             : const Text('Sign in'),
                       ),
@@ -115,10 +128,14 @@ class _LoginViewState extends State<LoginView> {
                   Center(
                     child: TextButton(
                       onPressed: () => Get.toNamed(
-                        intent == 'seller' ? Routes.registerSeller : Routes.registerBuyer,
+                        intent == 'seller'
+                            ? Routes.registerSeller
+                            : Routes.storeSelect,
                       ),
                       child: Text(
-                        intent == 'seller' ? 'New seller? Create a store' : 'New here? Create an account',
+                        intent == 'seller'
+                            ? 'New seller? Create a store'
+                            : 'New here? Create an account',
                       ),
                     ),
                   ),

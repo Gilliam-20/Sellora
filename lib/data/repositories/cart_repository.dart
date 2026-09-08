@@ -9,16 +9,32 @@ import '../models/product_model.dart';
 class CartRepository extends GetxService {
   final RxList<CartItemModel> items = <CartItemModel>[].obs;
 
+  /// The store (see StoreModel) this cart's items belong to. A buyer
+  /// shops exactly one store, so switching stores — or a different buyer
+  /// signing in on the same session — starts a fresh cart instead of
+  /// mixing two sellers' items together.
+  String? _storeId;
+  String? get storeId => _storeId;
+
+  void setStore(String? storeId) {
+    if (_storeId != storeId) {
+      _storeId = storeId;
+      items.clear();
+    }
+  }
+
   double get subtotal => items.fold(0, (sum, item) => sum + item.lineTotal);
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
 
   void add(ProductModel product, {String? variant, int quantity = 1}) {
-    final existingIndex = items.indexWhere((i) => i.product.id == product.id && i.selectedVariant == variant);
+    final existingIndex = items.indexWhere(
+        (i) => i.product.id == product.id && i.selectedVariant == variant);
     if (existingIndex != -1) {
       items[existingIndex].quantity += quantity;
       items.refresh();
     } else {
-      items.add(CartItemModel(product: product, quantity: quantity, selectedVariant: variant));
+      items.add(CartItemModel(
+          product: product, quantity: quantity, selectedVariant: variant));
     }
   }
 

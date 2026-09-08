@@ -46,12 +46,14 @@ class ManifestStub extends StatelessWidget {
                   width: 5,
                   decoration: BoxDecoration(
                     color: accentColor,
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(AppRadii.stub)),
+                    borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(AppRadii.stub)),
                   ),
                 ),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm + 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md, vertical: AppSpacing.sm + 4),
                     child: Row(
                       children: [
                         Expanded(
@@ -59,12 +61,23 @@ class ManifestStub extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(code, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.manifestCode()),
+                              Text(code,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.manifestCode()),
                               const SizedBox(height: 2),
-                              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
+                              Text(title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style:
+                                      Theme.of(context).textTheme.titleSmall),
                               if (subtitle != null) ...[
                                 const SizedBox(height: 2),
-                                Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+                                Text(subtitle!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall),
                               ],
                             ],
                           ),
@@ -113,10 +126,18 @@ class ManifestStatCard extends StatelessWidget {
         children: [
           Text(label, style: Theme.of(context).textTheme.labelMedium),
           const SizedBox(height: 6),
-          Text(value, style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 24)),
+          Text(value,
+              style: Theme.of(context)
+                  .textTheme
+                  .displaySmall
+                  ?.copyWith(fontSize: 24)),
           if (delta != null) ...[
             const SizedBox(height: 4),
-            Text(delta!, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.horizonTealDeep)),
+            Text(delta!,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: AppColors.horizonTealDeep)),
           ],
         ],
       ),

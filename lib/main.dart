@@ -19,7 +19,8 @@ Future<void> main() async {
   // Linux later — DefaultFirebaseOptions.currentPlatform throws on those
   // until then).
   if (!AppConstants.useMockData) {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform);
   }
 
   runApp(const SelloraApp());

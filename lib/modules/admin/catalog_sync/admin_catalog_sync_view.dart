@@ -33,7 +33,8 @@ class AdminCatalogSyncView extends GetView<AdminCatalogSyncController> {
                     children: [
                       const Icon(Icons.sync, color: AppColors.adminAccent),
                       const SizedBox(width: AppSpacing.sm),
-                      Text('Shared catalog', style: Theme.of(context).textTheme.titleMedium),
+                      Text('Shared catalog',
+                          style: Theme.of(context).textTheme.titleMedium),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -45,18 +46,26 @@ class AdminCatalogSyncView extends GetView<AdminCatalogSyncController> {
                   Obx(() {
                     final last = controller.lastSyncedAt.value;
                     return Text(
-                      last == null ? 'Never synced' : 'Last synced ${Formatters.dateTime(last)}',
+                      last == null
+                          ? 'Never synced'
+                          : 'Last synced ${Formatters.dateTime(last)}',
                       style: Theme.of(context).textTheme.labelMedium,
                     );
                   }),
                   const SizedBox(height: AppSpacing.md),
                   Obx(
                     () => ElevatedButton.icon(
-                      onPressed: controller.isSyncing.value ? null : controller.sync,
+                      onPressed:
+                          controller.isSyncing.value ? null : controller.sync,
                       icon: controller.isSyncing.value
-                          ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink))
+                          ? const SizedBox(
+                              height: 16,
+                              width: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppColors.ink))
                           : const Icon(Icons.refresh, size: 18),
-                      label: Text(controller.isSyncing.value ? 'Syncing…' : 'Sync now'),
+                      label: Text(
+                          controller.isSyncing.value ? 'Syncing…' : 'Sync now'),
                     ),
                   ),
                 ],

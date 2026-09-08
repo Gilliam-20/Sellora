@@ -11,7 +11,8 @@ import '../../../data/services/intasend_service.dart';
 enum OnboardingStep { choosePlan, pay }
 
 class SellerOnboardingController extends GetxController {
-  final SubscriptionRepository _subscriptionRepo = Get.find<SubscriptionRepository>();
+  final SubscriptionRepository _subscriptionRepo =
+      Get.find<SubscriptionRepository>();
   final AuthRepository _authRepo = Get.find<AuthRepository>();
 
   final plans = <SubscriptionPlanModel>[].obs;
@@ -33,7 +34,8 @@ class SellerOnboardingController extends GetxController {
   Future<void> _loadPlans() async {
     isLoadingPlans.value = true;
     plans.value = await _subscriptionRepo.fetchPlans();
-    selectedPlanId.value = plans.firstWhereOrNull((p) => p.isPopular)?.id ?? plans.first.id;
+    selectedPlanId.value =
+        plans.firstWhereOrNull((p) => p.isPopular)?.id ?? plans.first.id;
     isLoadingPlans.value = false;
   }
 
@@ -63,11 +65,13 @@ class SellerOnboardingController extends GetxController {
         reference = result.reference;
       }
 
-      await _subscriptionRepo.subscribeSeller(sellerId: user.uid, planId: plan.id, paymentReference: reference);
+      await _subscriptionRepo.subscribeSeller(
+          sellerId: user.uid, planId: plan.id, paymentReference: reference);
 
       final updated = user.copyWith(
         subscriptionPlanId: plan.id,
-        subscriptionActiveUntil: DateTime.now().add(Duration(days: plan.billingPeriodDays)),
+        subscriptionActiveUntil:
+            DateTime.now().add(Duration(days: plan.billingPeriodDays)),
       );
       final activeUser = UserModel(
         uid: updated.uid,
@@ -79,16 +83,19 @@ class SellerOnboardingController extends GetxController {
         sellerStatus: SellerStatus.active,
         storeName: updated.storeName,
         subscriptionPlanId: plan.id,
-        subscriptionActiveUntil: DateTime.now().add(Duration(days: plan.billingPeriodDays)),
+        subscriptionActiveUntil:
+            DateTime.now().add(Duration(days: plan.billingPeriodDays)),
         currencyCode: updated.currencyCode,
         createdAt: updated.createdAt,
       );
       await _authRepo.updateUser(activeUser);
 
       Get.offAllNamed(Routes.sellerShell);
-      Get.snackbar('You\'re live', 'Your ${plan.name} subscription is active — start listing products.');
+      Get.snackbar('You\'re live',
+          'Your ${plan.name} subscription is active — start listing products.');
     } catch (e) {
-      errorMessage.value = 'Payment didn\'t go through. Check the number and try again.';
+      errorMessage.value =
+          'Payment didn\'t go through. Check the number and try again.';
     } finally {
       isPaying.value = false;
     }
