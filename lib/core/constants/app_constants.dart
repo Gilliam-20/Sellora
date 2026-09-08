@@ -19,7 +19,7 @@ class AppConstants {
 class ApiEndpoints {
   ApiEndpoints._();
 
-  static const String baseFunctionsUrl = 'https://us-central1-YOUR_FIREBASE_PROJECT.cloudfunctions.net';
+  static const String baseFunctionsUrl = 'https://us-central1-sellora-20.cloudfunctions.net';
 
   static const String cjSearchProducts = '$baseFunctionsUrl/cjSearchProducts';
   static const String cjProductDetail = '$baseFunctionsUrl/cjProductDetail';
