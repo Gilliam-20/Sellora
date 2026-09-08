@@ -1,0 +1,66 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // ---- users ------------------------------------------------------
+    // A user can read/update their own document. Role changes and
+    // sellerStatus/subscription fields should really be admin- or
+    // Cloud-Function-only in production; tighten this once you have
+    // custom claims set up.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || role() == 'admin';
+      allow delete: if false;
+    }
+
+    // ---- shared CJ catalog -------------------------------------------
+    // Written only by the syncCjCatalog Cloud Function (admin SDK
+    // bypasses rules); readable by any signed-in seller browsing to list.
+    match /catalog/{productId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ---- seller listings ----------------------------------------------
+    match /listings/{listingId} {
+      allow read: if true; // storefront is browsable by buyers, incl. guests if you allow guest browsing
+      allow create, update: if isSignedIn() && role() == 'seller';
+      allow delete: if false;
+    }
+
+    // ---- orders ---------------------------------------------------------
+    match /orders/{orderId} {
+      allow create: if isSignedIn() && request.resource.data.buyerId == request.auth.uid;
+      allow read: if isSignedIn() &&
+        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || role() == 'admin');
+      allow update: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');
+      allow delete: if false;
+    }
+
+    // ---- subscription plans ---------------------------------------------
+    match /subscription_plans/{planId} {
+      allow read: if true;
+      allow write: if isSignedIn() && role() == 'admin';
+    }
+
+    // ---- billing history ------------------------------------------------
+    match /billing_history/{entryId} {
+      allow read: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');
+      allow write: if false; // written by Cloud Functions only
+    }
+  }
+}

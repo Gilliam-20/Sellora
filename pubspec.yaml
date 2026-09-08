@@ -1,0 +1,63 @@
+name: sellora
+description: "Sellora — a subscription marketplace where sellers list CJ Dropshipping-sourced products and buyers shop across the whole catalog."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management, routing, DI
+  get: ^4.6.6
+
+  # Networking — talks only to Sellora's own Cloud Functions, never
+  # directly to CJ Dropshipping or IntaSend (see /functions).
+  dio: ^5.4.1
+
+  # Firebase
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.4
+  cloud_firestore: ^4.15.5
+
+  # Local session / persistence
+  get_storage: ^2.1.1
+
+  # UI / design system
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.3.1
+
+  # Utilities
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+
+# Common next additions, not included to keep this scaffold lean:
+#   firebase_storage   — sellers uploading their own product photos
+#   image_picker       — picking those photos on-device
+#   url_launcher       — opening IntasendService.createCheckout()'s
+#                        hosted card-checkout URL (M-Pesa/STK push,
+#                        the flow actually wired up in this app,
+#                        doesn't need it)
+#   fl_chart           — revenue-over-time charts on the seller dashboard
+#   connectivity_plus  — offline-state handling
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+
+  # Custom type stack — see lib/app/theme/app_typography.dart for the
+  # Google Fonts fallback if you don't bundle these locally.
+  # fonts:
+  #   - family: Fraunces
+  #     fonts:
+  #       - asset: assets/fonts/Fraunces-Regular.ttf
+  #       - asset: assets/fonts/Fraunces-SemiBold.ttf
+  #         weight: 600
