@@ -92,18 +92,36 @@ class BottomActionBar extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
+        // The bar's background spans full width (it reads as a toolbar),
+        // but its content is capped and centered — on a wide desktop
+        // window a single button stretched to 1600px looks broken. This
+        // is a plain Row nested in a Row (not Center/Align) specifically
+        // so its height still hugs its content the same way it did
+        // un-wrapped: Flex widgets always size their cross axis to the
+        // tallest child regardless of how loose the incoming height
+        // constraint is, where Align/Center would instead try to fill it.
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (trailingText != null) ...[
-              Text(trailingText!, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(width: AppSpacing.md),
-            ],
-            Expanded(
-              child: ElevatedButton(
-                onPressed: isLoading ? null : onPressed,
-                child: isLoading
-                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink))
-                    : Text(label),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Row(
+                  children: [
+                    if (trailingText != null) ...[
+                      Text(trailingText!, style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(width: AppSpacing.md),
+                    ],
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : onPressed,
+                        child: isLoading
+                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.ink))
+                            : Text(label),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

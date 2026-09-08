@@ -15,7 +15,17 @@ class MockAuthRepository extends GetxService implements AuthRepository {
   UserModel? get cachedUser => _current;
 
   @override
-  Stream<UserModel?> get userChanges => _controller.stream;
+  // The broadcast controller only emits on sign-in/out, so on a cold
+  // start (nothing signed in yet) AuthController.checkSession()'s
+  // `.first` would hang for its full timeout instead of resolving
+  // immediately to "no session" — a several-second stall on every
+  // launch of the very demo mode the README promises is instant.
+  // Yielding the current value first mirrors how FirebaseAuthRepository
+  // behaves against a real authStateChanges stream.
+  Stream<UserModel?> get userChanges async* {
+    yield _current;
+    yield* _controller.stream;
+  }
 
   @override
   Future<UserModel> signIn({required String email, required String password}) async {

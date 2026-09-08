@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/models/order_model.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/common.dart';
@@ -16,59 +17,62 @@ class AdminOrdersView extends GetView<AdminOrdersController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('All orders')),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 44,
-            child: Obx(
-              () => ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                children: [
-                  _FilterChip(label: 'All', selected: controller.statusFilter.value == null, onTap: () => controller.setFilter(null)),
-                  const SizedBox(width: AppSpacing.sm),
-                  ...OrderStatus.values.map(
-                    (status) => Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.sm),
-                      child: _FilterChip(
-                        label: status.label,
-                        selected: controller.statusFilter.value == status,
-                        onTap: () => controller.setFilter(status),
+      body: ResponsiveCenter(
+        maxWidth: 900,
+        child: Column(
+          children: [
+            SizedBox(
+              height: 44,
+              child: Obx(
+                () => ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.sm),
+                  children: [
+                    _FilterChip(label: 'All', selected: controller.statusFilter.value == null, onTap: () => controller.setFilter(null)),
+                    const SizedBox(width: AppSpacing.sm),
+                    ...OrderStatus.values.map(
+                      (status) => Padding(
+                        padding: const EdgeInsets.only(right: AppSpacing.sm),
+                        child: _FilterChip(
+                          label: status.label,
+                          selected: controller.statusFilter.value == status,
+                          onTap: () => controller.setFilter(status),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          Expanded(
-            child: Obx(() {
-              if (controller.isLoading.value) return const SelloraLoader();
-              final orders = controller.filtered;
-              if (orders.isEmpty) {
-                return const EmptyState(icon: Icons.receipt_long_outlined, title: 'No orders', message: 'Nothing matches this filter yet.');
-              }
-              return RefreshIndicator(
-                onRefresh: controller.load,
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  itemCount: orders.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-                  itemBuilder: (context, index) {
-                    final order = orders[index];
-                    return ManifestStub(
-                      code: order.code,
-                      title: Formatters.currency(order.total, code: order.currency),
-                      subtitle: 'Seller: ${order.sellerId} · Buyer: ${order.buyerId}',
-                      accentColor: AppColors.statusColor(order.status.name),
-                      trailing: Text(order.status.label, style: Theme.of(context).textTheme.labelMedium),
-                    );
-                  },
-                ),
-              );
-            }),
-          ),
-        ],
+            Expanded(
+              child: Obx(() {
+                if (controller.isLoading.value) return const SelloraLoader();
+                final orders = controller.filtered;
+                if (orders.isEmpty) {
+                  return const EmptyState(icon: Icons.receipt_long_outlined, title: 'No orders', message: 'Nothing matches this filter yet.');
+                }
+                return RefreshIndicator(
+                  onRefresh: controller.load,
+                  child: ListView.separated(
+                    padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+                    itemCount: orders.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                    itemBuilder: (context, index) {
+                      final order = orders[index];
+                      return ManifestStub(
+                        code: order.code,
+                        title: Formatters.currency(order.total, code: order.currency),
+                        subtitle: 'Seller: ${order.sellerId} · Buyer: ${order.buyerId}',
+                        accentColor: AppColors.statusColor(order.status.name),
+                        trailing: Text(order.status.label, style: Theme.of(context).textTheme.labelMedium),
+                      );
+                    },
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
       ),
     );
   }

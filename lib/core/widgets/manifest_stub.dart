@@ -59,12 +59,12 @@ class ManifestStub extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(code, style: AppTypography.manifestCode()),
+                              Text(code, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTypography.manifestCode()),
                               const SizedBox(height: 2),
-                              Text(title, style: Theme.of(context).textTheme.titleSmall),
+                              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
                               if (subtitle != null) ...[
                                 const SizedBox(height: 2),
-                                Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+                                Text(subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
                               ],
                             ],
                           ),

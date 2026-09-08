@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/responsive.dart';
 import 'admin_catalog_sync_controller.dart';
 
 class AdminCatalogSyncView extends GetView<AdminCatalogSyncController> {
@@ -12,7 +13,8 @@ class AdminCatalogSyncView extends GetView<AdminCatalogSyncController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('CJ catalog sync')),
-      body: Padding(
+      body: ResponsiveCenter(
+        maxWidth: 720,
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,7 +43,7 @@ class AdminCatalogSyncView extends GetView<AdminCatalogSyncController> {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   Obx(() {
-                    final last = controller.lastSyncedAt;
+                    final last = controller.lastSyncedAt.value;
                     return Text(
                       last == null ? 'Never synced' : 'Last synced ${Formatters.dateTime(last)}',
                       style: Theme.of(context).textTheme.labelMedium,

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/repositories/auth_repository.dart';
 
 class BuyerProfileView extends StatelessWidget {
@@ -19,8 +20,10 @@ class BuyerProfileView extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+      body: ResponsiveCenter(
+        maxWidth: 560,
+        child: ListView(
+        padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
         children: [
           CircleAvatar(
             radius: 32,
@@ -57,6 +60,7 @@ class BuyerProfileView extends StatelessWidget {
             child: const Text('Sign out'),
           ),
         ],
+        ),
       ),
     );
   }

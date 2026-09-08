@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../data/models/order_model.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/common.dart';
@@ -27,25 +28,28 @@ class SellerOrdersView extends GetView<SellerOrdersController> {
         }
         return RefreshIndicator(
           onRefresh: controller.load,
-          child: ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            itemCount: controller.orders.length,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final order = controller.orders[index];
-              return ManifestStub(
-                code: order.code,
-                title: Formatters.currency(order.total, code: order.currency),
-                subtitle: '${order.items.length} item${order.items.length == 1 ? '' : 's'} · ${order.status.label}',
-                accentColor: AppColors.statusColor(order.status.name),
-                trailing: order.status == OrderStatus.delivered || order.status == OrderStatus.cancelled
-                    ? null
-                    : TextButton(
-                        onPressed: () => controller.advanceStatus(order),
-                        child: Text(_nextLabel(order.status)),
-                      ),
-              );
-            },
+          child: ResponsiveCenter(
+            maxWidth: 720,
+            child: ListView.separated(
+              padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
+              itemCount: controller.orders.length,
+              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+              itemBuilder: (context, index) {
+                final order = controller.orders[index];
+                return ManifestStub(
+                  code: order.code,
+                  title: Formatters.currency(order.total, code: order.currency),
+                  subtitle: '${order.items.length} item${order.items.length == 1 ? '' : 's'} · ${order.status.label}',
+                  accentColor: AppColors.statusColor(order.status.name),
+                  trailing: order.status == OrderStatus.delivered || order.status == OrderStatus.cancelled
+                      ? null
+                      : TextButton(
+                          onPressed: () => controller.advanceStatus(order),
+                          child: Text(_nextLabel(order.status)),
+                        ),
+                );
+              },
+            ),
           ),
         );
       }),

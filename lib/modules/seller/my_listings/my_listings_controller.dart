@@ -28,4 +28,11 @@ class MyListingsController extends GetxController {
     await _productRepo.unlistProduct(productId);
     load();
   }
+
+  Future<void> relist(String productId) async {
+    final product = listings.firstWhereOrNull((p) => p.id == productId);
+    if (product == null) return;
+    await _productRepo.updateListing(product.copyWith(isListed: true));
+    load();
+  }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/common.dart';
 import '../../../data/models/subscription_plan_model.dart';
@@ -16,11 +17,14 @@ class AdminPlansView extends GetView<AdminPlansController> {
       appBar: AppBar(title: const Text('Subscription plans')),
       body: Obx(() {
         if (controller.isLoading.value) return const SelloraLoader();
-        return ListView.separated(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          itemCount: controller.plans.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (context, index) => _PlanEditCard(plan: controller.plans[index]),
+        return ResponsiveCenter(
+          maxWidth: 720,
+          child: ListView.separated(
+            padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+            itemCount: controller.plans.length,
+            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+            itemBuilder: (context, index) => _PlanEditCard(plan: controller.plans[index]),
+          ),
         );
       }),
     );
@@ -38,6 +42,13 @@ class _PlanEditCard extends StatefulWidget {
 class _PlanEditCardState extends State<_PlanEditCard> {
   late final TextEditingController _kesCtrl = TextEditingController(text: widget.plan.priceKes.toStringAsFixed(0));
   late final TextEditingController _usdCtrl = TextEditingController(text: widget.plan.priceUsd.toStringAsFixed(0));
+
+  @override
+  void dispose() {
+    _kesCtrl.dispose();
+    _usdCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

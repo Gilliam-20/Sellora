@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/utils/responsive.dart';
 
 class RoleSelectView extends StatelessWidget {
   const RoleSelectView({super.key});
@@ -11,43 +12,54 @@ class RoleSelectView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: AppSpacing.xxl),
-              Text('Sellora', style: Theme.of(context).textTheme.displayMedium?.copyWith(color: AppColors.cargoNavy)),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'One catalog, sourced globally. Pick how you want in.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.slate),
-              ),
-              const Spacer(),
-              _RoleCard(
-                title: 'Shop the marketplace',
-                description: 'Browse products from every seller on Sellora and check out in a few taps.',
-                icon: Icons.storefront_outlined,
-                accent: AppColors.buyerAccent,
-                onTap: () => Get.toNamed(Routes.login, arguments: {'intent': 'buyer'}),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _RoleCard(
-                title: 'Start selling',
-                description: 'Subscribe monthly, list CJ Dropshipping products at your own price, and get paid on every order.',
-                icon: Icons.rocket_launch_outlined,
-                accent: AppColors.sellerAccent,
-                onTap: () => Get.toNamed(Routes.login, arguments: {'intent': 'seller'}),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Center(
-                child: TextButton(
-                  onPressed: () => Get.toNamed(Routes.login, arguments: {'intent': 'buyer'}),
-                  child: const Text('Already have an account? Sign in'),
+        // Used to be a Column with a Spacer() pushing the cards toward
+        // the bottom and no scroll fallback — on a short viewport (a
+        // small phone, landscape, a resized browser window, or a larger
+        // system text size) that overflows instead of laying out.
+        // Wrapped in a scroll view with a fixed gap instead: safe at
+        // any height, and a Spacer would in fact crash here anyway
+        // (Flex children with flex need a bounded height, and a
+        // scroll view's child is intentionally unbounded).
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.lg),
+          child: ResponsiveCenter(
+            maxWidth: 480,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: AppSpacing.xxl),
+                Text('Sellora', style: Theme.of(context).textTheme.displayMedium?.copyWith(color: AppColors.cargoNavy)),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'One catalog, sourced globally. Pick how you want in.',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppColors.slate),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-            ],
+                const SizedBox(height: AppSpacing.xxl),
+                _RoleCard(
+                  title: 'Shop the marketplace',
+                  description: 'Browse products from every seller on Sellora and check out in a few taps.',
+                  icon: Icons.storefront_outlined,
+                  accent: AppColors.buyerAccent,
+                  onTap: () => Get.toNamed(Routes.login, arguments: {'intent': 'buyer'}),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _RoleCard(
+                  title: 'Start selling',
+                  description: 'Subscribe monthly, list CJ Dropshipping products at your own price, and get paid on every order.',
+                  icon: Icons.rocket_launch_outlined,
+                  accent: AppColors.sellerAccent,
+                  onTap: () => Get.toNamed(Routes.login, arguments: {'intent': 'seller'}),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Center(
+                  child: TextButton(
+                    onPressed: () => Get.toNamed(Routes.login, arguments: {'intent': 'buyer'}),
+                    child: const Text('Already have an account? Sign in'),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
+            ),
           ),
         ),
       ),

@@ -6,6 +6,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../data/repositories/cart_repository.dart';
 import 'product_details_controller.dart';
@@ -32,7 +33,7 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: centeredSliverPadding(context, minHorizontal: AppSpacing.lg).add(const EdgeInsets.symmetric(vertical: AppSpacing.lg)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

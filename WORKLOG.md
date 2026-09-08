@@ -6,6 +6,74 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-08 — Bug fixes + responsiveness pass (current marketplace UI)
+
+**Status:** done. First real code changes in this repo (everything above was design-only). Scoped
+to the existing marketplace-model Flutter UI — unrelated to the multi-tenant pivot below, which is
+still awaiting sign-off and untouched by this pass.
+
+### Bugs fixed
+
+- **Buyer shell tab restore ran on every `build()`**, not once — `Get.arguments['tab']` was
+  re-applied via `addPostFrameCallback` on any rebuild, silently snapping the user back to the
+  checkout-handoff tab (e.g. after a MediaQuery-driven rebuild on resize). Moved into
+  `BuyerShellController.onInit()`, which runs exactly once per controller lifetime.
+- **Data loss on rebuild**: `TextEditingController`/`GlobalKey<FormState>` were created inline in
+  `StatelessWidget.build()` in `LoginView`, `RegisterBuyerView`, `RegisterSellerView`,
+  `CheckoutView`, and onboarding's `_PaymentStep` — any rebuild (a responsive `MediaQuery` read is
+  exactly that trigger) would silently wipe whatever the user had typed. Converted all five to
+  `StatefulWidget`s owning their controllers in `initState`/`dispose`. This was a prerequisite for
+  adding responsiveness to those screens safely, not just a cleanup.
+- **`MyListingsView`'s relist switch was a no-op**: `Switch.onChanged` unconditionally called
+  `unlist`, so turning a paused listing back on silently did nothing. Added
+  `MyListingsController.relist()` and branched on the switch's new value.
+- **Admin catalog sync's "Last synced" label never updated**: the controller exposed the repo's
+  plain `DateTime?` getter through an `Obx`, which has no reactive dependency on a non-Rx read — the
+  sync worked, the label just never refreshed. Made `lastSyncedAt` an `Rxn<DateTime>` on the
+  controller.
+- **Mock-mode cold start stalled ~3s on every launch**: `MockAuthRepository.userChanges` never
+  emitted until an explicit sign-in/out, so `checkSession()`'s `.first` always hit its timeout —
+  directly undercutting the README's "try it in 60 seconds" claim. Now yields the current value
+  immediately, matching how the Firebase-backed implementation behaves.
+- **`RoleSelectView` could overflow** on a short viewport: a `Spacer()`-based `Column` with no
+  scroll fallback. Fixed with a scroll view and fixed spacing rather than a flex spacer — note a
+  `Spacer()` inside a `SingleChildScrollView` is a different, worse bug (unbounded-height
+  `RenderFlex` crash), so the fix is spacing, not just "add scrolling."
+- Plus the 5 pre-existing `flutter analyze` lint infos (missing `const`, double-quote style).
+
+### Responsiveness
+
+- New `lib/core/utils/responsive.dart` — breakpoints, `BuildContext` extensions (`isWide`,
+  `pageHorizontalPadding`, …), `ResponsiveCenter` (caps + centers page content on wide screens),
+  `centeredSliverPadding()` for `CustomScrollView` screens, `productGridDelegate()`
+  (`SliverGridDelegateWithMaxCrossAxisExtent`-based, so grids grow columns with width instead of a
+  hardcoded count).
+- New `lib/core/widgets/adaptive_shell_scaffold.dart` — bottom nav bar below desktop width, a
+  Material `NavigationRail` at/above it. All three portal shells (buyer/seller/admin) now use it,
+  which also collapsed three near-duplicate shell implementations into one.
+- Buyer product grid and both stat-card dashboards (seller, admin) moved from a fixed
+  `crossAxisCount` to extent-based grids.
+- Every list/form screen wrapped in `ResponsiveCenter` so content stops stretching edge-to-edge on
+  desktop web; auth/checkout/onboarding forms capped at 440–560px and centered.
+- `BottomActionBar` and the two bottom-sheet forms (seller catalog listing, subscription switch) cap
+  and center their content — deliberately via a `Row`, not `Center`/`Align`: those slots (Scaffold's
+  `bottomNavigationBar`, a modal bottom sheet) give bounded-but-loose height, which `Align` fills
+  entirely per its own documented sizing rule; a `Row`'s cross axis always hugs its child regardless.
+- `ManifestStub` and `EmptyState` got overflow/width guards so they hold up at both very narrow and
+  very wide sizes.
+
+### Verification
+
+`flutter analyze` — 0 issues (was 5 infos). `flutter build web --release` — succeeds.
+
+### Changed
+
+23 view/controller files, plus 2 new files (`responsive.dart`, `adaptive_shell_scaffold.dart`) and
+`common.dart`/`empty_state.dart`/`manifest_stub.dart`. Nothing under `functions/`, routing, or
+Firestore rules touched — out of scope for this pass and overlapping with the pivot work below.
+
+---
+
 ## 2026-09-08 — Payment model revision: platform collect-and-disburse
 
 **Status:** revises decision #4 below. **No implementation code written.**

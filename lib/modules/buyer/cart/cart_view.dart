@@ -6,6 +6,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
 import 'cart_controller.dart';
@@ -26,8 +27,10 @@ class CartView extends GetView<CartController> {
             message: 'Products you add will show up here.',
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.all(AppSpacing.md),
+        return ResponsiveCenter(
+          maxWidth: 720,
+          child: ListView.separated(
+          padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
           itemCount: items.length,
           separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
           itemBuilder: (context, index) {
@@ -85,6 +88,7 @@ class CartView extends GetView<CartController> {
               ),
             );
           },
+          ),
         );
       }),
       bottomNavigationBar: Obx(() {

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/product_card.dart';
@@ -13,6 +14,8 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
 
   @override
   Widget build(BuildContext context) {
+    final sliverPadding = centeredSliverPadding(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Sellora', style: Theme.of(context).textTheme.displaySmall?.copyWith(fontSize: 22, color: AppColors.cargoNavy)),
@@ -22,7 +25,7 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
         child: CustomScrollView(
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
+              padding: EdgeInsets.fromLTRB(sliverPadding.horizontal / 2, AppSpacing.sm, sliverPadding.horizontal / 2, 0),
               sliver: SliverToBoxAdapter(
                 child: TextField(
                   onSubmitted: controller.search,
@@ -41,7 +44,7 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
                   child: Obx(
                     () => ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                      padding: EdgeInsets.symmetric(horizontal: sliverPadding.horizontal / 2),
                       itemCount: controller.categories.length,
                       separatorBuilder: (_, __) => const SizedBox(width: AppSpacing.sm),
                       itemBuilder: (context, index) {
@@ -65,7 +68,7 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
                 return const SliverFillRemaining(child: SelloraLoader());
               }
               if (controller.products.isEmpty) {
-                return SliverFillRemaining(
+                return const SliverFillRemaining(
                   child: EmptyState(
                     icon: Icons.search_off,
                     title: 'No products here yet',
@@ -74,14 +77,12 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
                 );
               }
               return SliverPadding(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: sliverPadding,
                 sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: AppSpacing.md,
-                    mainAxisSpacing: AppSpacing.md,
-                    childAspectRatio: 0.62,
-                  ),
+                  // A fixed 2-column count left desktop web sparse and
+                  // never grew past 2 on a tablet. A max-extent delegate
+                  // lets Flutter fit however many tiles the width allows.
+                  gridDelegate: productGridDelegate(),
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
                       final product = controller.products[index];

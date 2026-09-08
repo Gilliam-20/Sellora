@@ -4,6 +4,7 @@ import 'package:sellora/data/models/order_model.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/manifest_stub.dart';
@@ -28,8 +29,10 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
         }
         return RefreshIndicator(
           onRefresh: controller.loadOrders,
-          child: ListView.separated(
-            padding: const EdgeInsets.all(AppSpacing.md),
+          child: ResponsiveCenter(
+            maxWidth: 720,
+            child: ListView.separated(
+            padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding, vertical: AppSpacing.md),
             itemCount: controller.orders.length,
             separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
@@ -57,6 +60,7 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
                 ),
               );
             },
+            ),
           ),
         );
       }),

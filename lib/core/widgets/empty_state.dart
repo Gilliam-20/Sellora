@@ -36,10 +36,15 @@ class EmptyState extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             Text(title, style: Theme.of(context).textTheme.titleMedium, textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.xs),
-            Text(
-              message,
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.center,
+            ConstrainedBox(
+              // Caps the line length so the message stays readable
+              // instead of stretching edge-to-edge on a wide screen.
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Text(
+                message,
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
+              ),
             ),
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: AppSpacing.md),
