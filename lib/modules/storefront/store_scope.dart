@@ -16,19 +16,40 @@ class StoreScope extends GetxService {
   final isResolving = false.obs;
   final errorMessage = RxnString();
 
-  Future<StoreModel?> resolveSlug(String slug) async {
+  Future<StoreModel?> resolveSlug(String slug) => _resolve(
+        () => _storeRepository.storeBySlug(slug.trim().toLowerCase()),
+        notFoundMessage: 'This storefront could not be found.',
+      );
+
+  /// Resolves the signed-in seller's own store for the seller-admin shell.
+  /// A seller may own more than one store (`StoreRepository.storesForSeller`),
+  /// but nothing in the product yet lets them create a second one or switch
+  /// between them, so the first is treated as "the" active store until a
+  /// store switcher exists — see WORKLOG.md decision #4.
+  Future<StoreModel?> resolveForSeller(String sellerId) => _resolve(
+        () async {
+          final stores = await _storeRepository.storesForSeller(sellerId);
+          return stores.isEmpty ? null : stores.first;
+        },
+        notFoundMessage: "You haven't created a store yet.",
+      );
+
+  Future<StoreModel?> _resolve(
+    Future<StoreModel?> Function() lookup, {
+    required String notFoundMessage,
+  }) async {
     isResolving.value = true;
     errorMessage.value = null;
     try {
-      final store = await _storeRepository.storeBySlug(slug.trim().toLowerCase());
+      final store = await lookup();
       current.value = store;
       if (store == null) {
-        errorMessage.value = 'This storefront could not be found.';
+        errorMessage.value = notFoundMessage;
       }
       return store;
     } catch (_) {
       current.value = null;
-      errorMessage.value = 'We could not load this storefront. Please try again.';
+      errorMessage.value = 'We could not load this store. Please try again.';
       return null;
     } finally {
       isResolving.value = false;

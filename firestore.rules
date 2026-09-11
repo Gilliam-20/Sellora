@@ -20,14 +20,17 @@ service cloud.firestore {
     }
 
     // ---- users ------------------------------------------------------
-    // A user can read/update their own document. Role changes and
-    // sellerStatus/subscription fields should really be admin- or
-    // Cloud-Function-only in production; tighten this once you have
-    // custom claims set up.
+    // A user can read/update their own document; admins can read/update
+    // anyone's. `role` is the one field a user can never change on
+    // themselves — otherwise any signed-in user could grant themselves
+    // 'admin' and pass every role() == 'admin' check in this ruleset.
+    // Custom claims would remove this class of rule entirely; until then,
+    // this is the load-bearing check.
     match /users/{uid} {
-      allow read: if isSignedIn();
+      allow read: if isOwner(uid) || role() == 'admin';
       allow create: if isOwner(uid);
-      allow update: if isOwner(uid) || role() == 'admin';
+      allow update: if role() == 'admin' ||
+        (isOwner(uid) && request.resource.data.role == resource.data.role);
       allow delete: if false;
     }
 
@@ -89,13 +92,24 @@ service cloud.firestore {
     // ---- seller listings ----------------------------------------------
     match /listings/{listingId} {
       allow read: if true; // storefront is browsable by buyers, incl. guests if you allow guest browsing
-      allow create, update: if isSignedIn() && role() == 'seller';
+      // A seller can only create a listing under their own sellerId, and
+      // can only update a listing that's already theirs — role() == 'seller'
+      // alone let any seller edit any other seller's listing.
+      allow create: if isSignedIn() && role() == 'seller' &&
+        request.resource.data.sellerId == request.auth.uid;
+      allow update: if isSignedIn() && role() == 'seller' &&
+        resource.data.sellerId == request.auth.uid &&
+        request.resource.data.sellerId == resource.data.sellerId;
       allow delete: if false;
     }
 
     // ---- orders ---------------------------------------------------------
+    // Orders are created only by the createOrder Cloud Function (Admin SDK
+    // bypasses these rules), which re-prices from listings server-side —
+    // a client-created order would carry a self-reported total/fee. See
+    // functions/src/orders.ts.
     match /orders/{orderId} {
-      allow create: if isSignedIn() && request.resource.data.buyerId == request.auth.uid;
+      allow create: if false;
       allow read: if isSignedIn() &&
         (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || role() == 'admin');
       allow update: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');

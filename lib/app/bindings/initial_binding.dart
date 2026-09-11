@@ -44,26 +44,31 @@ class InitialBinding extends Bindings {
     if (AppConstants.useMockData) {
       // Demo mode: no Firebase project, IntaSend, or CJ Dropshipping
       // credentials required.
+      //
+      // StoreRepository goes first — AuthRepository's signUpSeller
+      // resolves it via Get.find in its own constructor, to create a
+      // store for every newly-registered seller.
+      Get.put<StoreRepository>(MockStoreRepository(), permanent: true);
       Get.put<AuthRepository>(MockAuthRepository(), permanent: true);
       Get.put<ProductRepository>(MockProductRepository(), permanent: true);
       Get.put<OrderRepository>(MockOrderRepository(), permanent: true);
       Get.put<SubscriptionRepository>(MockSubscriptionRepository(),
           permanent: true);
       Get.put<AdminRepository>(MockAdminRepository(), permanent: true);
-      Get.put<StoreRepository>(MockStoreRepository(), permanent: true);
     } else {
       Get.put(AuthService(), permanent: true);
       Get.put(FirestoreService(), permanent: true);
       Get.put(CjDropshippingService(), permanent: true);
       Get.put(IntasendService(), permanent: true);
 
+      // Same ordering reason as the mock branch above.
+      Get.put<StoreRepository>(FirebaseStoreRepository(), permanent: true);
       Get.put<AuthRepository>(FirebaseAuthRepository(), permanent: true);
       Get.put<ProductRepository>(FirebaseProductRepository(), permanent: true);
       Get.put<OrderRepository>(FirebaseOrderRepository(), permanent: true);
       Get.put<SubscriptionRepository>(FirebaseSubscriptionRepository(),
           permanent: true);
       Get.put<AdminRepository>(FirebaseAdminRepository(), permanent: true);
-      Get.put<StoreRepository>(FirebaseStoreRepository(), permanent: true);
     }
 
     // StoreScope resolves StoreRepository in its constructor, so it must be

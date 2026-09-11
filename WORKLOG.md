@@ -59,9 +59,147 @@ Firestore path and rules exist; nothing in `lib/` reads/writes store-scoped cust
 subcollections, and any indexes for `storeOrders()`/`storeProducts()` (none needed yet — both do a bare
 `.get()`/`.orderBy()` with no `.where()`).
 
+**Also added this session:** `StoreScope.resolveForSeller(sellerId)` (refactored `resolveSlug` and it
+onto a shared `_resolve` helper to avoid duplicating the loading/error-state bookkeeping), wired into
+`SellerShellController.onInit()` so every seller-admin route populates `StoreScope.current` with the
+signed-in seller's own store, the same way the public storefront does for a slug. Picks
+`storesForSeller(sellerId).first` — a placeholder for "the active store" until a store switcher exists
+(decision #4). Both `SellerShellController` and `StoreScope` take constructor-injected dependencies
+(default to `Get.find`) so this is unit-testable without a GetX test harness; see
+`test/seller_shell_controller_test.dart` and the two new cases in `test/store_scope_test.dart`.
+
+**Gap found, not fixed:** `AuthRepository.signUpSeller` (both mock and Firebase) never calls
+`StoreRepository.createStore` — a freshly-registered seller has no `StoreModel` at all, ever. Today
+nothing reads `StoreScope` from the dashboard so this was invisible; `resolveForSeller` now surfaces it
+correctly as "no store yet" rather than crashing, but there is still no screen that lets a seller
+create one. This is Phase 3 work ("seller onboarding/entitlements... store creation"), not fixed here.
+The mock quick-login path (`mock-seller` / `mock-seller-2`) is unaffected — those uids already have
+seeded stores.
+
+**Verification gap, disclosed:** did not drive this through an actual browser. This environment has
+neither `chromium-cli` nor Python (the two paths the `run` skill's browser-driven pattern needs), and
+Flutter web renders to canvas rather than DOM text nodes, so generic Playwright text-selectors aren't
+reliable without first enabling Flutter's semantics/accessibility tree — a setup investment outside
+this change's scope. Relied instead on `flutter analyze` (clean) and unit tests exercising the exact
+`onInit()` path for both a signed-in and a signed-out seller. Worth a `/run-skill-generator` pass if
+browser-driven verification becomes routinely needed for this repo.
+
 **Next step:** decisions #1/#4/#5 are still open and Phase 3 (seller onboarding/entitlements) depends
 on #4 (single vs. multi-store per seller changes the dashboard's store-picker and the custom-claim
-shape) — worth confirming before going much further into Phase 3.
+shape) — worth confirming before going much further into Phase 3. Within Phase 2 itself, still open:
+route middleware/guard for seller-admin routes (today `SellerShellController` resolves the store but
+nothing blocks navigation while it's resolving or missing), and the `placeOrder`/product-create
+write-path migration onto the `stores/{storeId}/...` subcollections.
+
+---
+
+## 2026-09-11 — TODOD.md adopted as phase framework; security/checkout hardening
+
+**Status:** implemented and verified this session (`flutter analyze` clean, `flutter test` — 8/8
+passing, `cd functions && npm run build` clean).
+
+The user handed in `TODOD.md`, a 56-section "master build prompt" asking for a full Shopify-class
+rebuild in one pass, plus an instruction to "remove all mock data." Neither is something to execute
+literally in one session — `TODOD.md`'s own rules say to work in phases and audit first, and this
+repo's `SELLORA_ARCHITECTURE.md` already shows the real backend isn't close to safe to point real
+money at. Three decisions were confirmed with the user before writing any code:
+
+1. **Phase framework**: adopt `TODOD.md`'s `PHASE 0`–`PHASE 12` numbering going forward (re-keyed into
+   `SELLORA_IMPLEMENTATION_PLAN.md`), rather than restarting the project under it — the existing audit
+   and phased plan stay the source of truth for *what's actually next*, `TODOD.md` for *how phases are
+   named/ordered*.
+2. **Platform service fee: 2%** (`TODOD.md` §15), replacing the app's previously-unused 5%
+   `defaultCommissionPercent` constant. Renamed to `AppConstants.platformServiceFeeRate = 0.02`.
+3. **Tenant write-path migration deferred** — `stores/{storeId}/products`/`.../orders` stay read-only
+   this pass; new work continues against the flat `listings`/`orders` collections.
+
+### What "remove mock data" actually required
+
+A second, sharper audit pass (reading `functions/src/*` and the checkout/repository code directly,
+not just the existing docs) found the real backend was further from usable than documented — flipping
+`AppConstants.useMockData` to `false` as-is would have shipped a self-escalating-privilege,
+unverified-payment app:
+
+- `firestore.rules` let a user set their own `role` to `'admin'` — every privileged check in the
+  ruleset is `role() == 'admin'`.
+- `listings` writes checked `role() == 'seller'` only, not ownership — any seller could edit any other
+  seller's listing.
+- Checkout was fully client-trusted: `CheckoutController` computed `total` and wrote
+  `paymentReference` itself; `FirebaseOrderRepository.placeOrder` just `.set()` it verbatim.
+- `intasendWebhook` was a stub — logged the payload, verified nothing, never touched Firestore. No
+  payment was ever actually confirmed anywhere.
+- The old `onOrderCreated` trigger's CJ-fulfillment call POSTed to the auth-gated `cjCreateOrder`
+  function with no `Authorization` header — it would 401 every time, and it also ran before payment was
+  verified (its own comment already flagged this).
+- `functions.config()` (CJ/IntaSend credentials) is deprecated in the installed `firebase-functions`
+  version, with no `.env`/`.runtimeconfig.json` present — a fresh deploy would call CJ/IntaSend with
+  `undefined` credentials.
+- `AuthRepository.signUpSeller` (mock and Firebase) never created a `StoreModel` — confirmed still true
+  from the 2026-09-11 Phase-2 entry above.
+
+None of this needed new decisions or real provider credentials to fix correctly, so it got fixed this
+session. `useMockData` stays `true` — flipping it for real use is a separate step gated on things only
+the user can supply (a real CJ Dropshipping account, a confirmed IntaSend production setup with the
+webhook verification scheme reconfirmed against current docs, and `firebase functions:secrets:set` run
+with real values).
+
+### Changed
+
+- **`firestore.rules`**: `users.role` can no longer be self-written (only an existing admin can change
+  someone's role); `users` read narrowed from "any signed-in user" to owner-or-admin; `listings`
+  create/update now ownership-checked; `orders` create is `allow create: if false` (Cloud-Function-only
+  via Admin SDK).
+- **`functions/src/orders.ts`**: new `createOrder` (`onRequest`, `requireAuth`) re-prices every item
+  from `listings` server-side, computes the 2% fee snapshot, writes the order with
+  `paymentStatus: 'pending'`. The old `onOrderCreated` trigger and its broken CJ call are gone —
+  fulfillment now happens from the webhook, after payment is confirmed, not at document-creation time.
+- **`functions/src/cj.ts`**: extracted `placeCjOrder()` as a plain function so the webhook can call it
+  in-process (no HTTP self-call, no missing-auth-header bug); migrated CJ credentials to
+  `defineSecret`/`runWith`.
+- **`functions/src/intasend.ts`**: `intasendWebhook` now verifies a shared "challenge" value (flagged
+  inline as needing reconfirmation against IntaSend's current docs before go-live — same caveat style
+  already used for `cj.ts`'s auth handshake) and, on a confirmed payment, looks the order up by
+  `api_ref` (the order id), sets `paymentStatus`/`paymentReference`, and calls `placeCjOrder` per item.
+  Migrated the secret key to `defineSecret`.
+- **`lib/data/models/order_model.dart`**: added `OrderPaymentStatus` (`pending`/`paid`/`failed` —
+  named distinctly from `IntasendService`'s own `PaymentStatus` to avoid an import collision) and the
+  fee snapshot fields (`serviceFeeRate`, `serviceFeeAmount`, `sellerRevenue`, `paymentFee`); added
+  `copyWith`.
+- **`lib/modules/buyer/checkout/checkout_controller.dart`** +
+  **`lib/data/repositories/firebase_order_repository.dart`**: checkout now creates the order
+  server-side (via a new `ApiEndpoints.createOrder` call) *before* contacting IntaSend, using the
+  server-assigned order id as the payment's `api_ref`/narrative, so the webhook can find it later.
+  Mock mode is untouched — it still fakes an instant "paid" order in one step, since there's no server
+  to re-price against or webhook to wait on.
+- **`lib/data/repositories/auth_repository.dart`** + **`mock/mock_auth_repository.dart`**:
+  `signUpSeller` now creates a `StoreModel` (slug derived from the store name via a new
+  `lib/core/utils/slug.dart`, de-duplicated against existing slugs). Both repos now take an optional
+  constructor-injected `StoreRepository` (default `Get.find`), matching the testability pattern the
+  2026-09-11 Phase-2 entry above established for `SellerShellController`/`StoreScope`.
+- **`lib/app/bindings/initial_binding.dart`**: `StoreRepository` registration moved before
+  `AuthRepository` in both branches — required now that `AuthRepository`'s constructor resolves it
+  eagerly via `Get.find`.
+- **`SELLORA_ARCHITECTURE.md`** (section K) and **`SELLORA_IMPLEMENTATION_PLAN.md`** (re-keyed to
+  `TODOD.md`'s phase numbering) updated to match.
+- New `test/auth_repository_test.dart` (2 cases: store gets created on signup; slug de-duplication).
+
+### Not done this session (deliberately)
+
+Everything in `TODOD.md` PHASE 3–7/9–11 (billing UI, CJ catalog import, store builder, storefront,
+analytics/marketing, admin panel, i18n); the `stores/{storeId}/...` write-path migration; the payment
+custody model decision (the two conflicting 2026-09-08 entries above are still unresolved — this
+session's webhook/order work is written to be compatible with either outcome); the CJ shared-vs-
+per-seller account decision; subscription-payment webhook wiring (`billing_history` writes are still
+client-side and silently blocked by rules against real Firestore — same class of bug as the order one
+just fixed, next in line for Phase 3).
+
+### Verification gap, disclosed
+
+Did not drive the new `createOrder`/webhook flow through the Firebase emulator or a real IntaSend
+sandbox call — this environment has neither running, and the IntaSend webhook "challenge" scheme is
+implemented from memory of their published docs, not verified against a live account. Flagged inline
+in `intasend.ts` and in `SELLORA_IMPLEMENTATION_PLAN.md`'s PHASE 12 as needing a firestore-tests case
+and a real-account read-through before deploy, rather than claimed as tested.
 
 ---
 

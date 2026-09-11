@@ -37,15 +37,17 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cjTrackShipment = exports.cjCreateOrder = exports.cjProductDetail = exports.cjSearchProducts = void 0;
+exports.placeCjOrder = placeCjOrder;
 const functions = __importStar(require("firebase-functions"));
+const params_1 = require("firebase-functions/params");
 const axios_1 = __importDefault(require("axios"));
 const auth_1 = require("./auth");
 /**
- * All CJ Dropshipping calls go through here so the CJ API key/secret
- * (functions config: cj.api_key / cj.email / cj.password) never ships
- * inside the Flutter app. Set them with:
+ * All CJ Dropshipping calls go through here so the CJ credentials never
+ * ship inside the Flutter app. Set them once per environment with:
  *
- *   firebase functions:config:set cj.email="you@example.com" cj.password="..." cj.api_key="..."
+ *   firebase functions:secrets:set CJ_EMAIL
+ *   firebase functions:secrets:set CJ_PASSWORD
  *
  * See CJ Dropshipping's API docs for the exact auth handshake
  * (access-token request, then subsequent calls with CJ-Access-Token) —
@@ -54,12 +56,17 @@ const auth_1 = require("./auth");
  * partner/API-key program).
  */
 const CJ_BASE_URL = 'https://developers.cjdropshipping.com/api2.0/v1';
+const cjEmail = (0, params_1.defineSecret)('CJ_EMAIL');
+const cjPassword = (0, params_1.defineSecret)('CJ_PASSWORD');
+const cjSecrets = { secrets: [cjEmail, cjPassword] };
 async function getCjAccessToken() {
-    const { email, password } = functions.config().cj ?? {};
-    const { data } = await axios_1.default.post(`${CJ_BASE_URL}/authentication/getAccessToken`, { email, password });
+    const { data } = await axios_1.default.post(`${CJ_BASE_URL}/authentication/getAccessToken`, {
+        email: cjEmail.value(),
+        password: cjPassword.value(),
+    });
     return data.data.accessToken;
 }
-exports.cjSearchProducts = functions.https.onRequest(async (req, res) => {
+exports.cjSearchProducts = functions.runWith(cjSecrets).https.onRequest(async (req, res) => {
     const user = await (0, auth_1.requireAuth)(req, res);
     if (!user)
         return;
@@ -89,7 +96,7 @@ exports.cjSearchProducts = functions.https.onRequest(async (req, res) => {
         res.status(502).json({ message: 'Could not reach CJ Dropshipping' });
     }
 });
-exports.cjProductDetail = functions.https.onRequest(async (req, res) => {
+exports.cjProductDetail = functions.runWith(cjSecrets).https.onRequest(async (req, res) => {
     const user = await (0, auth_1.requireAuth)(req, res);
     if (!user)
         return;
@@ -108,30 +115,34 @@ exports.cjProductDetail = functions.https.onRequest(async (req, res) => {
     }
 });
 /**
- * Places the real fulfillment order with CJ. In production this should
- * be called from a Firestore trigger once payment is confirmed (see
- * orders.ts), not directly from the client — exposed here as an
- * https function too for manual/admin retry.
+ * Places the real fulfillment order with CJ. Called two ways: directly,
+ * in-process, by the IntaSend webhook once a payment is confirmed (see
+ * intasend.ts) — no HTTP hop, no auth header needed, since that's a
+ * server-to-server call within the same Functions runtime — and via the
+ * `cjCreateOrder` HTTPS function below for manual/admin retry.
  */
-exports.cjCreateOrder = functions.https.onRequest(async (req, res) => {
+async function placeCjOrder(order) {
+    const token = await getCjAccessToken();
+    const { data } = await axios_1.default.post(`${CJ_BASE_URL}/shopping/order/createOrder`, {
+        products: [{ vid: order.variant, pid: order.cjProductId, quantity: order.quantity }],
+        shippingAddress: order.shippingAddress,
+    }, { headers: { 'CJ-Access-Token': token } });
+    return { cjOrderId: data.data?.orderId };
+}
+exports.cjCreateOrder = functions.runWith(cjSecrets).https.onRequest(async (req, res) => {
     const user = await (0, auth_1.requireAuth)(req, res);
     if (!user)
         return;
     try {
-        const token = await getCjAccessToken();
-        const { cjProductId, quantity, shippingAddress, variant } = req.body;
-        const { data } = await axios_1.default.post(`${CJ_BASE_URL}/shopping/order/createOrder`, {
-            products: [{ vid: variant, pid: cjProductId, quantity }],
-            shippingAddress,
-        }, { headers: { 'CJ-Access-Token': token } });
-        res.json({ cjOrderId: data.data?.orderId });
+        const result = await placeCjOrder(req.body);
+        res.json(result);
     }
     catch (err) {
         functions.logger.error('cjCreateOrder failed', err?.response?.data ?? err.message);
         res.status(502).json({ message: 'Could not place the CJ Dropshipping order' });
     }
 });
-exports.cjTrackShipment = functions.https.onRequest(async (req, res) => {
+exports.cjTrackShipment = functions.runWith(cjSecrets).https.onRequest(async (req, res) => {
     const user = await (0, auth_1.requireAuth)(req, res);
     if (!user)
         return;

@@ -120,12 +120,22 @@ check `WORKLOG.md`'s latest entry before extending either the old or new model.
 
 ## Known gaps (from README, still open)
 
-- `intasendWebhook` in `functions/src/intasend.ts` logs the payload but does **not** verify the
-  signature — there is a `TODO` where verification belongs.
-- `CheckoutController` prices the cart client-side and writes an order with a client-set `total` and
-  `paymentReference`. Order creation needs to move server-side before real money moves.
-- `firestore.rules` trusts the client-writable `users/{uid}.role` field via a `get()` on every rule
-  evaluation. This should be Firebase Auth custom claims.
-- The current checkout assumes one seller per cart.
+As of 2026-09-11, order creation is server-side and the IntaSend webhook verifies a shared "challenge"
+value before confirming payment — see `WORKLOG.md`'s 2026-09-11 entry for what changed and why. Still
+open:
+
+- The IntaSend webhook "challenge" scheme in `functions/src/intasend.ts` is implemented from their
+  published docs, not verified against a real account — reconfirm the exact payload shape before going
+  live.
+- `firestore.rules` still reads `role` off the client-writable `users/{uid}` document (a user can no
+  longer *change* their own role, but it's still a Firestore field, not a Firebase Auth custom claim).
+- The current checkout assumes one seller per cart — `createOrder` now rejects a mixed-seller cart
+  outright rather than silently misattributing it, but doesn't split it either.
 - CJ Dropshipping's auth handshake and response shapes vary by account type; `functions/src/cj.ts`
   sketches the flow but field names need confirming against a real CJ developer account.
+- `FirebaseSubscriptionRepository.subscribeSeller` still writes `billing_history` directly from the
+  client — `firestore.rules` already blocks that write against real Firestore (`allow write: if
+  false`), so subscription billing needs the same server-side move `createOrder` just got for orders.
+- `AppConstants.useMockData` is still `true`. Flipping it needs a real CJ Dropshipping account, a
+  confirmed IntaSend production setup, and `firebase functions:secrets:set` run with real values —
+  none of that is done here.

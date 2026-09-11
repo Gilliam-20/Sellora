@@ -32,43 +32,108 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onOrderCreated = void 0;
+exports.createOrder = void 0;
 const functions = __importStar(require("firebase-functions"));
-const axios_1 = __importDefault(require("axios"));
+const auth_1 = require("./auth");
+function round2(n) {
+    return Math.round(n * 100) / 100;
+}
+function orderCode() {
+    return `SLR-${1000 + Math.floor(Math.random() * 9000)}`;
+}
 /**
- * Fires whenever a new order document is written (see
- * OrderRepository.placeOrder in the Flutter app). Real fulfillment
- * with CJ Dropshipping happens here — server-side, once — rather than
- * from the client, so a flaky connection or a malicious client can't
- * double-submit or skip payment verification.
+ * Creates an order server-side, re-pricing every item from its listing
+ * document rather than trusting whatever total/fee/sellerId the client
+ * sends — see CheckoutController, which now calls this (via
+ * FirebaseOrderRepository.placeOrder) before ever contacting IntaSend, so
+ * the returned order id can be used as the payment's api_ref (see
+ * intasend.ts's intasendWebhook, which is what actually confirms payment
+ * and kicks off CJ fulfillment — never this function).
+ *
+ * Assumes one seller per cart (see CheckoutController's own comment and
+ * CLAUDE.md's "Known gaps") — a mixed-seller cart is rejected rather than
+ * silently attributed to the wrong seller.
  */
-exports.onOrderCreated = functions.firestore.document('orders/{orderId}').onCreate(async (snap, context) => {
-    const order = snap.data();
-    if (!order.paymentReference) {
-        functions.logger.warn(`Order ${context.params.orderId} created with no payment reference — skipping fulfillment.`);
+exports.createOrder = functions.https.onRequest(async (req, res) => {
+    const user = await (0, auth_1.requireAuth)(req, res);
+    if (!user)
         return;
-    }
     try {
-        // In production: verify order.paymentReference against IntaSend's
-        // status endpoint before forwarding to CJ (don't just trust the
-        // client-set field). See intasend.ts's intasendStatus for the call.
-        for (const item of order.items ?? []) {
-            await axios_1.default.post(`${functions.config().app?.functions_base_url}/cjCreateOrder`, {
-                cjProductId: item.productId,
-                quantity: item.quantity,
-                shippingAddress: order.shippingAddress,
-                variant: item.variant,
+        const items = (req.body.items ?? []);
+        const { shippingAddress, storeId, paymentMethod, currency } = req.body;
+        if (!Array.isArray(items) || items.length === 0) {
+            res.status(400).json({ message: 'No items in order' });
+            return;
+        }
+        if (!shippingAddress) {
+            res.status(400).json({ message: 'shippingAddress is required' });
+            return;
+        }
+        let subtotal = 0;
+        let sellerId = null;
+        const resolvedItems = [];
+        for (const item of items) {
+            const listingSnap = await auth_1.db.collection('listings').doc(item.productId).get();
+            if (!listingSnap.exists) {
+                res.status(404).json({ message: `Listing ${item.productId} not found` });
+                return;
+            }
+            const listing = listingSnap.data();
+            if (sellerId === null) {
+                sellerId = listing.sellerId ?? null;
+            }
+            else if (listing.sellerId !== sellerId) {
+                res.status(400).json({ message: 'All items in an order must belong to the same seller' });
+                return;
+            }
+            const quantity = Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+            const unitPrice = Number(listing.sellPrice ?? 0);
+            subtotal += unitPrice * quantity;
+            resolvedItems.push({
+                productId: item.productId,
+                title: listing.title ?? '',
+                imageUrl: listing.imageUrl ?? '',
+                quantity,
+                unitPrice,
+                variant: item.variant ?? null,
             });
         }
-        await snap.ref.update({ status: 'processing' });
+        if (!sellerId) {
+            res.status(400).json({ message: 'Could not resolve a seller for this order' });
+            return;
+        }
+        const serviceFeeRate = 0.02;
+        const serviceFeeAmount = round2(subtotal * serviceFeeRate);
+        const sellerRevenue = round2(subtotal - serviceFeeAmount);
+        const orderRef = auth_1.db.collection('orders').doc();
+        const order = {
+            id: orderRef.id,
+            code: orderCode(),
+            buyerId: user.uid,
+            sellerId,
+            storeId: storeId ?? null,
+            items: resolvedItems,
+            status: 'pending',
+            total: round2(subtotal),
+            currency: currency ?? 'KES',
+            shippingAddress,
+            paymentMethod: paymentMethod ?? 'IntaSend',
+            paymentReference: null,
+            trackingNumber: null,
+            createdAt: new Date().toISOString(),
+            paymentStatus: 'pending',
+            serviceFeeRate,
+            serviceFeeAmount,
+            sellerRevenue,
+            paymentFee: 0,
+        };
+        await orderRef.set(order);
+        res.json({ orderId: orderRef.id, code: order.code, total: order.total, serviceFeeAmount });
     }
     catch (err) {
-        functions.logger.error(`Fulfillment failed for order ${context.params.orderId}`, err);
-        await snap.ref.update({ status: 'pending', fulfillmentError: true });
+        functions.logger.error('createOrder failed', err?.message ?? err);
+        res.status(500).json({ message: 'Could not create the order' });
     }
 });
 //# sourceMappingURL=orders.js.map

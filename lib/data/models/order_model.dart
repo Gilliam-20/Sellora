@@ -10,6 +10,23 @@ extension OrderStatusX on OrderStatus {
       };
 }
 
+/// Whether the buyer's payment has actually cleared — separate from
+/// [OrderStatus], which tracks fulfillment. An order can be `pending`
+/// fulfillment while its payment is still `pending` confirmation from the
+/// IntaSend webhook (see functions/src/intasend.ts). Named distinctly from
+/// IntasendService's own `PaymentStatus` (a single collection call's
+/// immediate result) to avoid an import collision — this one is the
+/// order's persisted state.
+enum OrderPaymentStatus { pending, paid, failed }
+
+extension OrderPaymentStatusX on OrderPaymentStatus {
+  String get label => switch (this) {
+        OrderPaymentStatus.pending => 'Pending',
+        OrderPaymentStatus.paid => 'Paid',
+        OrderPaymentStatus.failed => 'Failed',
+      };
+}
+
 class OrderItem {
   OrderItem({
     required this.productId,
@@ -67,7 +84,46 @@ class OrderModel {
     this.paymentReference,
     this.trackingNumber,
     required this.createdAt,
+    this.paymentStatus = OrderPaymentStatus.pending,
+    this.serviceFeeRate = 0,
+    this.serviceFeeAmount = 0,
+    this.sellerRevenue = 0,
+    this.paymentFee = 0,
   });
+
+  OrderModel copyWith({
+    String? id,
+    String? code,
+    double? total,
+    String? paymentReference,
+    OrderStatus? status,
+    OrderPaymentStatus? paymentStatus,
+    double? serviceFeeRate,
+    double? serviceFeeAmount,
+    double? sellerRevenue,
+  }) {
+    return OrderModel(
+      id: id ?? this.id,
+      code: code ?? this.code,
+      buyerId: buyerId,
+      sellerId: sellerId,
+      storeId: storeId,
+      items: items,
+      status: status ?? this.status,
+      total: total ?? this.total,
+      currency: currency,
+      shippingAddress: shippingAddress,
+      paymentMethod: paymentMethod,
+      paymentReference: paymentReference ?? this.paymentReference,
+      trackingNumber: trackingNumber,
+      createdAt: createdAt,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      serviceFeeRate: serviceFeeRate ?? this.serviceFeeRate,
+      serviceFeeAmount: serviceFeeAmount ?? this.serviceFeeAmount,
+      sellerRevenue: sellerRevenue ?? this.sellerRevenue,
+      paymentFee: paymentFee,
+    );
+  }
 
   final String id;
   final String code; // human-readable manifest code, e.g. SLR-2049
@@ -86,6 +142,20 @@ class OrderModel {
   final String? paymentReference;
   final String? trackingNumber;
   final DateTime createdAt;
+
+  /// Whether the buyer's payment has actually cleared (set by
+  /// functions/src/intasend.ts's webhook, never by the client).
+  final OrderPaymentStatus paymentStatus;
+
+  // ---- Fee snapshot ---------------------------------------------------
+  // Computed once, server-side, at order-creation time (see
+  // functions/src/orders.ts createOrder) and never recomputed — changing
+  // AppConstants.platformServiceFeeRate later must not alter historical
+  // orders.
+  final double serviceFeeRate;
+  final double serviceFeeAmount;
+  final double sellerRevenue;
+  final double paymentFee;
 
   factory OrderModel.fromMap(Map<String, dynamic> map) {
     return OrderModel(
@@ -107,6 +177,13 @@ class OrderModel {
       trackingNumber: map['trackingNumber'] as String?,
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ??
           DateTime.now(),
+      paymentStatus: OrderPaymentStatus.values.firstWhere(
+          (s) => s.name == map['paymentStatus'],
+          orElse: () => OrderPaymentStatus.pending),
+      serviceFeeRate: (map['serviceFeeRate'] as num?)?.toDouble() ?? 0,
+      serviceFeeAmount: (map['serviceFeeAmount'] as num?)?.toDouble() ?? 0,
+      sellerRevenue: (map['sellerRevenue'] as num?)?.toDouble() ?? 0,
+      paymentFee: (map['paymentFee'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -125,5 +202,10 @@ class OrderModel {
         'paymentReference': paymentReference,
         'trackingNumber': trackingNumber,
         'createdAt': createdAt.toIso8601String(),
+        'paymentStatus': paymentStatus.name,
+        'serviceFeeRate': serviceFeeRate,
+        'serviceFeeAmount': serviceFeeAmount,
+        'sellerRevenue': sellerRevenue,
+        'paymentFee': paymentFee,
       };
 }

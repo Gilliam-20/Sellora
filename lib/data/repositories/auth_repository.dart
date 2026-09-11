@@ -1,7 +1,10 @@
 import 'package:get/get.dart';
+import '../../core/utils/slug.dart';
+import '../models/store_model.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
+import 'store_repository.dart';
 
 abstract class AuthRepository {
   Stream<UserModel?> get userChanges;
@@ -33,8 +36,12 @@ abstract class AuthRepository {
 /// with [FirestoreService] (the `users` document holding role, store
 /// name, subscription state, etc).
 class FirebaseAuthRepository extends GetxService implements AuthRepository {
+  FirebaseAuthRepository({StoreRepository? storeRepository})
+      : _storeRepository = storeRepository ?? Get.find<StoreRepository>();
+
   final AuthService _auth = Get.find<AuthService>();
   final FirestoreService _fs = Get.find<FirestoreService>();
+  final StoreRepository _storeRepository;
 
   UserModel? _cached;
 
@@ -113,8 +120,31 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
       createdAt: DateTime.now(),
     );
     await _fs.users.doc(user.uid).set(user.toMap());
+    await _createStoreForSeller(sellerId: user.uid, storeName: storeName);
     _cached = user;
     return user;
+  }
+
+  /// Every seller needs a [StoreModel] to have anything to sell against —
+  /// without this, a freshly-registered seller has no store at all
+  /// (see WORKLOG.md, 2026-09-11). One store per seller for now; a
+  /// store-switcher for multi-store sellers is future work.
+  Future<void> _createStoreForSeller(
+      {required String sellerId, required String storeName}) async {
+    final base = slugify(storeName);
+    var slug = base;
+    var suffix = 2;
+    while (await _storeRepository.storeBySlug(slug) != null) {
+      slug = '$base-$suffix';
+      suffix++;
+    }
+    await _storeRepository.createStore(StoreModel(
+      id: 'store-$sellerId',
+      slug: slug,
+      sellerId: sellerId,
+      name: storeName,
+      createdAt: DateTime.now(),
+    ));
   }
 
   @override

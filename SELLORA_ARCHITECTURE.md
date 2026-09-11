@@ -53,13 +53,39 @@ The Meridian system provides colors, typography, metrics, `ManifestStub`/`Manife
 
 - The app is mock-first; Firebase initialization is disabled in the active configuration.
 - Financial values use `double`; money must migrate to integer minor units before payment/order work.
-- The 5% `defaultCommissionPercent` and subscription `commissionPercent` conflict with the requested 2% service-fee model.
 - Role authorization relies on Firestore data writable by the user; use Firebase custom claims plus server-side validation.
 - Public/flat listing and order paths can leak tenants when a query constraint is missed.
-- Webhook authentication, order pricing, payment confirmation, retries/idempotency, and CJ fulfillment authorization are not safe for production.
-- Functions use deprecated runtime config and a trigger that calls an HTTP function without a verified server-to-server credential.
-- There is no automated Dart test suite or Firestore emulator rule suite.
+- There is no automated Firestore emulator rule suite (Dart unit tests exist under `test/`).
 - The original buyer marketplace remains alongside the planned store-scoped model; it must be retired only through a measured migration.
+
+**Findings from the 2026-09-11 follow-up audit (fixed same session — see `WORKLOG.md`):**
+
+- `firestore.rules` let any signed-in user set their own `users/{uid}.role` field to `'admin'` on
+  update, self-escalating past every `role() == 'admin'` check in the ruleset. Fixed: `role` can now
+  only change via an existing admin.
+- `listings/{listingId}` write rule checked only `role() == 'seller'`, not ownership — any seller
+  could edit or "steal" any other seller's listing. Fixed: create/update now require
+  `sellerId == request.auth.uid` and forbid reassigning `sellerId`.
+- `functions/src/orders.ts`'s `onOrderCreated` trigger POSTed to the authenticated `cjCreateOrder`
+  HTTPS function with no `Authorization` header — it would 401 on every real order. Fixed by removing
+  the HTTP self-call: `cj.ts` now exports a plain `placeCjOrder()` function called in-process, and only
+  from the IntaSend webhook once payment is actually confirmed (previously fulfillment could start
+  before payment was verified at all — the trigger's own comment already flagged this).
+- `functions/src/intasend.ts`'s `intasendWebhook` was a stub — logged the payload, verified nothing,
+  never touched Firestore, so no payment was ever confirmed anywhere. Fixed: verifies a shared
+  "challenge" value (needs reconfirming against IntaSend's current docs before go-live) and updates
+  the matching order's `paymentStatus`/triggers fulfillment.
+- Checkout was fully client-trusted — `CheckoutController` computed `total` and wrote
+  `paymentReference` itself; `FirebaseOrderRepository.placeOrder` just `.set()` the client's doc
+  verbatim. Fixed: a new `createOrder` Cloud Function re-prices every item from its `listings` doc
+  server-side; `orders/{orderId}` create is now `allow create: if false` in rules, so no client path
+  can write an order doc directly anymore.
+- `functions.config()` (used for CJ/IntaSend credentials) is deprecated in the installed
+  `firebase-functions` version, and no `.env`/`.runtimeconfig.json` existed — a fresh deploy would call
+  CJ/IntaSend with `undefined` credentials. Migrated to `defineSecret`/`runWith({ secrets: [...] })`;
+  real values still need to be set with `firebase functions:secrets:set` before any real deploy.
+- `AuthRepository.signUpSeller` (mock and Firebase) never created a `StoreModel` — a freshly-registered
+  seller had no store at all. Fixed in both implementations.
 
 ## L. Missing features
 

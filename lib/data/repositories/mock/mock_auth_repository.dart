@@ -1,13 +1,20 @@
 import 'dart:async';
 import 'package:get/get.dart';
+import '../../../core/utils/slug.dart';
+import '../../models/store_model.dart';
 import '../../models/user_model.dart';
 import '../auth_repository.dart';
+import '../store_repository.dart';
 
 /// In-memory stand-in for [FirebaseAuthRepository] used when
 /// [AppConstants.useMockData] is true. Accepts any email/password and
 /// keeps a single fake user in memory for the session — good enough to
 /// demo every screen in the app without a Firebase project.
 class MockAuthRepository extends GetxService implements AuthRepository {
+  MockAuthRepository({StoreRepository? storeRepository})
+      : _storeRepository = storeRepository ?? Get.find<StoreRepository>();
+
+  final StoreRepository _storeRepository;
   final _controller = StreamController<UserModel?>.broadcast();
   UserModel? _current;
 
@@ -103,9 +110,32 @@ class MockAuthRepository extends GetxService implements AuthRepository {
       currencyCode: 'KES',
       createdAt: DateTime.now(),
     );
+    await _createStoreForSeller(sellerId: user.uid, storeName: storeName);
     _current = user;
     _controller.add(user);
     return user;
+  }
+
+  /// Mirrors FirebaseAuthRepository's store-creation-on-signup — every
+  /// seller needs a StoreModel to have anything to sell against. The
+  /// seeded quick-login accounts (mock-seller / mock-seller-2) already
+  /// have stores from MockSeedData and never go through this path.
+  Future<void> _createStoreForSeller(
+      {required String sellerId, required String storeName}) async {
+    final base = slugify(storeName);
+    var slug = base;
+    var suffix = 2;
+    while (await _storeRepository.storeBySlug(slug) != null) {
+      slug = '$base-$suffix';
+      suffix++;
+    }
+    await _storeRepository.createStore(StoreModel(
+      id: 'store-$sellerId',
+      slug: slug,
+      sellerId: sellerId,
+      name: storeName,
+      createdAt: DateTime.now(),
+    ));
   }
 
   @override

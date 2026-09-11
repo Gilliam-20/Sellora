@@ -130,21 +130,32 @@ real secret keys server-side. This is the difference between "a secret
 key baked into an APK anyone can decompile" and "a secret key that
 never leaves your server."
 
+Credentials are Cloud Secret Manager secrets (not `functions:config:set`,
+which is deprecated), set once per environment:
+
 ```bash
 cd functions
 npm install
-firebase functions:config:set \
-  cj.email="you@example.com" cj.password="..." \
-  intasend.secret_key="ISSecretKey_..." intasend.publishable_key="ISPubKey_..." intasend.env="sandbox"
+firebase functions:secrets:set CJ_EMAIL
+firebase functions:secrets:set CJ_PASSWORD
+firebase functions:secrets:set INTASEND_SECRET_KEY
+firebase functions:secrets:set INTASEND_WEBHOOK_CHALLENGE   # any random string; you'll enter the same value in IntaSend's dashboard below
 npm run deploy
 ```
+
+`INTASEND_ENV` (`"sandbox"` or `"live"`) is a plain runtime env var, not a
+secret — set it in `functions/.env` (`INTASEND_ENV=sandbox`) rather than
+via `secrets:set`.
 
 Update `lib/core/constants/app_constants.dart`'s
 `ApiEndpoints.baseFunctionsUrl` with your deployed functions URL.
 
 Configure IntaSend's webhook (dashboard → Webhooks) to point at your
-deployed `intasendWebhook` function so subscription/order payments are
-confirmed server-side rather than trusted from the client.
+deployed `intasendWebhook` function, with the same challenge string you
+set as `INTASEND_WEBHOOK_CHALLENGE` above — `intasendWebhook` verifies it
+before confirming any payment, and reconfirm the exact webhook payload
+shape against IntaSend's current docs before going live; it's implemented
+from their published docs, not tested against a real account.
 
 ### 3. Subscription plans
 
@@ -172,13 +183,24 @@ seller subscription management, buyer storefront/cart/checkout/order
 history, and the full admin panel (sellers, catalog sync, orders,
 plans).
 
-Worth hardening before real money moves through it:
-- IntaSend webhook signature verification (`functions/src/intasend.ts`
-  has a `TODO` — right now it logs the payload but doesn't verify it).
+As of 2026-09-11, order pricing/creation and payment confirmation are
+server-side (`functions/src/orders.ts`'s `createOrder`, `functions/src/
+intasend.ts`'s `intasendWebhook`), and `firestore.rules` no longer lets a
+client write an order directly or grant themselves a role. Still worth
+hardening before real money moves through it:
+- IntaSend's webhook "challenge" verification is implemented from their
+  published docs, not tested against a real account — reconfirm the exact
+  payload shape before going live.
 - The current checkout flow assumes one seller per cart; a real
-  multi-seller cart should split into one order per seller at checkout.
-- Custom claims (Firebase Auth) for `role`/`admin`, rather than trusting
-  the `users/{uid}.role` field the way the sample Firestore rules do.
+  multi-seller cart is rejected rather than split into one order per
+  seller.
+- Custom claims (Firebase Auth) for `role`/`admin` — the Firestore rules
+  no longer let a user grant themselves a role, but `role` still lives on
+  a plain Firestore document rather than a signed auth token.
 - CJ Dropshipping's real API auth handshake and response shapes vary by
   account type — `functions/src/cj.ts` sketches the flow; confirm field
   names against your CJ developer account before going live.
+- Subscription billing (`FirebaseSubscriptionRepository.subscribeSeller`)
+  still writes `billing_history` directly from the client, which
+  `firestore.rules` already silently blocks against real Firestore — the
+  same class of fix `createOrder` just got, not yet done for billing.

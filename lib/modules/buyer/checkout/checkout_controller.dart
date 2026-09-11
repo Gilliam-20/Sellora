@@ -24,59 +24,94 @@ class CheckoutController extends GetxController {
     isPlacingOrder.value = true;
     errorMessage.value = null;
     try {
-      String? paymentReference;
-      if (!AppConstants.useMockData) {
-        final intasend = Get.find<IntasendService>();
-        final result = await intasend.collectMpesa(
-          phone: Formatters.toMpesaFormat(mpesaPhone),
-          amountKes: cartRepo.subtotal,
-          narrative: 'Sellora order',
-        );
-        paymentReference = result.reference;
-      } else {
-        await Future.delayed(const Duration(seconds: 2));
-        paymentReference = 'MOCK-PAY-${DateTime.now().millisecondsSinceEpoch}';
-      }
-
       // A real multi-seller cart would split into one order per seller.
-      // Simplified here to a single order against the first item's seller.
+      // Simplified here to a single order against the first item's
+      // seller — matches functions/src/orders.ts's createOrder, which
+      // rejects a cart mixing sellers rather than silently misattributing
+      // it.
       final sellerId =
           cartRepo.items.first.product.sellerId ?? 'unknown-seller';
-      final order = OrderModel(
-        id: 'order-${DateTime.now().millisecondsSinceEpoch}',
-        code: 'SLR-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}',
+      final items = cartRepo.items
+          .map((i) => OrderItem(
+                productId: i.product.id,
+                title: i.product.title,
+                imageUrl: i.product.imageUrl,
+                quantity: i.quantity,
+                unitPrice: i.product.sellPrice,
+                variant: i.selectedVariant,
+              ))
+          .toList();
+
+      if (AppConstants.useMockData) {
+        // Demo mode fakes an instant successful payment — there's no
+        // server to re-price against and no webhook to confirm it later,
+        // so the order is written already "paid" for a smooth demo.
+        await Future.delayed(const Duration(seconds: 2));
+        final order = OrderModel(
+          id: 'order-${DateTime.now().millisecondsSinceEpoch}',
+          code: 'SLR-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}',
+          buyerId: user.uid,
+          sellerId: sellerId,
+          storeId: cartRepo.storeId,
+          items: items,
+          status: OrderStatus.pending,
+          total: cartRepo.subtotal,
+          currency: 'KES',
+          shippingAddress: address,
+          paymentMethod: 'IntaSend M-Pesa',
+          paymentReference:
+              'MOCK-PAY-${DateTime.now().millisecondsSinceEpoch}',
+          paymentStatus: OrderPaymentStatus.paid,
+          createdAt: DateTime.now(),
+        );
+        await _orderRepo.placeOrder(order);
+        _onOrderPlaced(order.code,
+            'Your order ${order.code} is on its way to processing.');
+        return;
+      }
+
+      // Real mode: create the order server-side — re-priced from
+      // listings, ignoring whatever total this draft carries — *before*
+      // contacting IntaSend, so the server-assigned order id can be used
+      // as the payment's api_ref. See FirebaseOrderRepository.placeOrder
+      // and functions/src/intasend.ts's webhook, which is what actually
+      // confirms payment and starts CJ fulfillment; this controller does
+      // neither itself anymore.
+      final draft = OrderModel(
+        id: '',
+        code: '',
         buyerId: user.uid,
         sellerId: sellerId,
         storeId: cartRepo.storeId,
-        items: cartRepo.items
-            .map((i) => OrderItem(
-                  productId: i.product.id,
-                  title: i.product.title,
-                  imageUrl: i.product.imageUrl,
-                  quantity: i.quantity,
-                  unitPrice: i.product.sellPrice,
-                  variant: i.selectedVariant,
-                ))
-            .toList(),
+        items: items,
         status: OrderStatus.pending,
         total: cartRepo.subtotal,
         currency: 'KES',
         shippingAddress: address,
         paymentMethod: 'IntaSend M-Pesa',
-        paymentReference: paymentReference,
         createdAt: DateTime.now(),
       );
+      final order = await _orderRepo.placeOrder(draft);
 
-      await _orderRepo.placeOrder(order);
-      cartRepo.clear();
-      Get.offAllNamed(Routes.buyerShell, arguments: {'tab': 2});
-      Get.snackbar('Order placed',
-          'Your order ${order.code} is on its way to processing.');
+      final intasend = Get.find<IntasendService>();
+      await intasend.collectMpesa(
+        phone: Formatters.toMpesaFormat(mpesaPhone),
+        amountKes: order.total,
+        narrative: order.id,
+      );
+      _onOrderPlaced(order.code,
+          'Order ${order.code} placed — complete the M-Pesa prompt on your phone to finish payment.');
     } catch (e) {
       errorMessage.value =
           'Payment didn\'t go through. Check the number and try again.';
     } finally {
       isPlacingOrder.value = false;
     }
+  }
+
+  void _onOrderPlaced(String code, String message) {
+    cartRepo.clear();
+    Get.offAllNamed(Routes.buyerShell, arguments: {'tab': 2});
+    Get.snackbar('Order placed', message);
   }
 }

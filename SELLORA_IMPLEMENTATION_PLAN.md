@@ -2,48 +2,137 @@
 
 ## Guardrails
 
-Preserve the current GetX/repository split, mock mode, and working portals while a replacement is built. Each repository contract change includes mock and Firebase implementations. No payment, fulfillment, fee, or Firestore-rule migration ships without tests and Firebase Emulator verification.
+Preserve the current GetX/repository split, mock mode, and working portals while a replacement is
+built. Each repository contract change includes mock and Firebase implementations. No payment,
+fulfillment, fee, or Firestore-rule migration ships without tests and Firebase Emulator verification.
 
-## Phase 1 — Foundation (started)
+## Phase framework
 
-Deliverables: the #FFC107 / #303F9F Sellora theme pair, system dark mode, shared page/header/search/loading/error primitives, unified breakpoints, and a documented route/component convention. The current responsive shell and Meridian signature card are retained. The seller dashboard now uses the shared page-header primitive.
+As of 2026-09-11 this plan re-keys to `TODOD.md`'s `PHASE 0`–`PHASE 12` numbering (its 56-section
+"master build prompt") rather than this document's own earlier numbering — see `WORKLOG.md`
+(2026-09-11) for why. `TODOD.md` itself is treated as an aspirational reference, not a literal spec to
+execute section-by-section in one pass; each phase below still only does what the codebase audit
+(`SELLORA_ARCHITECTURE.md`) shows is actually next.
 
-Exit criteria: `flutter analyze`, widget tests for new primitives, and web build pass. This phase intentionally does not alter business data, payments, CJ calls, or security rules.
+## Decisions on record
 
-## Phase 2 — Tenant core (started)
+- Platform service fee: **2%** of order subtotal (TODOD §15), snapshotted per order
+  (`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/`paymentFee` on `OrderModel`), never
+  shipping/tax unless configured, never retroactively changed on historical orders.
+- The `listings`/`orders` flat collections → `stores/{storeId}/products` / `stores/{storeId}/orders`
+  write-path migration is **deferred** — today those subcollections are read-only and always empty.
+  Don't build new features against them until that migration lands.
+- Payment custody model (platform collect-and-disburse vs. each seller connects their own IntaSend
+  account) is still **open** — see the two conflicting 2026-09-08 `WORKLOG.md` entries. Work done so
+  far (order creation, webhook confirmation) is written to be compatible with either: it confirms *a*
+  payment against *an* order without assuming who the payout ultimately goes to.
+- CJ Dropshipping account model (shared platform credential vs. per-seller) is still **open** —
+  unchanged, still one platform credential in `functions/src/cj.ts`.
 
-Add a `StoreScope` that resolves `/s/:slug`, a public-store lookup cache, and store-scoped route middleware. Add repository methods keyed by `storeId`; migrate mocks first, then Firestore paths. Define the collection indexes and write emulator tests proving one seller cannot query another seller's products, orders, customers, settings, or payments.
+## PHASE 0 — Audit: done
 
-Done so far: `StoreScope` + `/s/:slug` + `StorefrontView`; `storeProducts()`/`storeOrders()` read methods (mock + Firebase) with matching Firestore rules; `firestore-tests/` emulator suite proving tenant isolation on products/orders/customers. Still open: store-scoped route middleware for seller-admin routes, the `placeOrder`/product-create write-path migration onto the new subcollections, and store-scoped `settings`/`collections`. See `WORKLOG.md` (2026-09-11) for the full detail.
+`SELLORA_ARCHITECTURE.md` (sections A–P, dated 2026-09-11), refreshed same day with the sharper
+findings from a second pass over `functions/src/*` and the checkout/repository code (section K).
 
-## Phase 3 — Seller onboarding and entitlements
+## PHASE 1 — Foundation: done
 
-Normalize seller/store creation, country/currency, onboarding completion, active store selection, plan definitions, and feature flags. Model limits as plan data, never UI constants.
+The #FFC107 / #303F9F Sellora theme pair, system dark mode, shared page/header/search/loading/error
+primitives, unified breakpoints, and a documented route/component convention. The responsive shell and
+Meridian signature card are retained. Exit criteria met: `flutter analyze` clean, web build passes.
 
-## Phase 4 — Catalog, pricing, and import
+## PHASE 2 — Auth + seller onboarding: in progress
 
-Confirm the CJ account/API contract. Add a supplier adapter, shipping quote contract, `Money` minor-unit type, configurable pricing rules, and import drafts. Compute recommendations server-side or in a deterministic shared domain service; sellers may override only their selling price.
+Done: `StoreScope` resolving both `/s/:slug` and a signed-in seller's own store
+(`resolveForSeller`), wired into `SellerShellController.onInit()`; `storeProducts()`/`storeOrders()`
+read methods (mock + Firebase) with matching Firestore rules; `firestore-tests/` emulator suite proving
+tenant isolation on products/orders/customers; **`AuthRepository.signUpSeller` now creates a
+`StoreModel` for every new seller** (mock + Firebase, 2026-09-11 — previously a seller had no store at
+all after signing up).
 
-## Phase 5 — Seller product management
+Still open: route middleware/guard for seller-admin routes (nothing blocks navigation while the store
+is resolving or missing); a store switcher for multi-store sellers (today `resolveForSeller` just picks
+`storesForSeller(sellerId).first`); onboarding completion state and plan selection (folds into
+PHASE 3).
 
-Build store-scoped products/variants/inventory/collections/SEO, with server-authorized write paths and paginated query contracts. Add responsive list/table/grid states and bulk operation confirmation flows.
+## PHASE 3 — Billing
 
-## Phase 6 — Store builder and storefront
+Plan schema (Starter/Growth/Pro per TODOD §16, configurable rather than hard-coded), immutable
+subscription/billing records, usage tracking, provider-neutral subscription payments. Not started.
+Note: `FirebaseSubscriptionRepository.subscribeSeller` currently writes `billing_history` directly from
+the client, which `firestore.rules`' `allow write: if false` on that collection already silently
+blocks against real Firestore — this phase needs to move that write server-side, the same way PHASE 8
+just did for orders.
 
-Create theme, section, block, and setting models plus renderer/preview/publish flows. Replace the shared buyer feed with `/s/:slug` storefront pages, store-bound carts, and customer profiles beneath that store.
+## PHASE 4 — Catalog, pricing, and CJ import
 
-## Phase 7 — Billing, payments, and orders
+Confirm the CJ account/API contract, add a supplier adapter, shipping quote contract, integer-minor-
+unit `Money` type, configurable pricing rules, import drafts. Not started.
 
-Choose and verify the marketplace payment operating model before implementation. Build a provider interface, signed webhooks, idempotent order creation, server repricing, fulfillment state machine, refunds, and payment ledger. Snapshot `serviceFeeRate = 0.02`, `serviceFeeAmount`, `paymentFee`, `sellerRevenue`, and currency on each successful order; do not charge service fee on shipping/tax unless configured.
+## PHASE 5 — Seller product management
 
-## Phase 8 — Operations and launch hardening
+Store-scoped products/variants/inventory/collections/SEO, server-authorized write paths, paginated
+query contracts, responsive list/table/grid states, bulk operations. Not started — blocked behind the
+deferred `stores/{storeId}/products` write-path migration above.
 
-Add analytics, discounts, customer tools, notifications, platform admin reporting, custom-claim administration, Secret Manager migration, monitoring/Crashlytics, rate limits, backups, full test coverage, and deployment runbooks.
+## PHASE 6 — Store builder
 
-## Decisions required before data/payment migration
+Theme/section/block/setting models, renderer/preview/publish flow. Not started.
 
-1. Is there any production Firebase data to migrate?
+## PHASE 7 — Customer storefront
+
+Replace the shared buyer feed with `/s/:slug` storefront pages, store-bound carts, customer profiles
+beneath that store. Not started.
+
+## PHASE 8 — Payments + orders: slice done, rest not started
+
+Done (2026-09-11): order creation moved server-side — a new `createOrder` Cloud Function re-prices
+every item from its `listings` doc (never trusting a client-supplied total/seller), snapshots the 2%
+fee fields, and writes the order; `orders/{orderId}` create is `allow create: if false` in rules, so no
+client path can write an order doc directly anymore. `intasendWebhook` now verifies a shared
+"challenge" value (needs reconfirming against IntaSend's current docs before go-live) and, on a
+confirmed payment, sets the order's `paymentStatus` and calls CJ fulfillment
+(`placeCjOrder`, extracted from `cj.ts`'s old HTTP-only `cjCreateOrder` handler — the previous
+`onOrderCreated` trigger's fulfillment call was broken, missing the auth header its own target
+endpoint required).
+
+Not started: payment provider abstraction (still IntaSend-only), refunds, the full fulfillment state
+machine, multi-seller-cart splitting (still rejected rather than handled), subscription-payment webhook
+wiring (PHASE 3's job).
+
+## PHASE 9 — Analytics + marketing
+
+Not started.
+
+## PHASE 10 — Admin
+
+Not started (existing admin mock screens are marketplace-era, not this platform's admin panel).
+
+## PHASE 11 — Internationalization
+
+Not started. `platformServiceFeeRate` and `StoreModel.currencyCode` exist as seams; no multi-currency
+conversion service yet.
+
+## PHASE 12 — Security + production
+
+Pulled forward and done this session (2026-09-11), because they're prerequisites for any later phase
+touching real money or tenant data, not because PHASE 12 is next in sequence:
+
+- Firestore rules: `users.role` self-escalation closed; `listings` ownership-checked; `orders` create
+  locked to Cloud-Function-only.
+- Secrets: `functions.config()` → `defineSecret`/`runWith({ secrets })` for CJ and IntaSend credentials
+  (real values still need `firebase functions:secrets:set` before deploy — not set here).
+
+Still open: Firebase custom claims (role still lives on a Firestore doc, just no longer
+self-writable); rate limiting; Crashlytics/monitoring; backups; deployment runbooks; the emulator rule
+suite for the two new rules above (add cases per `WORKLOG.md`'s verification section).
+
+## Decisions still required
+
+1. Payment custody model — platform collect-and-disburse vs. per-seller IntaSend accounts (see above).
 2. Is CJ account ownership shared by Sellora or connected per seller?
-3. Which payment provider has confirmed marketplace/split-payment capability and its refund/settlement rules?
+3. Which payment provider has confirmed marketplace/split-payment capability, and its
+   refund/settlement rules — gates resolving #1.
 4. Are multi-store sellers required at launch?
 5. Is `/s/:slug` accepted for MVP, with custom domains following later?
+
+None of these block PHASE 1/2/8's completed slice above; they gate PHASE 3–7 and the rest of PHASE 8.

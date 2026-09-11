@@ -40,6 +40,27 @@ void main() {
     expect(scope.current.value, isNull);
     expect(scope.errorMessage.value, 'This storefront could not be found.');
   });
+
+  test('resolves a seller\'s own store for the seller-admin shell', () async {
+    final scope = StoreScope(repository: _FakeStoreRepository([amina, jengo]));
+
+    final result = await scope.resolveForSeller('seller-b');
+
+    expect(result?.id, 'store-b');
+    expect(scope.current.value?.id, 'store-b');
+    expect(scope.errorMessage.value, isNull);
+  });
+
+  test('flags a seller who has not created a store yet, without crashing',
+      () async {
+    final scope = StoreScope(repository: _FakeStoreRepository([amina]));
+
+    final result = await scope.resolveForSeller('seller-with-no-store');
+
+    expect(result, isNull);
+    expect(scope.current.value, isNull);
+    expect(scope.errorMessage.value, "You haven't created a store yet.");
+  });
 }
 
 class _FakeStoreRepository implements StoreRepository {
