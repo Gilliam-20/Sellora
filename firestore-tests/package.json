@@ -1,0 +1,13 @@
+{
+  "name": "sellora-firestore-rules-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Firestore emulator tests proving tenant isolation between stores (see WORKLOG.md, Phase 2).",
+  "type": "commonjs",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project sellora-rules-test \"node --test\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4"
+  }
+}

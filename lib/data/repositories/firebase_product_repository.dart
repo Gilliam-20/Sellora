@@ -26,6 +26,25 @@ class FirebaseProductRepository extends GetxService
   }
 
   @override
+  Future<List<ProductModel>> storeProducts(
+    String storeId, {
+    String? keyword,
+    String? category,
+  }) async {
+    final snap = await _fs.storeProducts(storeId).get();
+    return snap.docs
+        .map((d) => ProductModel.fromMap(d.data()))
+        .where((product) {
+      final matchesKeyword = keyword == null ||
+          keyword.isEmpty ||
+          product.title.toLowerCase().contains(keyword.toLowerCase());
+      final matchesCategory =
+          category == null || category == 'All' || product.category == category;
+      return product.isListed && matchesKeyword && matchesCategory;
+    }).toList();
+  }
+
+  @override
   Future<List<ProductModel>> storefrontFeed(
       {String? keyword, String? category}) async {
     var query = _fs.listings.where('isListed', isEqualTo: true);

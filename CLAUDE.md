@@ -109,10 +109,14 @@ The app is being reshaped **from a shared marketplace into a Shopify-style multi
 each seller gets their own storefront at `sellora.app/s/{slug}`, buyers become customers of a specific
 store rather than global Sellora accounts, and the shared buyer feed goes away.
 
-The design is written up and awaiting sign-off — see `WORKLOG.md` for the decisions, the open
-questions, and a link to the full document. **No implementation has started.** Until it does, the
-code in `lib/modules/buyer/` and the flat top-level Firestore collections still reflect the
-marketplace model, so check `WORKLOG.md` before building on either.
+The design is written up — see `WORKLOG.md` for the decisions, the open questions, and a link to the
+full document. As of 2026-09-11, implementation has started on decisions that don't require the still-
+open questions (#1 buyer account scoping, #4 multi-store-per-seller, #5 white-label depth): a
+`StoreScope` service resolves `/s/:slug`, `stores/{storeId}/products` and `.../orders` subcollections
+now exist with matching Firestore rules, and `SELLORA_ARCHITECTURE.md`/`SELLORA_IMPLEMENTATION_PLAN.md`
+hold the current audit and phased plan. The buyer marketplace in `lib/modules/buyer/` and the flat
+top-level `listings`/`orders` collections are still live and have **not** been migrated or removed —
+check `WORKLOG.md`'s latest entry before extending either the old or new model.
 
 ## Known gaps (from README, still open)
 

@@ -18,6 +18,8 @@ import '../../modules/onboarding/views/seller_onboarding_view.dart';
 import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
 import '../../modules/seller/subscription/seller_subscription_view.dart';
+import '../../modules/storefront/storefront_binding.dart';
+import '../../modules/storefront/storefront_view.dart';
 import 'app_routes.dart';
 import 'role_middleware.dart';
 
@@ -46,6 +48,11 @@ class AppPages {
         name: Routes.registerSeller,
         page: () => const RegisterSellerView(),
         binding: AuthBinding()),
+    GetPage(
+      name: Routes.storefront,
+      page: () => const StorefrontView(),
+      binding: StorefrontBinding(),
+    ),
 
     GetPage(
       name: Routes.sellerOnboarding,

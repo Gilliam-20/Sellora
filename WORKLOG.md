@@ -6,6 +6,65 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-11 — Multi-tenant pivot: Phase 0 audit, Phase 1 foundation, Phase 2 started
+
+**Status:** in progress, uncommitted. Supersedes the "no implementation code written" status on every
+entry below — implementation began without a separate explicit sign-off message, on the reasoning
+that decisions #2 (Firestore subcollection model) and #3 (path routing at `/s/:slug`) from the
+2026-09-08 design doc are the only two Phase 1–3 depend on, both already recommendations rather than
+open questions, and phases 1–3 don't touch Q2/Q3 (CJ account ownership, IntaSend split capability) per
+that entry's own note. Decisions #1, #4, #5 (buyer account scoping, multi-store-per-seller, white-label
+depth) are still open and should be confirmed before Phase 3 (seller onboarding/entitlements) goes far.
+
+**Changed on disk:**
+- `SELLORA_ARCHITECTURE.md`, `SELLORA_IMPLEMENTATION_PLAN.md` — audit + 8-phase plan (finer-grained
+  than the design doc's phase list, adapted to what actually exists in the repo).
+- Phase 1: Sellora theme pair (`#FFC107` / `#303F9F`) with system dark mode in `app_theme.dart`,
+  shared `lib/core/widgets/app_page.dart` (page header, search field, loading/error states), seller
+  dashboard migrated to the shared header.
+- Phase 2 (partial): `lib/modules/storefront/` — `StoreScope` (`GetxService` resolving `/s/:slug` to
+  a `StoreModel`, tested in `test/store_scope_test.dart`), `StorefrontView`/`Controller`/`Binding`
+  wired into `app_pages.dart`/`app_routes.dart`/`initial_binding.dart`. `ProductRepository` gained
+  `storeProducts(storeId, ...)` (mock + Firebase implementations). `FirestoreService` gained
+  `storeProducts()`/`storeOrders()` subcollection accessors.
+- `firestore.rules` — added `stores/{storeId}/products` and `stores/{storeId}/orders` subcollection
+  rules. These paths existed in `firestore_service.dart` with no matching rule, which under
+  Firestore's default-deny meant they were unreachable — a latent bug, not a leak, but it would have
+  silently broken the first real-Firestore run.
+- `OrderRepository` gained `storeOrders(storeId)` (mock + Firebase), mirroring `storeProducts()`. Like
+  `storeProducts()`, this reads the new subcollection only — `placeOrder` still writes to the flat
+  `orders` collection, so `storeOrders()` returns nothing against real Firestore until that write path
+  migrates. Mock's version filters the existing seed list by `OrderModel.storeId` instead, since mock
+  orders already carry that field.
+- `firebase.json` gained an `emulators.firestore` block (port 8080, UI disabled) so `firebase
+  emulators:exec` runs non-interactively.
+- New `firestore-tests/` — a small Node package (`@firebase/rules-unit-testing`, run via
+  `npm test`, which shells out to `firebase emulators:exec --only firestore "node --test"`) with
+  `tenant-isolation.test.js`: 5 tests proving a seller can write/read/update only their own store's
+  `products`/`orders`, a buyer's `customers` profile is private to them + their store's seller + admins,
+  and the storefront stays publicly readable for guests. All 5 pass against the real emulator, with
+  the rules engine's own `PERMISSION_DENIED` responses visible in the log — not vacuous passes.
+
+**Verification:** `flutter analyze` clean (only 6 pre-existing `info`-level lints), `flutter test`
+passes (2 tests), `npm test` in `firestore-tests/` passes (5 tests, ~12s against the emulator).
+
+**Found and left alone:** `functions/node_modules` (5,839 files) is already committed to git. Not this
+session's doing and not touched — flagging it here since it's the kind of thing a later session might
+otherwise "fix" by surprise. `firestore-tests/node_modules` is gitignored so this isn't repeated.
+
+**Not done:** route middleware enforcing store scope on seller-admin routes (only the public storefront
+resolves a slug today), store-scoped `customers`/`settings`/`collections` repository *methods* (the
+Firestore path and rules exist; nothing in `lib/` reads/writes store-scoped customers yet beyond
+`AuthRepository`'s existing write), the `placeOrder`/product-create write-path migration to the new
+subcollections, and any indexes for `storeOrders()`/`storeProducts()` (none needed yet — both do a bare
+`.get()`/`.orderBy()` with no `.where()`).
+
+**Next step:** decisions #1/#4/#5 are still open and Phase 3 (seller onboarding/entitlements) depends
+on #4 (single vs. multi-store per seller changes the dashboard's store-picker and the custom-claim
+shape) — worth confirming before going much further into Phase 3.
+
+---
+
 ## 2026-09-09 — Payment design finalized: IntaSend Split Payments mechanics
 
 **Status:** design complete, still awaiting overall sign-off. No implementation code written.

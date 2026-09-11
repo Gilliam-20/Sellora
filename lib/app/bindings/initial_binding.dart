@@ -24,6 +24,7 @@ import '../../data/services/cj_dropshipping_service.dart';
 import '../../data/services/firestore_service.dart';
 import '../../data/services/intasend_service.dart';
 import '../../data/services/storage_service.dart';
+import '../../modules/storefront/store_scope.dart';
 
 /// Everything the whole app needs for its entire lifetime is registered
 /// here, once, as `permanent: true` — services, and whichever
@@ -64,5 +65,9 @@ class InitialBinding extends Bindings {
       Get.put<AdminRepository>(FirebaseAdminRepository(), permanent: true);
       Get.put<StoreRepository>(FirebaseStoreRepository(), permanent: true);
     }
+
+    // StoreScope resolves StoreRepository in its constructor, so it must be
+    // registered after either the mock or Firebase repository set above.
+    Get.put(StoreScope(), permanent: true);
   }
 }

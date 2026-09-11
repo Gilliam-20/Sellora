@@ -27,4 +27,12 @@ class FirestoreService extends GetxService {
   /// the platform-wide `users` collection. See WORKLOG.md.
   CollectionReference<Map<String, dynamic>> storeCustomers(String storeId) =>
       stores.doc(storeId).collection('customers');
+
+  /// Tenant-owned resources. These paths are introduced additively; the
+  /// legacy flat listing/order collections remain readable during migration.
+  CollectionReference<Map<String, dynamic>> storeProducts(String storeId) =>
+      stores.doc(storeId).collection('products');
+
+  CollectionReference<Map<String, dynamic>> storeOrders(String storeId) =>
+      stores.doc(storeId).collection('orders');
 }

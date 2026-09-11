@@ -35,6 +35,8 @@ class SelloraApp extends StatelessWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       initialRoute: Routes.splash,
       initialBinding: InitialBinding(),
       getPages: AppPages.pages,

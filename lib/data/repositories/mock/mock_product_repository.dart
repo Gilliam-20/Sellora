@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import '../../models/product_model.dart';
 import '../../mock/mock_seed_data.dart';
 import '../product_repository.dart';
+import '../store_repository.dart';
 
 class MockProductRepository extends GetxService implements ProductRepository {
   MockProductRepository() {
@@ -50,6 +51,27 @@ class MockProductRepository extends GetxService implements ProductRepository {
           .map((p) => p.copyWith(sellerId: sellerId, isListed: true)));
     }
     return _listings.where((p) => p.sellerId == sellerId).toList();
+  }
+
+  @override
+  Future<List<ProductModel>> storeProducts(
+    String storeId, {
+    String? keyword,
+    String? category,
+  }) async {
+    // Demo mode mirrors the target store-owned path by resolving the store
+    // first, then returning only that store owner's seed listings.
+    final store = await Get.find<StoreRepository>().storeById(storeId);
+    if (store == null) return const [];
+    final listings = await sellerListings(store.sellerId);
+    return listings.where((product) {
+      final matchesKeyword = keyword == null ||
+          keyword.isEmpty ||
+          product.title.toLowerCase().contains(keyword.toLowerCase());
+      final matchesCategory =
+          category == null || category == 'All' || product.category == category;
+      return product.isListed && matchesKeyword && matchesCategory;
+    }).toList();
   }
 
   @override

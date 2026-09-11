@@ -6,6 +6,7 @@ import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
+import '../../../core/widgets/app_page.dart';
 import '../../../core/widgets/manifest_stub.dart';
 import 'seller_dashboard_controller.dart';
 
@@ -29,17 +30,11 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
                   horizontal: context.pageHorizontalPadding,
                   vertical: AppSpacing.md),
               children: [
-                Text('Welcome back',
-                    style: Theme.of(context)
-                        .textTheme
-                        .displaySmall
-                        ?.copyWith(fontSize: 22)),
-                const SizedBox(height: 4),
-                Text(
-                  user?.hasActiveSubscription == true
+                AppPageHeader(
+                  title: 'Welcome back',
+                  subtitle: user?.hasActiveSubscription == true
                       ? 'Your subscription renews ${Formatters.date(user!.subscriptionActiveUntil!)}.'
                       : 'Your subscription needs attention.',
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 GridView.extent(

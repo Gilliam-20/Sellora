@@ -53,6 +53,29 @@ service cloud.firestore {
         allow update: if isOwner(uid) || role() == 'admin';
         allow delete: if false;
       }
+
+      // ---- per-store products (tenant-scoped catalog) -------------------
+      // Same public-read shape as the legacy flat `listings` collection —
+      // a storefront must be browsable by guests — but writes are checked
+      // against this store's own sellerId rather than a bare role check,
+      // so one seller cannot write into another seller's store.
+      match /products/{productId} {
+        allow read: if true;
+        allow create, update: if isSignedIn() && storeSellerId(storeId) == request.auth.uid;
+        allow delete: if false;
+      }
+
+      // ---- per-store orders (tenant-scoped) ------------------------------
+      // Mirrors the flat `orders` collection's ownership checks, scoped to
+      // this store so a seller can never read/update another store's
+      // orders even if they guess an order id.
+      match /orders/{orderId} {
+        allow create: if isSignedIn() && request.resource.data.buyerId == request.auth.uid;
+        allow read: if isSignedIn() &&
+          (resource.data.buyerId == request.auth.uid || storeSellerId(storeId) == request.auth.uid || role() == 'admin');
+        allow update: if isSignedIn() && (storeSellerId(storeId) == request.auth.uid || role() == 'admin');
+        allow delete: if false;
+      }
     }
 
     // ---- shared CJ catalog -------------------------------------------

@@ -20,10 +20,10 @@ class AppColors {
   AppColors._();
 
   // ---- Brand ----------------------------------------------------------
-  static const Color cargoNavy = Color(0xFF16213E);
-  static const Color cargoNavyDeep = Color(0xFF0E1529);
-  static const Color manifestGold = Color(0xFFF2A93B);
-  static const Color manifestGoldDeep = Color(0xFFD8901F);
+  static const Color cargoNavy = Color(0xFF303F9F);
+  static const Color cargoNavyDeep = Color(0xFF1A237E);
+  static const Color manifestGold = Color(0xFFFFC107);
+  static const Color manifestGoldDeep = Color(0xFFFFA000);
   static const Color horizonTeal = Color(0xFF2EC4B6);
   static const Color horizonTealDeep = Color(0xFF1F9E92);
 

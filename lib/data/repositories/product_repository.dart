@@ -7,6 +7,14 @@ abstract class ProductRepository {
   /// Products a specific seller has listed in their own store.
   Future<List<ProductModel>> sellerListings(String sellerId);
 
+  /// Public, tenant-scoped products for one storefront. New features must
+  /// use this instead of querying a platform-wide listing feed.
+  Future<List<ProductModel>> storeProducts(
+    String storeId, {
+    String? keyword,
+    String? category,
+  });
+
   /// All active listings across all sellers, for the buyer storefront.
   Future<List<ProductModel>> storefrontFeed(
       {String? keyword, String? category});

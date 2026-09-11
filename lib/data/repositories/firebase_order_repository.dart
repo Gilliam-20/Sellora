@@ -37,6 +37,13 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
   }
 
   @override
+  Future<List<OrderModel>> storeOrders(String storeId) async {
+    final snap =
+        await _fs.storeOrders(storeId).orderBy('createdAt', descending: true).get();
+    return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+  }
+
+  @override
   Future<List<OrderModel>> sellerOrders(String sellerId) async {
     final snap = await _fs.orders
         .where('sellerId', isEqualTo: sellerId)

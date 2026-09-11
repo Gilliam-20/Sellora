@@ -10,6 +10,10 @@ abstract class Routes {
 
   static const sellerOnboarding = '/seller/onboarding';
 
+  // Public tenant storefront. This remains separate from portal routes so a
+  // later custom-domain resolver only has to populate StoreScope.
+  static const storefront = '/s/:slug';
+
   // Buyer portal
   static const buyerShell = '/buyer';
   static const buyerProductDetails = '/buyer/product';
