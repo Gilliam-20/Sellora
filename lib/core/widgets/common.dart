@@ -53,6 +53,36 @@ class RoleBadge extends StatelessWidget {
   }
 }
 
+/// A status pill — order/shipment/subscription status, colored via
+/// [AppColors.statusColor] (or any caller-supplied tone color) at 15% alpha
+/// with a bold label in the solid tone. Pulled out of `buyer_orders_view.dart`
+/// where it was originally hand-built, so every status display (order lists,
+/// seller/admin views) renders the same pill instead of each screen
+/// reimplementing it slightly differently.
+class StatusBadge extends StatelessWidget {
+  const StatusBadge({super.key, required this.label, required this.color});
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppRadii.control),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(color: color, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
 /// Section header used to introduce a group of content without resorting
 /// to a tracked-out all-caps eyebrow label.
 class SectionHeader extends StatelessWidget {

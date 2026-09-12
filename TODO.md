@@ -1,5 +1,28 @@
 # SELLORA — MASTER BUILD PROMPT
 
+## STATUS (as of 2026-09-11 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+
+| Phase | Status |
+|---|---|
+| **0 — Audit** | Done (`SELLORA_ARCHITECTURE.md`) |
+| **1 — Foundation** | Done — theme, responsive shell, shared primitives, 0 analyzer issues |
+| **2 — Auth + seller onboarding** | In progress — signup now creates a store; still missing: route guard while store resolves, multi-store switcher |
+| **3 — Billing** | Not started (Starter/Growth/Pro plan UI, usage limits) |
+| **4 — Catalog + CJ import** | Not started (product search/import screens; CJ integration itself is proxied but unverified against a real account) |
+| **5 — Seller product management** | Not started — blocked behind the deferred flat→`stores/{storeId}/products` write migration |
+| **6 — Store builder** | Not started |
+| **7 — Customer storefront** | Not started (`/s/:slug` shared buyer feed still marketplace-era) |
+| **8 — Payments + orders** | Slice done: server-side `createOrder` (re-prices, snapshots the 2% fee), `intasendWebhook` now actually confirms payment. Not done: provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
+| **9 — Analytics + marketing** | Not started |
+| **10 — Admin** | Not started (existing admin screens are marketplace-era mocks) |
+| **11 — i18n** | Not started |
+| **12 — Security + production** | Pulled forward and done: role self-escalation closed, `listings` ownership-checked, `orders` locked to server-only creation, secrets moved to `defineSecret` |
+
+`useMockData` is still `true` — nothing points at real Firebase/CJ/IntaSend yet. CJ and IntaSend
+secrets are being wired up via `firebase functions:secrets:set` next.
+
+---
+
 You are the lead Flutter architect, senior product engineer, UI/UX designer, backend engineer, and QA engineer responsible for transforming my existing Flutter application **Sellora** into a production-grade, Shopify-class ecommerce SaaS platform.
 
 ## 1. PRODUCT VISION

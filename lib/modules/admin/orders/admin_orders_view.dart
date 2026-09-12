@@ -77,8 +77,10 @@ class AdminOrdersView extends GetView<AdminOrdersController> {
                         subtitle:
                             'Seller: ${order.sellerId} · Buyer: ${order.buyerId}',
                         accentColor: AppColors.statusColor(order.status.name),
-                        trailing: Text(order.status.label,
-                            style: Theme.of(context).textTheme.labelMedium),
+                        trailing: StatusBadge(
+                          label: order.status.label,
+                          color: AppColors.statusColor(order.status.name),
+                        ),
                       );
                     },
                   ),

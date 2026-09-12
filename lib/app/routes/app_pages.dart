@@ -13,6 +13,8 @@ import '../../modules/buyer/buyer_binding.dart';
 import '../../modules/buyer/checkout/checkout_view.dart';
 import '../../modules/buyer/product_details/product_details_view.dart';
 import '../../modules/buyer/shell/buyer_shell_view.dart';
+import '../../modules/marketing/marketing_controller.dart';
+import '../../modules/marketing/marketing_view.dart';
 import '../../modules/onboarding/bindings/seller_onboarding_binding.dart';
 import '../../modules/onboarding/views/seller_onboarding_view.dart';
 import '../../modules/seller/seller_binding.dart';
@@ -32,6 +34,10 @@ class AppPages {
         page: () => const SplashView(),
         binding: AuthBinding()),
     GetPage(name: Routes.roleSelect, page: () => const RoleSelectView()),
+    GetPage(
+        name: Routes.marketing,
+        page: () => MarketingView(),
+        binding: MarketingBinding()),
     GetPage(
         name: Routes.login,
         page: () => const LoginView(),

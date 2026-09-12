@@ -46,20 +46,9 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
                       '${order.items.length} item${order.items.length == 1 ? '' : 's'} · ${Formatters.currency(order.total, code: order.currency)}',
                   subtitle: Formatters.date(order.createdAt),
                   accentColor: AppColors.statusColor(order.status.name),
-                  trailing: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.statusColor(order.status.name)
-                          .withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(AppRadii.control),
-                    ),
-                    child: Text(
-                      order.status.label,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.statusColor(order.status.name),
-                          fontWeight: FontWeight.w700),
-                    ),
+                  trailing: StatusBadge(
+                    label: order.status.label,
+                    color: AppColors.statusColor(order.status.name),
                   ),
                 );
               },

@@ -71,6 +71,12 @@ class RoleSelectView extends StatelessWidget {
                     child: const Text('Already have an account? Sign in'),
                   ),
                 ),
+                Center(
+                  child: TextButton(
+                    onPressed: () => Get.toNamed(Routes.marketing),
+                    child: const Text('Learn more about Sellora'),
+                  ),
+                ),
                 const SizedBox(height: AppSpacing.md),
               ],
             ),

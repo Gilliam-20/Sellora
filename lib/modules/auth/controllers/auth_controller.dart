@@ -28,7 +28,9 @@ class AuthController extends GetxController {
     } catch (_) {
       // No session, or mock mode with nothing cached yet — fall through.
     }
-    Get.offAllNamed(Routes.roleSelect);
+    // No signed-in user: lead with the marketing page rather than
+    // dropping a first-time visitor straight into role select.
+    Get.offAllNamed(Routes.marketing);
   }
 
   Future<void> signIn({required String email, required String password}) async {
