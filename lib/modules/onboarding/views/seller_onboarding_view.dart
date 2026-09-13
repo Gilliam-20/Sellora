@@ -18,9 +18,14 @@ class SellerOnboardingView extends GetView<SellerOnboardingController> {
       appBar: AppBar(title: const Text('Choose your plan')),
       body: Obx(() {
         if (controller.isLoadingPlans.value) return const SelloraLoader();
-        return controller.step.value == OnboardingStep.choosePlan
-            ? const _PlanStep()
-            : const _PaymentStep();
+        switch (controller.step.value) {
+          case OnboardingStep.choosePlan:
+            return const _PlanStep();
+          case OnboardingStep.pay:
+            return const _PaymentStep();
+          case OnboardingStep.pendingConfirmation:
+            return const _PendingConfirmationStep();
+        }
       }),
     );
   }
@@ -238,6 +243,51 @@ class _PaymentStepState extends State<_PaymentStep> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PendingConfirmationStep extends GetView<SellerOnboardingController> {
+  const _PendingConfirmationStep();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ResponsiveCenter(
+        maxWidth: 440,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: context.pageHorizontalPadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.hourglass_top,
+                  size: 48, color: AppColors.manifestGoldDeep),
+              const SizedBox(height: AppSpacing.md),
+              Text('Confirming your payment',
+                  style: Theme.of(context).textTheme.displaySmall,
+                  textAlign: TextAlign.center),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Complete the M-Pesa prompt on your phone. Once we receive confirmation, your plan activates automatically — or tap below to check now.',
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Obx(() => FilledButton(
+                    onPressed: controller.isRefreshing.value
+                        ? null
+                        : controller.refreshStatus,
+                    child: controller.isRefreshing.value
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('I\'ve completed payment'),
+                  )),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

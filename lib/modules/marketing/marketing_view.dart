@@ -30,13 +30,9 @@ class MarketingView extends GetView<MarketingController> {
         duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
   }
 
-  void _goToSignIn() => Get.toNamed(Routes.roleSelect);
+  void _goToSignIn() => Get.toNamed(Routes.login);
 
-  void _goToBuyerSignIn() =>
-      Get.toNamed(Routes.login, arguments: {'intent': 'buyer'});
-
-  void _goToSellerSignUp() =>
-      Get.toNamed(Routes.login, arguments: {'intent': 'seller'});
+  void _goToSellerSignUp() => Get.toNamed(Routes.login);
 
   @override
   Widget build(BuildContext context) {
@@ -63,7 +59,6 @@ class MarketingView extends GetView<MarketingController> {
             _Footer(
               onSignIn: _goToSignIn,
               onStart: _goToSellerSignUp,
-              onShop: _goToBuyerSignIn,
             ),
           ],
         ),
@@ -807,11 +802,9 @@ class _FinalCta extends StatelessWidget {
 }
 
 class _Footer extends StatelessWidget {
-  const _Footer(
-      {required this.onSignIn, required this.onStart, required this.onShop});
+  const _Footer({required this.onSignIn, required this.onStart});
   final VoidCallback onSignIn;
   final VoidCallback onStart;
-  final VoidCallback onShop;
 
   @override
   Widget build(BuildContext context) {
@@ -842,7 +835,6 @@ class _Footer extends StatelessWidget {
               children: [
                 _FooterLink('Sign in', onSignIn),
                 _FooterLink('Start selling', onStart),
-                _FooterLink('Shop the marketplace', onShop),
               ],
             ),
             const SizedBox(height: AppSpacing.xl),

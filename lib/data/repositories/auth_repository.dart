@@ -10,7 +10,12 @@ abstract class AuthRepository {
   Stream<UserModel?> get userChanges;
   UserModel? get cachedUser;
 
-  Future<UserModel> signIn({required String email, required String password});
+  /// [storeId] is only meaningful for a store-scoped buyer sign-in (see
+  /// AuthController.signInToStore) — MockAuthRepository uses it to attach a
+  /// store to a freshly-minted mock buyer; FirebaseAuthRepository ignores it,
+  /// since a real buyer's Firestore doc already carries their true storeId.
+  Future<UserModel> signIn(
+      {required String email, required String password, String? storeId});
 
   /// [storeId] is the store (see StoreModel) the buyer is registering as
   /// a customer of — every buyer belongs to exactly one store.
@@ -30,6 +35,13 @@ abstract class AuthRepository {
   Future<void> sendPasswordReset(String email);
   Future<void> signOut();
   Future<void> updateUser(UserModel user);
+
+  /// Re-reads the signed-in user's Firestore doc, bypassing [cachedUser],
+  /// and updates the cache. Needed because subscription activation is now
+  /// written by the IntaSend webhook, which the client has no realtime
+  /// channel to — see `RoleMiddleware` and the seller onboarding/
+  /// subscription controllers' "refresh status" actions.
+  Future<UserModel?> refreshCurrentUser();
 }
 
 /// Firebase-backed implementation. Composes [AuthService] (identity)
@@ -68,7 +80,7 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
 
   @override
   Future<UserModel> signIn(
-      {required String email, required String password}) async {
+      {required String email, required String password, String? storeId}) async {
     final cred = await _auth.signIn(email: email, password: password);
     final doc = await _fs.users.doc(cred.user!.uid).get();
     _cached = UserModel.fromMap(doc.data()!);
@@ -158,5 +170,15 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
   Future<void> updateUser(UserModel user) async {
     await _fs.users.doc(user.uid).update(user.toMap());
     _cached = user;
+  }
+
+  @override
+  Future<UserModel?> refreshCurrentUser() async {
+    final uid = _cached?.uid;
+    if (uid == null) return null;
+    final doc = await _fs.users.doc(uid).get();
+    if (!doc.exists) return null;
+    _cached = UserModel.fromMap(doc.data()!);
+    return _cached;
   }
 }

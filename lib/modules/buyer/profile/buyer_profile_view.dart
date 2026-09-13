@@ -5,13 +5,24 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/store_repository.dart';
 
 class BuyerProfileView extends StatelessWidget {
   const BuyerProfileView({super.key});
 
+  // A buyer's sign-out must land them back on their own store's storefront,
+  // never on Sellora's own (seller-only) login — resolve the slug before
+  // clearing the session, since the store lookup needs the still-cached
+  // user's storeId.
   Future<void> _signOut() async {
-    await Get.find<AuthRepository>().signOut();
-    Get.offAllNamed(Routes.roleSelect);
+    final authRepo = Get.find<AuthRepository>();
+    final storeId = authRepo.cachedUser?.storeId;
+    final store = storeId != null
+        ? await Get.find<StoreRepository>().storeById(storeId)
+        : null;
+    await authRepo.signOut();
+    Get.offAllNamed(
+        store != null ? '/s/${store.slug}' : Routes.marketing);
   }
 
   @override
@@ -46,14 +57,6 @@ class BuyerProfileView extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: AppSpacing.lg),
             const Divider(),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.storefront_outlined),
-              title: const Text('Become a seller'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  Get.toNamed('/login', arguments: {'intent': 'seller'}),
-            ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.help_outline),

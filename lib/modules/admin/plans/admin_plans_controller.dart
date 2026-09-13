@@ -26,18 +26,31 @@ class AdminPlansController extends GetxController {
       double newPriceUsd) async {
     isSaving.value = true;
     try {
-      final updated = SubscriptionPlanModel(
-        id: plan.id,
-        name: plan.name,
-        priceUsd: newPriceUsd,
-        priceKes: newPriceKes,
-        billingPeriodDays: plan.billingPeriodDays,
-        listingLimit: plan.listingLimit,
-        commissionPercent: plan.commissionPercent,
-        perks: plan.perks,
-        isPopular: plan.isPopular,
-      );
-      await _subscriptionRepo.updatePlan(updated);
+      await _subscriptionRepo
+          .updatePlan(plan.copyWith(priceKes: newPriceKes, priceUsd: newPriceUsd));
+      await load();
+    } finally {
+      isSaving.value = false;
+    }
+  }
+
+  /// Schema-only fields — orderLimit/storeLimit aren't enforced anywhere
+  /// yet (see WORKLOG.md, 2026-09-12), but stay admin-editable since the
+  /// point is the config surface existing, not hiding it until enforcement
+  /// lands.
+  Future<void> updateLimitsAndFeatures(
+    SubscriptionPlanModel plan, {
+    int? orderLimit,
+    int? storeLimit,
+    Map<String, bool>? features,
+  }) async {
+    isSaving.value = true;
+    try {
+      await _subscriptionRepo.updatePlan(plan.copyWith(
+        orderLimit: orderLimit,
+        storeLimit: storeLimit,
+        features: features,
+      ));
       await load();
     } finally {
       isSaving.value = false;

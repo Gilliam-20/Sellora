@@ -18,6 +18,8 @@ class FirestoreService extends GetxService {
       _db.collection('subscription_plans');
   CollectionReference<Map<String, dynamic>> get billingHistory =>
       _db.collection('billing_history');
+  CollectionReference<Map<String, dynamic>> get subscriptions =>
+      _db.collection('subscriptions');
   CollectionReference<Map<String, dynamic>> get stores =>
       _db.collection('stores');
 

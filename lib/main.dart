@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
@@ -36,7 +37,10 @@ class SelloraApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       themeMode: ThemeMode.light,
-      initialRoute: Routes.splash,
+      // Web opens straight on the marketing/landing page, matching how a
+      // browser homepage behaves; the branded splash (with its
+      // session-check redirect) is a mobile-app-only affordance.
+      initialRoute: kIsWeb ? Routes.marketing : Routes.splash,
       initialBinding: InitialBinding(),
       getPages: AppPages.pages,
       defaultTransition: Transition.cupertino,

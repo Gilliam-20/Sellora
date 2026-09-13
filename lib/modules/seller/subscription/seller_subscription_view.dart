@@ -7,6 +7,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
 import '../../../data/models/subscription_plan_model.dart';
+import '../../../data/models/subscription_usage_model.dart';
 import 'seller_subscription_controller.dart';
 
 class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
@@ -57,9 +58,28 @@ class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
                             .bodySmall
                             ?.copyWith(color: AppColors.slateLight),
                       ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: controller.isRefreshing.value
+                            ? null
+                            : controller.refreshStatus,
+                        child: Text(
+                          controller.isRefreshing.value
+                              ? 'Refreshing…'
+                              : 'Refresh status',
+                          style: const TextStyle(color: AppColors.cloud),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
+              if (controller.usage.value != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                _UsageCard(usage: controller.usage.value!),
+              ],
               const SizedBox(height: AppSpacing.lg),
               Text('Available plans',
                   style: Theme.of(context).textTheme.titleMedium),
@@ -75,6 +95,45 @@ class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
           ),
         );
       }),
+    );
+  }
+}
+
+class _UsageCard extends StatelessWidget {
+  const _UsageCard({required this.usage});
+  final SubscriptionUsageModel usage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.cloud,
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        border: Border.all(color: AppColors.hairline),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.inventory_2_outlined, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Usage this period',
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 2),
+                Text(
+                  usage.listingLimit == -1
+                      ? '${usage.listingCount} products listed (unlimited)'
+                      : '${usage.listingCount} of ${usage.listingLimit} products listed',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -187,7 +246,16 @@ class _SwitchPlanSheetState extends State<_SwitchPlanSheet> {
                           hintText: '07XXXXXXXX'),
                       validator: Validators.mpesaPhone,
                     ),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.sm),
+                    Obx(() {
+                      final error = controller.errorMessage.value;
+                      if (error == null) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: Text(error,
+                            style: const TextStyle(color: AppColors.danger)),
+                      );
+                    }),
                     Obx(
                       () => SizedBox(
                         width: double.infinity,

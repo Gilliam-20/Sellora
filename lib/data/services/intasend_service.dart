@@ -67,6 +67,50 @@ class IntasendService extends GetxService {
     return _statusFrom(res['state']?.toString());
   }
 
+  /// Starts an M-Pesa STK push for a pending subscription billing entry
+  /// (see `SubscriptionRepository.subscribeSeller`) — the entry's id is the
+  /// payment's reference, the same way an order id is for [collectMpesa].
+  /// Calls the new billing-specific Cloud Functions (`{success,data}`
+  /// envelope), not [collectMpesa]'s endpoint.
+  Future<String> payBillingMpesa({
+    required String billingEntryId,
+    required String phone,
+  }) async {
+    final res = await _dio.post(ApiEndpoints.payBillingMpesa, data: {
+      'billingEntryId': billingEntryId,
+      'phoneNumber': phone,
+    });
+    final data = Map<String, dynamic>.from(res['data'] as Map? ?? {});
+    return data['invoiceId']?.toString() ?? '';
+  }
+
+  /// Hosted checkout link for a pending subscription billing entry.
+  /// [method] is `'CARD-PAYMENT'` or `'GOOGLE-PAY'`.
+  Future<String?> payBillingCard({
+    required String billingEntryId,
+    required String method,
+    String? redirectUrl,
+  }) async {
+    final res = await _dio.post(ApiEndpoints.payBillingCard, data: {
+      'billingEntryId': billingEntryId,
+      'method': method,
+      'redirectUrl': redirectUrl,
+    });
+    final data = Map<String, dynamic>.from(res['data'] as Map? ?? {});
+    return data['checkoutUrl']?.toString();
+  }
+
+  /// Re-checks a subscription billing entry's payment status directly with
+  /// the server (never trusts a client-side guess).
+  Future<PaymentStatus> confirmBillingPayment(String billingEntryId) async {
+    final res = await _dio.post(ApiEndpoints.confirmBillingPayment, data: {
+      'billingEntryId': billingEntryId,
+    });
+    final data = Map<String, dynamic>.from(res['data'] as Map? ?? {});
+    if (data['paid'] == true) return PaymentStatus.completed;
+    return _statusFrom(data['state']?.toString());
+  }
+
   PaymentStatus _statusFrom(String? state) {
     switch ((state ?? '').toUpperCase()) {
       case 'COMPLETE':

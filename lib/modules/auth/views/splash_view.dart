@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../app/theme/app_colors.dart';
+import '../../../core/widgets/common.dart';
 import '../controllers/auth_controller.dart';
 
 class SplashView extends GetView<AuthController> {
@@ -11,7 +13,7 @@ class SplashView extends GetView<AuthController> {
     WidgetsBinding.instance
         .addPostFrameCallback((_) => controller.checkSession());
 
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.cargoNavy,
       body: Center(
         child: Column(
@@ -19,19 +21,23 @@ class SplashView extends GetView<AuthController> {
           children: [
             Text(
               'Sellora',
-              style: TextStyle(
-                  color: AppColors.manifestGold,
-                  fontSize: 34,
-                  fontWeight: FontWeight.w600),
+              style: GoogleFonts.fraunces(
+                color: AppColors.cloud,
+                fontSize: 40,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
-              'source anywhere. sell everywhere.',
-              style: TextStyle(
-                  color: AppColors.slateLight,
-                  fontSize: 13,
-                  letterSpacing: 0.2),
+              'Sourced globally. Sold locally.',
+              style: GoogleFonts.inter(
+                color: AppColors.slateLight,
+                fontSize: 14,
+                letterSpacing: 0.2,
+              ),
             ),
+            const SizedBox(height: 28),
+            const SelloraLoader(size: 28),
           ],
         ),
       ),

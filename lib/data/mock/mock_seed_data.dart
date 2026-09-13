@@ -144,7 +144,10 @@ class MockSeedData {
           priceKes: 1300,
           billingPeriodDays: 30,
           listingLimit: 25,
+          orderLimit: 50,
+          storeLimit: 1,
           commissionPercent: 7,
+          features: const {'customDomain': false, 'advancedAnalytics': false},
           perks: const [
             'List up to 25 products',
             'Standard catalog access',
@@ -158,8 +161,11 @@ class MockSeedData {
           priceKes: 3250,
           billingPeriodDays: 30,
           listingLimit: 200,
+          orderLimit: 500,
+          storeLimit: 1,
           commissionPercent: 5,
           isPopular: true,
+          features: const {'customDomain': false, 'advancedAnalytics': true},
           perks: const [
             'List up to 200 products',
             'Full catalog access',
@@ -174,7 +180,10 @@ class MockSeedData {
           priceKes: 10300,
           billingPeriodDays: 30,
           listingLimit: -1,
+          orderLimit: -1,
+          storeLimit: 1,
           commissionPercent: 3,
+          features: const {'customDomain': true, 'advancedAnalytics': true},
           perks: const [
             'Unlimited listings',
             'Full catalog access',

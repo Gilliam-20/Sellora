@@ -36,7 +36,9 @@ class MockAuthRepository extends GetxService implements AuthRepository {
 
   @override
   Future<UserModel> signIn(
-      {required String email, required String password}) async {
+      {required String email,
+      required String password,
+      String? storeId}) async {
     await Future.delayed(const Duration(milliseconds: 600));
     // Demo convenience: an email containing "seller" or "admin" logs in
     // to that portal so reviewers can explore all three without a
@@ -47,8 +49,16 @@ class MockAuthRepository extends GetxService implements AuthRepository {
             ? UserRole.seller
             : UserRole.buyer;
 
+    // A mock buyer is scoped to whichever store's sign-in page they used
+    // (see AuthController.signInToStore) — without this, every mock buyer
+    // sign-in used to come back with storeId: null, silently breaking
+    // CartRepository.setStore/BuyerOrdersController's store-scoped reads.
+    final buyerUid = role == UserRole.buyer && storeId != null
+        ? 'mock-buyer-$storeId'
+        : 'mock-${role.name}';
+
     final user = UserModel(
-      uid: 'mock-${role.name}',
+      uid: buyerUid,
       name: role == UserRole.admin
           ? 'Sellora Admin'
           : (role == UserRole.seller ? 'Amina\'s Store' : 'Jane Buyer'),
@@ -61,6 +71,7 @@ class MockAuthRepository extends GetxService implements AuthRepository {
           ? DateTime.now().add(const Duration(days: 18))
           : null,
       currencyCode: 'KES',
+      storeId: role == UserRole.buyer ? storeId : null,
       createdAt: DateTime.now(),
     );
     _current = user;
@@ -153,5 +164,12 @@ class MockAuthRepository extends GetxService implements AuthRepository {
   Future<void> updateUser(UserModel user) async {
     _current = user;
     _controller.add(user);
+  }
+
+  @override
+  Future<UserModel?> refreshCurrentUser() async {
+    // Mock activation (MockSubscriptionRepository.subscribeSeller) is
+    // already synchronous, so there's never anything to re-fetch.
+    return _current;
   }
 }

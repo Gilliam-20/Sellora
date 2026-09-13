@@ -47,26 +47,48 @@ Done: `StoreScope` resolving both `/s/:slug` and a signed-in seller's own store
 read methods (mock + Firebase) with matching Firestore rules; `firestore-tests/` emulator suite proving
 tenant isolation on products/orders/customers; **`AuthRepository.signUpSeller` now creates a
 `StoreModel` for every new seller** (mock + Firebase, 2026-09-11 — previously a seller had no store at
-all after signing up).
+all after signing up); a public marketing/landing page (`lib/modules/marketing/`) is now the entry
+point for a signed-out visitor (`AuthController.checkSession` → `Routes.marketing`, 2026-09-12); a
+loading/error guard now sits in front of the seller shell so it can no longer render fully-interactive
+tabs while `StoreScope` is still resolving or failed to find a store (`SellerShellView`, 2026-09-12 —
+see `WORKLOG.md`).
 
-Still open: route middleware/guard for seller-admin routes (nothing blocks navigation while the store
-is resolving or missing); a store switcher for multi-store sellers (today `resolveForSeller` just picks
-`storesForSeller(sellerId).first`); onboarding completion state and plan selection (folds into
-PHASE 3).
+Still open: a store switcher for multi-store sellers (today `resolveForSeller` just picks
+`storesForSeller(sellerId).first`) — gated on decision #4; onboarding completion state and plan
+selection (folds into PHASE 3); still no screen that lets a seller *create* a store if the guard's
+"you haven't created a store yet" branch is ever hit for a real account (today it can only offer retry
+and sign-out) — every current signup path already creates one, so this is a defensive path, not a
+known-reachable gap.
 
-## PHASE 3 — Billing
+## PHASE 3 — Billing: security core + plan schema + usage tracking done, richer UI not started
 
-Plan schema (Starter/Growth/Pro per TODOD §16, configurable rather than hard-coded), immutable
-subscription/billing records, usage tracking, provider-neutral subscription payments. Not started.
-Note: `FirebaseSubscriptionRepository.subscribeSeller` currently writes `billing_history` directly from
-the client, which `firestore.rules`' `allow write: if false` on that collection already silently
-blocks against real Firestore — this phase needs to move that write server-side, the same way PHASE 8
-just did for orders.
+Done (2026-09-12, see `WORKLOG.md`): `subscribeSeller` moved fully server-side (`functions/lib/
+subscriptions.js` + three new `payBillingMpesa`/`payBillingCard`/`confirmBillingPayment` endpoints,
+mirroring the order-payment handlers exactly); `billing_history`/`subscriptions/{sellerId}` are now
+Cloud-Function-only end to end (the client-write bug this phase used to be blocked on is fixed —
+`FirebaseSubscriptionRepository` no longer touches either collection directly); `users/{uid}`'s
+subscription fields are field-lockdown-protected the same way `role` already was. `SubscriptionPlanModel`
+gained `orderLimit`/`storeLimit`/`features` (configurable, admin-editable) — kept existing
+Starter/Growth/Scale naming/pricing/commission unchanged per user decision, not renamed to TODOD §16's
+Starter/Growth/Pro numbering. Listing usage is tracked and displayed; the hand-rolled `UserModel`
+reconstruction duplicated across the onboarding and subscription controllers is gone.
+
+Not started: order-limit enforcement and order-usage display (both need `sellerId` on the order
+document, which the PHASE 4 backend swap below doesn't have yet — this is the same gap, not a new one);
+store-limit enforcement (gated on decision #4); cancel/resume, billing-history/invoices UI, a real
+plan-comparison screen — none of this was in the confirmed scope for the 2026-09-12 pass.
 
 ## PHASE 4 — Catalog, pricing, and CJ import
 
 Confirm the CJ account/API contract, add a supplier adapter, shipping quote contract, integer-minor-
-unit `Money` type, configurable pricing rules, import drafts. Not started.
+unit `Money` type, configurable pricing rules, import drafts. Not started as app-facing work, but
+`functions/`'s backend for this phase changed underneath it 2026-09-12 (see `WORKLOG.md`): a real CJ
+auth/catalog-sync/tracking pipeline and a margin-based pricing engine (FX, region/VAT) now exist
+server-side, adopted from a rebranded external codebase — well past the old `cj.ts` sketch. Still
+unstarted: reconciling any of it with the Flutter client (`ApiEndpoints`, `ProductModel.fromMap`,
+`CjDropshippingService` all expect different request/response shapes than this backend returns) and
+deciding how a shared CJ catalog (`products`/`categories`, no seller scoping) maps onto per-seller
+`listings` at import time.
 
 ## PHASE 5 — Seller product management
 
@@ -98,6 +120,14 @@ endpoint required).
 Not started: payment provider abstraction (still IntaSend-only), refunds, the full fulfillment state
 machine, multi-seller-cart splitting (still rejected rather than handled), subscription-payment webhook
 wiring (PHASE 3's job).
+
+**2026-09-12 update:** the `functions/` backing this phase was replaced (see `WORKLOG.md`) with a
+rebranded external codebase that actually *does* have PayPal support and real provider-side refunds —
+but it's single-vendor (no `sellerId`/`storeId`, no marketplace fee split anywhere in `orders.js`), so
+none of "not started" above is actually closed by it. The old `createOrder`/`intasendWebhook`
+description above (server-priced from `listings`, 2% fee snapshot, `sellerId`/`storeId` on the order)
+describes code that no longer exists on disk (only at git history) — this phase's real next step is
+reconciling the two rather than resuming where the old code left off.
 
 ## PHASE 9 — Analytics + marketing
 

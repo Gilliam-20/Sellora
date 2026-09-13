@@ -1,13 +1,13 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-11 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-12 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
 | **0 — Audit** | Done (`SELLORA_ARCHITECTURE.md`) |
 | **1 — Foundation** | Done — theme, responsive shell, shared primitives, 0 analyzer issues |
-| **2 — Auth + seller onboarding** | In progress — signup now creates a store; still missing: route guard while store resolves, multi-store switcher |
-| **3 — Billing** | Not started (Starter/Growth/Pro plan UI, usage limits) |
+| **2 — Auth + seller onboarding** | In progress — signup creates a store, marketing page is the signed-out entry point, seller shell now guards on store resolution; still missing: multi-store switcher (blocked on open decision #4) |
+| **3 — Billing** | Security core done — server-side `subscribeSeller`, immutable billing ledger, locked-down subscription fields, configurable plan schema (orderLimit/storeLimit/features), listing usage tracked. Not done: order-limit enforcement/usage (blocked on PHASE 4's order-attribution gap), cancel/resume, invoices UI |
 | **4 — Catalog + CJ import** | Not started (product search/import screens; CJ integration itself is proxied but unverified against a real account) |
 | **5 — Seller product management** | Not started — blocked behind the deferred flat→`stores/{storeId}/products` write migration |
 | **6 — Store builder** | Not started |

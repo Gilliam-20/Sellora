@@ -4,6 +4,8 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/widgets/common.dart';
+import '../../../data/models/user_model.dart';
 import '../controllers/auth_controller.dart';
 
 class RegisterSellerView extends StatefulWidget {
@@ -56,6 +58,8 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
                     'Pick a plan next — you can list products the moment your subscription is active.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  const SizedBox(height: AppSpacing.md),
+                  const RoleBadge(role: UserRole.seller),
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(
                     controller: _nameCtrl,

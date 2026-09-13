@@ -4,11 +4,8 @@ import '../../modules/admin/admin_binding.dart';
 import '../../modules/admin/shell/admin_shell_view.dart';
 import '../../modules/auth/bindings/auth_binding.dart';
 import '../../modules/auth/views/login_view.dart';
-import '../../modules/auth/views/register_buyer_view.dart';
 import '../../modules/auth/views/register_seller_view.dart';
-import '../../modules/auth/views/role_select_view.dart';
 import '../../modules/auth/views/splash_view.dart';
-import '../../modules/auth/views/store_select_view.dart';
 import '../../modules/buyer/buyer_binding.dart';
 import '../../modules/buyer/checkout/checkout_view.dart';
 import '../../modules/buyer/product_details/product_details_view.dart';
@@ -21,6 +18,8 @@ import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
 import '../../modules/seller/subscription/seller_subscription_view.dart';
 import '../../modules/storefront/storefront_binding.dart';
+import '../../modules/storefront/storefront_login_view.dart';
+import '../../modules/storefront/storefront_register_view.dart';
 import '../../modules/storefront/storefront_view.dart';
 import 'app_routes.dart';
 import 'role_middleware.dart';
@@ -33,7 +32,6 @@ class AppPages {
         name: Routes.splash,
         page: () => const SplashView(),
         binding: AuthBinding()),
-    GetPage(name: Routes.roleSelect, page: () => const RoleSelectView()),
     GetPage(
         name: Routes.marketing,
         page: () => MarketingView(),
@@ -43,14 +41,6 @@ class AppPages {
         page: () => const LoginView(),
         binding: AuthBinding()),
     GetPage(
-        name: Routes.storeSelect,
-        page: () => const StoreSelectView(),
-        binding: AuthBinding()),
-    GetPage(
-        name: Routes.registerBuyer,
-        page: () => const RegisterBuyerView(),
-        binding: AuthBinding()),
-    GetPage(
         name: Routes.registerSeller,
         page: () => const RegisterSellerView(),
         binding: AuthBinding()),
@@ -58,6 +48,16 @@ class AppPages {
       name: Routes.storefront,
       page: () => const StorefrontView(),
       binding: StorefrontBinding(),
+    ),
+    GetPage(
+      name: Routes.storefrontLogin,
+      page: () => const StorefrontLoginView(),
+      bindings: [StorefrontBinding(), AuthBinding()],
+    ),
+    GetPage(
+      name: Routes.storefrontRegister,
+      page: () => const StorefrontRegisterView(),
+      bindings: [StorefrontBinding(), AuthBinding()],
     ),
 
     GetPage(

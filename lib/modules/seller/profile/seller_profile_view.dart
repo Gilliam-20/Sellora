@@ -11,7 +11,7 @@ class SellerProfileView extends StatelessWidget {
 
   Future<void> _signOut() async {
     await Get.find<AuthRepository>().signOut();
-    Get.offAllNamed(Routes.roleSelect);
+    Get.offAllNamed(Routes.login);
   }
 
   @override
@@ -58,14 +58,6 @@ class SellerProfileView extends StatelessWidget {
               title: const Text('Subscription & billing'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Get.toNamed(Routes.sellerSubscription),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.storefront_outlined),
-              title: const Text('Shop as a buyer'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () =>
-                  Get.toNamed('/login', arguments: {'intent': 'buyer'}),
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,

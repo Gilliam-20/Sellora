@@ -3,12 +3,11 @@ import '../../../app/routes/app_routes.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/subscription_plan_model.dart';
-import '../../../data/models/user_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/subscription_repository.dart';
 import '../../../data/services/intasend_service.dart';
 
-enum OnboardingStep { choosePlan, pay }
+enum OnboardingStep { choosePlan, pay, pendingConfirmation }
 
 class SellerOnboardingController extends GetxController {
   final SubscriptionRepository _subscriptionRepo =
@@ -20,6 +19,7 @@ class SellerOnboardingController extends GetxController {
   final step = OnboardingStep.choosePlan.obs;
   final isLoadingPlans = true.obs;
   final isPaying = false.obs;
+  final isRefreshing = false.obs;
   final errorMessage = RxnString();
 
   SubscriptionPlanModel? get selectedPlan =>
@@ -51,53 +51,53 @@ class SellerOnboardingController extends GetxController {
     isPaying.value = true;
     errorMessage.value = null;
     try {
-      String reference;
+      final entry = await _subscriptionRepo.subscribeSeller(
+          sellerId: user.uid, planId: plan.id);
+
       if (AppConstants.useMockData) {
-        await Future.delayed(const Duration(seconds: 2));
-        reference = 'MOCK-${DateTime.now().millisecondsSinceEpoch}';
-      } else {
-        final intasend = Get.find<IntasendService>();
-        final result = await intasend.collectMpesa(
-          phone: Formatters.toMpesaFormat(phone),
-          amountKes: plan.priceKes,
-          narrative: 'Sellora ${plan.name} plan subscription',
-        );
-        reference = result.reference;
+        // Mock mode's repository already activated the subscription
+        // synchronously — nothing left to wait on.
+        Get.offAllNamed(Routes.sellerShell);
+        Get.snackbar('You\'re live',
+            'Your ${plan.name} subscription is active — start listing products.');
+        return;
       }
 
-      await _subscriptionRepo.subscribeSeller(
-          sellerId: user.uid, planId: plan.id, paymentReference: reference);
-
-      final updated = user.copyWith(
-        subscriptionPlanId: plan.id,
-        subscriptionActiveUntil:
-            DateTime.now().add(Duration(days: plan.billingPeriodDays)),
+      await Get.find<IntasendService>().payBillingMpesa(
+        billingEntryId: entry.id,
+        phone: Formatters.toMpesaFormat(phone),
       );
-      final activeUser = UserModel(
-        uid: updated.uid,
-        name: updated.name,
-        email: updated.email,
-        role: updated.role,
-        phone: updated.phone,
-        photoUrl: updated.photoUrl,
-        sellerStatus: SellerStatus.active,
-        storeName: updated.storeName,
-        subscriptionPlanId: plan.id,
-        subscriptionActiveUntil:
-            DateTime.now().add(Duration(days: plan.billingPeriodDays)),
-        currencyCode: updated.currencyCode,
-        createdAt: updated.createdAt,
-      );
-      await _authRepo.updateUser(activeUser);
-
-      Get.offAllNamed(Routes.sellerShell);
-      Get.snackbar('You\'re live',
-          'Your ${plan.name} subscription is active — start listing products.');
+      // No live confirmation channel — the IntaSend webhook activates the
+      // subscription asynchronously (matching buyer checkout's own
+      // fire-and-forget pattern). Show the pending step; refreshStatus()
+      // is the manual recovery path once the customer has paid.
+      step.value = OnboardingStep.pendingConfirmation;
+      Get.snackbar('Almost there',
+          'Complete the M-Pesa prompt on your phone to activate your plan.');
     } catch (e) {
       errorMessage.value =
           'Payment didn\'t go through. Check the number and try again.';
     } finally {
       isPaying.value = false;
+    }
+  }
+
+  /// Re-reads the signed-in user's Firestore doc (bypassing the in-memory
+  /// cache) and moves on if the webhook has activated the subscription by
+  /// now. There's no realtime channel to that confirmation, so this is a
+  /// manual "I've paid" recovery action, not polling.
+  Future<void> refreshStatus() async {
+    isRefreshing.value = true;
+    try {
+      final refreshed = await _authRepo.refreshCurrentUser();
+      if (refreshed?.hasActiveSubscription == true) {
+        Get.offAllNamed(Routes.sellerShell);
+      } else {
+        Get.snackbar('Still pending',
+            'We haven\'t received your payment confirmation yet. Try again in a moment.');
+      }
+    } finally {
+      isRefreshing.value = false;
     }
   }
 }

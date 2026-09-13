@@ -33,11 +33,48 @@ class AuthController extends GetxController {
     Get.offAllNamed(Routes.marketing);
   }
 
+  /// Sellora's own sign-in — seller/admin only. A buyer account is rejected
+  /// rather than silently routed to the buyer portal, since a buyer should
+  /// never authenticate through Sellora's own login.
   Future<void> signIn({required String email, required String password}) async {
     isLoading.value = true;
     errorMessage.value = null;
     try {
       final user = await _authRepo.signIn(email: email, password: password);
+      if (user.role == UserRole.buyer) {
+        await _authRepo.signOut();
+        errorMessage.value =
+            'This is the seller sign-in. Buyers sign in from their store\'s page.';
+        return;
+      }
+      _storage.lastRole = user.role.name;
+      _goToHome(user);
+    } catch (e) {
+      errorMessage.value = _friendlyError(e);
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  /// Store-scoped buyer sign-in, used only from a store's own storefront
+  /// (e.g. `/s/{slug}/login`) — rejects an account that isn't a buyer of
+  /// exactly this store, so signing in from the wrong store's page can't
+  /// silently attach the wrong cart/order history.
+  Future<void> signInToStore({
+    required String email,
+    required String password,
+    required String storeId,
+  }) async {
+    isLoading.value = true;
+    errorMessage.value = null;
+    try {
+      final user = await _authRepo.signIn(
+          email: email, password: password, storeId: storeId);
+      if (user.role != UserRole.buyer || user.storeId != storeId) {
+        await _authRepo.signOut();
+        errorMessage.value = 'This account isn\'t registered with this store.';
+        return;
+      }
       _storage.lastRole = user.role.name;
       _goToHome(user);
     } catch (e) {
@@ -104,7 +141,7 @@ class AuthController extends GetxController {
   Future<void> signOut() async {
     await _authRepo.signOut();
     _cartRepo.setStore(null);
-    Get.offAllNamed(Routes.roleSelect);
+    Get.offAllNamed(Routes.login);
   }
 
   void _goToHome(UserModel user) {

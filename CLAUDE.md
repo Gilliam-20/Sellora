@@ -29,11 +29,16 @@ missing — it only adds absent platform folders and won't touch `lib/` or `pubs
 ```bash
 cd functions
 npm install
-npm run build     # tsc
-npm run serve     # build + firebase emulators:start --only functions
+npm run build     # no-op — plain JS, no compile step
+npm test          # node --test test/
+npm run serve     # firebase emulators:start --only functions,firestore
 npm run deploy    # firebase deploy --only functions
 npm run logs
 ```
+
+As of 2026-09-12 `functions/` is plain JavaScript (no TypeScript, no `tsconfig.json`) — see
+`WORKLOG.md`'s 2026-09-12 entry for why. `npm run build` stays as a no-op purely because
+`firebase.json`'s `predeploy` hook still calls it.
 
 ### Firebase
 

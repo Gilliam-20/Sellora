@@ -47,11 +47,20 @@ class _PlanEditCardState extends State<_PlanEditCard> {
       TextEditingController(text: widget.plan.priceKes.toStringAsFixed(0));
   late final TextEditingController _usdCtrl =
       TextEditingController(text: widget.plan.priceUsd.toStringAsFixed(0));
+  late final TextEditingController _orderLimitCtrl = TextEditingController(
+      text: widget.plan.orderLimit.toString());
+  late final TextEditingController _storeLimitCtrl = TextEditingController(
+      text: widget.plan.storeLimit.toString());
+  late bool _customDomain = widget.plan.features['customDomain'] ?? false;
+  late bool _advancedAnalytics =
+      widget.plan.features['advancedAnalytics'] ?? false;
 
   @override
   void dispose() {
     _kesCtrl.dispose();
     _usdCtrl.dispose();
+    _orderLimitCtrl.dispose();
+    _storeLimitCtrl.dispose();
     super.dispose();
   }
 
@@ -117,6 +126,72 @@ class _PlanEditCardState extends State<_PlanEditCard> {
                             '${widget.plan.name} pricing updated to ${Formatters.currency(kes, code: 'KES')}.');
                       },
                 child: const Text('Save'),
+              ),
+            ),
+          ),
+          const Divider(height: AppSpacing.lg),
+          Text('Limits (not yet enforced)',
+              style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _orderLimitCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Orders / month (-1 = unlimited)'),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: TextField(
+                  controller: _storeLimitCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Stores (-1 = unlimited)'),
+                ),
+              ),
+            ],
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Custom domain'),
+            value: _customDomain,
+            onChanged: (v) => setState(() => _customDomain = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Advanced analytics'),
+            value: _advancedAnalytics,
+            onChanged: (v) => setState(() => _advancedAnalytics = v),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Obx(
+              () => TextButton(
+                onPressed: controller.isSaving.value
+                    ? null
+                    : () {
+                        final orderLimit =
+                            int.tryParse(_orderLimitCtrl.text) ??
+                                widget.plan.orderLimit;
+                        final storeLimit =
+                            int.tryParse(_storeLimitCtrl.text) ??
+                                widget.plan.storeLimit;
+                        controller.updateLimitsAndFeatures(
+                          widget.plan,
+                          orderLimit: orderLimit,
+                          storeLimit: storeLimit,
+                          features: {
+                            'customDomain': _customDomain,
+                            'advancedAnalytics': _advancedAnalytics,
+                          },
+                        );
+                        Get.snackbar(
+                            'Saved', '${widget.plan.name} limits updated.');
+                      },
+                child: const Text('Save limits & features'),
               ),
             ),
           ),

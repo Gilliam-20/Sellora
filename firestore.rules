@@ -19,18 +19,27 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/stores/$(storeId)).data.sellerId;
     }
 
+    function touchesAny(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
     // ---- users ------------------------------------------------------
     // A user can read/update their own document; admins can read/update
     // anyone's. `role` is the one field a user can never change on
     // themselves — otherwise any signed-in user could grant themselves
     // 'admin' and pass every role() == 'admin' check in this ruleset.
     // Custom claims would remove this class of rule entirely; until then,
-    // this is the load-bearing check.
+    // this is the load-bearing check. Subscription state is likewise
+    // self-write-blocked (but self-create-allowed, since signUpSeller
+    // legitimately sets sellerStatus: pendingApproval) — only the
+    // intasendWebhook Cloud Function may activate a subscription; see
+    // `subscriptions/{sellerId}` below.
     match /users/{uid} {
       allow read: if isOwner(uid) || role() == 'admin';
       allow create: if isOwner(uid);
       allow update: if role() == 'admin' ||
-        (isOwner(uid) && request.resource.data.role == resource.data.role);
+        (isOwner(uid) && request.resource.data.role == resource.data.role &&
+         !touchesAny(['subscriptionPlanId', 'subscriptionActiveUntil', 'sellerStatus']));
       allow delete: if false;
     }
 
@@ -126,6 +135,16 @@ service cloud.firestore {
     match /billing_history/{entryId} {
       allow read: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');
       allow write: if false; // written by Cloud Functions only
+    }
+
+    // ---- current subscription state --------------------------------------
+    // One doc per seller (id == sellerId), upserted only by intasendWebhook
+    // on payment confirmation. Never client-writable — a future orderLimit
+    // check would read this doc, so a client write here could grant a
+    // seller an unlimited order quota.
+    match /subscriptions/{sellerId} {
+      allow read: if isOwner(sellerId) || role() == 'admin';
+      allow write: if false;
     }
   }
 }

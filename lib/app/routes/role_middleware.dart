@@ -16,7 +16,16 @@ class RoleMiddleware extends GetMiddleware {
     final auth = Get.find<AuthRepository>();
     final user = auth.cachedUser;
 
-    if (user == null) return const RouteSettings(name: Routes.roleSelect);
+    if (user == null) {
+      // A buyer route has no store context to send an unauthenticated
+      // visitor back to (this route carries no :slug) — Sellora's own
+      // login is seller/admin-only, so a buyer never lands there.
+      return RouteSettings(
+        name: requiredRole == UserRole.buyer
+            ? Routes.marketing
+            : Routes.login,
+      );
+    }
 
     if (user.role != requiredRole) {
       final home = switch (user.role) {

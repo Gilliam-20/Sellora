@@ -43,4 +43,14 @@ class ApiEndpoints {
       '$baseFunctionsUrl/intasendCollectMpesa';
   static const String intasendCheckout = '$baseFunctionsUrl/intasendCheckout';
   static const String intasendStatus = '$baseFunctionsUrl/intasendStatus';
+
+  /// Creates a pending billing_history entry for a seller's subscription
+  /// purchase, server-priced from subscription_plans — see
+  /// functions/lib/subscriptions.js. Activation only happens on confirmed
+  /// payment (confirmBillingPayment or the IntaSend webhook), never here.
+  static const String subscribeSeller = '$baseFunctionsUrl/subscribeSeller';
+  static const String payBillingMpesa = '$baseFunctionsUrl/payBillingMpesa';
+  static const String payBillingCard = '$baseFunctionsUrl/payBillingCard';
+  static const String confirmBillingPayment =
+      '$baseFunctionsUrl/confirmBillingPayment';
 }

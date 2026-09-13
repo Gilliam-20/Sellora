@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_metrics.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/widgets/app_page.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/product_card.dart';
+import '../../data/models/user_model.dart';
+import '../../data/repositories/auth_repository.dart';
 import 'storefront_controller.dart';
 
 /// Guest-accessible storefront for a single tenant. Cart and checkout are
@@ -21,6 +24,24 @@ class StorefrontView extends GetView<StorefrontController> {
       appBar: AppBar(
         title:
             Obx(() => Text(controller.scope.current.value?.name ?? 'Sellora')),
+        actions: [
+          Obx(() {
+            final store = controller.scope.current.value;
+            if (store == null) return const SizedBox.shrink();
+            return IconButton(
+              icon: const Icon(Icons.person_outline),
+              tooltip: 'Account',
+              onPressed: () {
+                final user = Get.find<AuthRepository>().cachedUser;
+                final signedInHere =
+                    user != null && user.role == UserRole.buyer && user.storeId == store.id;
+                Get.toNamed(signedInHere
+                    ? Routes.buyerShell
+                    : '/s/${store.slug}/login');
+              },
+            );
+          }),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: controller.load,

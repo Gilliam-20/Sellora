@@ -6,6 +6,260 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-13 — Sellora's own login becomes seller-only; buyer auth moves into the storefront
+
+**Status:** implemented and verified this session (`flutter analyze` clean — 4 pre-existing `info`
+lints, `flutter test` 13/13, `flutter build web` succeeds). No browser-driven check — same disclosed
+gap as every prior entry (no `chromium-cli`/Python in this environment); see "Verification gap" below.
+
+Closed the gap between the multi-tenant data model (already built — see the 2026-09-11 entries) and
+Sellora's own auth flow, which still had a full buyer path living at the top level. Auditing first
+found most of the *data model* already done: `StoreModel`/`StoreRepository` (abstract+mock+Firebase),
+`StoreScope`, a guest-browsable `StorefrontView`, and `firestore.rules`' `stores/{storeId}/{customers,
+products,orders}` rules all already existed and needed no changes. What was actually missing was the
+auth wiring: `RoleSelectView` still offered "Shop the marketplace," `RegisterBuyerView`/`StoreSelectView`
+were reachable from Sellora's own top-level flow instead of from inside a store's own URL, and both
+buyer/seller profile screens had hardcoded shortcuts into the other role's login. Confirmed with the
+user beforehand: delete `StoreSelectView` outright rather than repurpose it as a store directory — its
+own code comment already called it a stand-in "until path routing (`/s/:slug`) exists," which now does.
+
+**A real bug found and fixed along the way:** `MockAuthRepository.signIn`'s buyer branch never set
+`storeId` at all — every mock buyer sign-in silently got `storeId: null`, breaking
+`CartRepository.setStore`/`BuyerOrdersController`'s store-scoped queries for anyone using the generic
+mock sign-in shortcut (not just this session's new store-scoped login path).
+
+**Changed:**
+- **Deleted** `lib/modules/auth/views/role_select_view.dart`, `register_buyer_view.dart`,
+  `store_select_view.dart`, `lib/modules/auth/controllers/store_select_controller.dart`. Removed
+  `Routes.roleSelect`/`registerBuyer`/`storeSelect` and their `GetPage`s.
+- **`lib/modules/auth/views/login_view.dart`** rewritten as the sole entry point (`Routes.login`
+  replaces the old role-chooser) — seller/admin only, no `intent` branching. Split-screen layout on wide
+  screens (a marketing panel — wordmark, headline, one testimonial, three trust badges, all copy reused
+  from existing `MarketingView` claims — next to the sign-in form), form-only below the desktop
+  breakpoint. Modeled on a generic single-purpose SaaS login pattern; the `app.droxen.cloud/login`
+  reference the user linked 403'd on fetch, so this wasn't built against the actual page — flagged to
+  the user to compare and redirect if the shape is off.
+- **New** `lib/modules/storefront/storefront_login_view.dart` / `storefront_register_view.dart` — a
+  buyer's sign-in/registration as a customer of one store, reached only at `/s/{slug}/login` and
+  `/s/{slug}/register` (`Routes.storefrontLogin`/`storefrontRegister`), storeId resolved from the route
+  `:slug` via `StoreScope` rather than passed as `Get.arguments`. `StorefrontView` gained an account
+  icon in its `AppBar` linking here (or straight to `/buyer` if already signed in as *this* store's
+  buyer).
+- **`AuthRepository.signIn`** gained an optional `storeId` param (`FirebaseAuthRepository` ignores it —
+  a real buyer's doc already carries their true storeId; `MockAuthRepository` uses it to fix the bug
+  above). **`AuthController`** gained `signInToStore` (rejects a sign-in whose result isn't a buyer of
+  exactly that store — signing in from the wrong store's page can't silently attach the wrong
+  cart/order history) and taught `signIn` to reject a buyer-role result outright, so Sellora's own login
+  can't be used as an accidental side door into the buyer portal.
+- Removed the cross-role shortcuts: `BuyerProfileView`'s "Become a seller" tile, `SellerProfileView`'s
+  "Shop as a buyer" tile (neither makes sense once a buyer belongs to one specific store). Buyer
+  sign-out (`BuyerProfileView`) now resolves the buyer's store slug and returns them to `/s/{slug}`
+  instead of Sellora's own login, falling back to `/marketing` if the store can't be resolved.
+  `RoleMiddleware`'s unauthenticated fallback now splits by role: buyer → `/marketing` (no store context
+  to send them anywhere store-specific), seller/admin → `/login`.
+- `MarketingView`: removed the buyer sign-in CTA and the footer's "Shop the marketplace" link — no path
+  from marketing into a buyer flow through Sellora's own auth.
+
+**Not done:** cart/checkout still isn't wired into the public `StorefrontView` itself (same deliberate
+deferral its existing code comment already stated) — a buyer still completes shop→cart→checkout via the
+existing flat `/buyer` shell after signing in, same as before this session. No `firestore.rules` or
+`firestore.indexes.json` changes were needed — verified the existing tenant-scoped rules and the
+unfiltered/single-field-sorted store subcollection reads already cover this without a new composite
+index.
+
+**Verification gap, disclosed:** did not drive this through an actual browser — same environment gap
+noted in the 2026-09-11 entries (no `chromium-cli`, no Python). Relied on `flutter analyze`, `flutter
+test` (13/13, including a fixed `test/seller_shell_controller_test.dart` fake that needed the new
+`signIn` param), and a clean `flutter build web`. Worth a manual click-through (seller login → dashboard;
+`/s/aminas-picks` and `/s/jengo-electronics` → account icon → sign in → confirm separate carts/order
+history per store; buyer sign-out lands back on the right store) before this is considered fully proven.
+
+**Next step:** none of this touches `functions/` — the adopted backend still has no seller/store concept
+at all (see the 2026-09-12 backend-adoption entry), which remains separate, larger work.
+
+---
+
+## 2026-09-12 — PHASE 3 (Billing): security core, configurable plan schema, usage tracking
+
+**Status:** implemented and verified this session (`flutter analyze` clean — 4 pre-existing `info`
+lints, `flutter test` 13/13, `cd functions && npm test` 227/227, `cd firestore-tests && npm test`
+18/18). Builds on the same-day backend adoption entry below — read that first.
+
+Closes the gap both this file and `SELLORA_IMPLEMENTATION_PLAN.md` had flagged since 2026-09-11:
+`FirebaseSubscriptionRepository.subscribeSeller` wrote `billing_history`/`users` subscription fields
+directly from the client, which `firestore.rules`' `allow write: if false` on `billing_history` already
+silently blocked against real Firestore. Confirmed scope with the user beforehand: security core +
+configurable plan schema + usage tracking, keeping the existing Starter/Growth/Scale pricing and
+per-plan commission unchanged.
+
+**Data model:** `SubscriptionPlanModel` gained `orderLimit`/`storeLimit`/`features` (backward-compatible
+defaults, `copyWith` added) — `storeLimit` is schema-only/unenforced pending decision #4 (multi-store),
+`orderLimit` is schema-only/unenforced because `createOrder`'s backend has no `sellerId` to count
+against yet (see the backend-adoption entry). New `SubscriptionRecordModel` (`subscriptions/{sellerId}`,
+read-only from Dart) and `BillingHistoryEntryModel` (`billing_history/{id}`) — both written only by
+Cloud Functions. New `SubscriptionUsageModel` (listing usage only; no order-count fields for the same
+reason `orderLimit` isn't enforced). `AuthRepository` gained `refreshCurrentUser()` — re-reads the
+user doc bypassing the in-memory cache, since activation is now server-side and the client has no
+realtime channel to it.
+
+**Cloud Functions:** new `functions/lib/subscriptions.js` — `createBillingEntry` (server-prices from
+`subscription_plans`, writes a pending ledger entry), `activatePendingSubscription` (idempotent —
+guards on `isPayable`/entry status — upserts `subscriptions/{sellerId}` and mirrors
+`subscriptionPlanId`/`subscriptionActiveUntil`/`sellerStatus` onto `users/{sellerId}` in one batch),
+`attachBillingPaymentAttempt`/`billingRefMatches` (the anti-fraud invoice-binding check, mirroring
+`orders.js`'s `paymentRefMatches` — without it, a genuinely-completed IntaSend invoice for a *different*
+payment could be paired with someone else's billing entry id and activate their subscription for free).
+`functions/index.js` gained `subscribeSeller`, `payBillingMpesa`, `payBillingCard`,
+`confirmBillingPayment` — exact structural mirrors of the existing order-payment handlers, reusing
+`intasend.mpesaStkPush`/`createCheckout`/`checkPaymentStatus`/`verifyAmount` completely unchanged.
+`intasendWebhook` now checks `billing_history` before falling through to the existing order lookup (order
+ids and billing entry ids can never collide — separate collections, separate auto-ids). New
+`functions/test/subscriptions.test.js` (9 cases) covers `isPayable`/`billingRefMatches` as pure
+functions, matching this codebase's existing test style.
+
+**Firestore rules:** new `subscriptions/{sellerId}` block (owner-or-admin read, `write: if false`).
+`users/{uid}`'s update rule extended with a field-level lockdown via
+`request.resource.data.diff(resource.data).affectedKeys()` blocking self-writes to
+`subscriptionPlanId`/`subscriptionActiveUntil`/`sellerStatus` — the same technique already used to lock
+down `role`, closing the hole where a seller could self-activate by editing their own user doc.
+`create` stays unrestricted (signup legitimately sets `sellerStatus: pendingApproval`). New
+`firestore-tests/billing-hardening.test.js` (7 cases).
+
+**Repositories:** `SubscriptionRepository.subscribeSeller` no longer takes a client-supplied
+`paymentReference` — it returns a pending `BillingHistoryEntryModel`; added `fetchUsage`.
+`FirebaseSubscriptionRepository` now injects `DioClient`, posts to the new endpoints, and no longer
+writes `_fs.users`/`_fs.billingHistory` directly at all (the actual fix). `MockSubscriptionRepository`
+now injects `AuthRepository` and activates the mock user itself inside `subscribeSeller` — this is what
+let the hand-rolled `UserModel` reconstruction duplicated in both `SellerOnboardingController` and
+`SellerSubscriptionController` be deleted entirely, real mode's copy of which also had to go regardless
+since the new rules block it.
+
+**Controllers/UI:** `SellerOnboardingController` gained an `OnboardingStep.pendingConfirmation` step and
+`refreshStatus()` — in mock mode nothing changes (repository already activated synchronously); in real
+mode, payment is fired via `payBillingMpesa` and the screen shows a pending state with a manual "I've
+completed payment" refresh action, since there's no live confirmation channel (matching buyer checkout's
+own fire-and-forget standard — deliberately not introducing polling/streaming here). `switchPlan` on
+`SellerSubscriptionController` gained the identical pattern plus a try/catch it was missing before (a
+real pre-existing bug — an exception there previously propagated unhandled). `SellerSubscriptionView`
+gained a "Usage this period" listing-count card and a "Refresh status" action. `AdminPlansController`/
+view gained order/store-limit and feature-flag editing (schema-only, left visibly editable rather than
+hidden). `SellerCatalogController.listProduct` gained a soft, client-side listing-limit upsell check —
+deliberately not server-enforced, since listing creation isn't server-authoritative yet (Phase 5).
+
+**Not done (deliberately deferred, not silently skipped):** order-limit enforcement inside `createOrder`
+and order-usage display — both need `sellerId` on the order document, which the newly-adopted backend's
+`orders.js` doesn't have (see below); store-limit enforcement — gated on decision #4; a full billing UI
+(invoices list, cancel/resume, plan-comparison) — out of the confirmed scope for this pass.
+
+**Next step:** PHASE 4/5/8's reconciliation of the adopted backend with the Flutter client's
+`ApiEndpoints`/`ProductModel`/order shapes is what unblocks the deferred items above.
+
+---
+
+## 2026-09-12 — Cloud Functions backend replaced (rebranded from a dropped-in codebase); Phase 3 started
+
+**Status:** in progress this session, picking up from "let's go to phase 3" (billing).
+
+Before Phase 3 work could start, found `functions/` in an inconsistent state: the tracked Sellora
+TypeScript functions (`auth.ts`, `cj.ts`, `index.ts`, `intasend.ts`, `orders.ts`, `tsconfig.json`) were
+deleted, uncommitted, and replaced on disk by an untracked plain-JavaScript codebase from a different
+project, "GoShopping" (a single-vendor CJ dropshipping storefront — `functions/package.json`'s own
+description said so). Confirmed with the user this was deliberate: keep it, rebrand it, and **fold its
+capabilities into Sellora's existing multi-tenant architecture** rather than restore the old TS code or
+pivot Sellora to single-vendor.
+
+**What the adopted codebase actually is** (a strict superset of what it replaces, once rebranded): a
+real CJ auth/token-refresh/catalog-sync/tracking pipeline (`cjAuth.js`, `cjApi.js`, `catalogSync.js`,
+`tracking.js`) well beyond the old `cj.ts` sketch; a margin-based Smart Pricing Engine with FX and
+region/VAT handling (`marginPricingService.js`, `pricing.js`, `fx.js`, `regions.js`); IntaSend *and*
+PayPal (`intasendApi.js`, `paypalApi.js`), with real provider-side refunds (`refunds.js`); product
+reviews with a transactionally-updated rating aggregate (`reviews.js`); a per-instance LRU/TTL cache
+(`cache.js`); and a 218-case `node --test` suite covering the pure logic in all of it. Auth is the same
+shape as before — `Authorization: Bearer <idToken>` verified via `admin.auth().verifyIdToken`.
+
+**The real gap, not fixed this session:** this codebase has **no seller/store concept anywhere** — one
+global `products` catalog, one global `orders` collection, no `sellerId`/`storeId` on anything —
+whereas Sellora's own multi-tenant work (`stores/{storeId}/...`, `StoreScope`, per-seller `listings`,
+the 2% marketplace fee split) assumes many sellers each running a store. `orders.js` and everything
+hung off it (`payOrderMpesa`/`payOrderCard`, `confirmIntasendPayment`, `intasendWebhook`, `refundOrder`,
+`submitProductReview`'s verified-purchase check) has no seller/store attribution or fee split. The
+Flutter client's current `ApiEndpoints`/`ProductModel.fromMap`/`FirebaseOrderRepository`/
+`CjDropshippingService` also don't match this backend's request/response shapes at all — it wraps
+every response as `{success, data, message}`, not the old flat fields, and uses different field/query-
+param names throughout. Reconciling per-seller order/catalog attribution with this backend is separate
+future work (Phase 4/5/8 territory) — not attempted here. Since `AppConstants.useMockData` is still
+`true` and the app has never run against real Firebase, none of this is a regression from a working
+state; it's a disclosed gap in scaffolding, same as every other "Not started" line in
+`SELLORA_IMPLEMENTATION_PLAN.md`.
+
+One more unreconciled duplicate: admin gating in this codebase is a Firebase Auth custom claim
+(`user.admin === true`), while the rest of Sellora checks a Firestore `users/{uid}.role` field. Not
+fixed here — flagging so a later session doesn't assume Sellora's existing admin accounts can call
+`refundOrder`/`runCatalogSync`.
+
+**Changed:**
+- `functions/lib/orders.js` — the one substantive rename (`GoShopping order ${orderId}` → `Sellora
+  order ${orderId}`, a CJ order remark string). This and `functions/package.json`'s `description` were
+  the *only* two "GoShopping" strings anywhere in the adopted code — confirmed by grep.
+- `functions/package.json` — added a no-op `"build"` script (the old `tsc` step is gone along with
+  `tsconfig.json`, but `firebase.json`'s `predeploy` hook still calls `npm run build`).
+- `CLAUDE.md` — Cloud Functions command block updated to drop the `tsc` framing.
+- Deleted `functions/src/*.ts`/`tsconfig.json` left deleted, not restored — no git operations performed
+  (add/rm/commit stay the user's call).
+
+**Verification:** `cd functions && npm run build && npm test` — build no-ops cleanly, all 218
+pre-existing tests still pass unchanged (nothing besides the two string edits was touched).
+
+**Next step:** Phase 3 (billing/subscriptions) proceeds on top of this backend, self-contained enough
+to not depend on the deferred order/catalog multi-tenant threading — see the Phase 3 entry that follows
+once that work lands this same session.
+
+---
+
+## 2026-09-12 — Marketing landing page; seller-shell store-resolution guard
+
+**Status:** implemented and verified this session (`flutter analyze` clean — 4 pre-existing `info`
+lints, `flutter test` 8/8 passing).
+
+Picking up from the 2026-09-11 entries below. Two things landed:
+
+1. **Public marketing page** (commit `3318770`, earlier today, undocumented until now): a new
+   `lib/modules/marketing/` (`MarketingView`/`MarketingController`, route `/marketing`) is Sellora's
+   own landing page — hero, how-it-works, pricing pulled from `SubscriptionPlanModel`, FAQ, footer.
+   `AuthController.checkSession` now sends a signed-out visitor here instead of straight to
+   `Routes.roleSelect`; `RoleSelectView` gained a "Learn more about Sellora" link back to it. Self-
+   contained — no repository or model changes.
+2. **Seller-shell store-resolution guard** (this session): closes the PHASE 2 item both this file and
+   `SELLORA_IMPLEMENTATION_PLAN.md` had listed as open — "nothing blocks navigation while the store is
+   resolving or missing." `SellerShellView` now reads `StoreScope.isResolving`/`current`/`errorMessage`
+   (already-reactive state `SellerShellController.onInit()` was populating but nothing consumed) before
+   rendering the tab shell: a loading state while resolving, an `EmptyState` with a "Try again" action
+   (`SellerShellController.resolveStore()`, the same lookup `onInit` already ran, now re-callable) and
+   a "Sign out" fallback (`SellerShellController.signOut()`, new) if it comes back empty. Deliberately
+   does **not** add a store-creation screen — every current signup path already creates a store
+   (2026-09-11 fix), so an empty `StoreScope.current` is a defensive/edge case, not a known-reachable
+   one; building a creation flow for it now would be speculative scope, not this item.
+
+**Changed:** `lib/modules/seller/shell/seller_shell_controller.dart` (extracted `onInit`'s lookup into
+public `resolveStore()`, added `signOut()`), `lib/modules/seller/shell/seller_shell_view.dart` (the
+guard), `SELLORA_IMPLEMENTATION_PLAN.md` (PHASE 2 section updated to match both changes above).
+
+**Not done:** the store switcher and store-creation-recovery-screen items noted above remain open,
+same as before.
+
+**Verification gap, disclosed:** same as every prior entry in this file — no browser/widget-level
+check of the new loading/error branches, only `flutter analyze` and the pre-existing
+`seller_shell_controller_test.dart` cases (which still pass unchanged, since `onInit`'s behavior is
+unchanged, just renamed-and-exposed). `signOut()` isn't unit tested — it's a thin wrapper around
+`AuthRepository.signOut()` + `Get.offAllNamed`, matching `AuthController.signOut()`'s existing
+(likewise untested) shape; testing GetX navigation here would need a full `GetMaterialApp` harness this
+repo doesn't otherwise use for controller tests.
+
+**Next step:** decisions #1/#4/#5 are still the gate for going further into PHASE 3+ (see 2026-09-11
+entry below) — nothing in today's work changes that.
+
+---
+
 ## 2026-09-11 — Multi-tenant pivot: Phase 0 audit, Phase 1 foundation, Phase 2 started
 
 **Status:** in progress, uncommitted. Supersedes the "no implementation code written" status on every

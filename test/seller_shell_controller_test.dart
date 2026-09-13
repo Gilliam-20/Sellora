@@ -61,7 +61,8 @@ class _FakeAuthRepository implements AuthRepository {
   Stream<UserModel?> get userChanges => Stream.value(_user);
 
   @override
-  Future<UserModel> signIn({required String email, required String password}) =>
+  Future<UserModel> signIn(
+          {required String email, required String password, String? storeId}) =>
       throw UnimplementedError();
 
   @override
@@ -91,6 +92,9 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> updateUser(UserModel user) => throw UnimplementedError();
+
+  @override
+  Future<UserModel?> refreshCurrentUser() => throw UnimplementedError();
 }
 
 class _FakeStoreRepository implements StoreRepository {
