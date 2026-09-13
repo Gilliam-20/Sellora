@@ -6,6 +6,81 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-14 — Role select returns for mobile, seller-only this time
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`
+lints as every prior entry, `flutter test` 13/13). No browser-driven check — same disclosed gap as
+every prior entry.
+
+User asked for the platform split to be explicit: mobile app leads splash → role select → sign in; web
+leads with the marketing view. Web already worked this way (`SelloraApp.initialRoute` picks
+`Routes.marketing` under `kIsWeb`) — the actual gap was mobile, where `AuthController.checkSession()`
+sent an unauthenticated visitor straight to `Routes.marketing` too, skipping role select entirely
+(a deliberate choice made in the entry directly below, before this one).
+
+Re-adding role select isn't a plain revert: the version deleted on 2026-09-13 offered two cards, "Shop
+the marketplace" (buyer) and "Start selling" (seller), because buyers were still a shared top-level
+role back then. Today a buyer only exists as a customer of one store, signed in from that store's own
+`/s/{slug}/login` — there's no top-level buyer destination to point a card at, and no store-directory
+screen exists yet for a mobile user without a direct link to find one. Confirmed with the user: keep
+role select seller-only for now (a welcome step with "Start selling" → `registerSeller` and "Sign in" →
+`login`) rather than also building a new store-search screen to restore the buyer card.
+
+**Changed:**
+- **New** `lib/modules/auth/views/role_select_view.dart` — reintroduced, trimmed to the single seller
+  card plus "Already have an account? Sign in" and "Learn more about Sellora" links. No `intent`
+  argument passed anywhere (today's `LoginView` doesn't branch on one).
+- **`lib/app/routes/app_routes.dart`**: added `Routes.roleSelect = '/role-select'`.
+- **`lib/app/routes/app_pages.dart`**: registered the route (no binding needed — the view has no
+  controller).
+- **`lib/modules/auth/controllers/auth_controller.dart`**: `checkSession()`'s no-session branch is now
+  `kIsWeb ? Routes.marketing : Routes.roleSelect` instead of unconditionally `Routes.marketing`.
+- **`lib/main.dart`**: updated the `initialRoute` comment to describe the full mobile chain.
+
+**Still open:** a buyer with no direct `/s/{slug}` link has no way to find a store from the mobile app —
+flagged above as a real gap, not fixed here since the user chose to scope this to the seller-only
+welcome step.
+
+---
+
+## 2026-09-14 — Claude Design "Meridian" export reviewed; documented as reference-only, not a build spec
+
+**Status:** documentation only — no Flutter or Cloud Functions code changed.
+
+A Claude Design project ("Sellora Mockups," `_ds/sellora-meridian-design-system-ffa880f5-…`) was shared
+for import via the `claude_design` MCP: design tokens (`tokens/*.css`), React recreations of Meridian's
+component set, and three click-through portal UI kits (`ui/{admin,buyer,seller}/{bundle.jsx,mockData.js}`)
+plus browser/iOS frame chrome for prototyping outside Flutter. Read every listed file before deciding
+what, if anything, to bring into the app.
+
+**Findings:**
+- The project's own `readme.md` says it was built by reading `lib/app/theme/` and the existing screens
+  directly — it's an export *of* the app, not a design *for* the app. Confirmed: `colors.css`,
+  `spacing.css`, `radius.css` are value-for-value identical to `AppColors`/`AppSpacing`/`AppRadii`
+  (`lib/app/theme/app_colors.dart`, `app_metrics.dart`).
+- Every screen in the three `bundle.jsx` files already exists as a Flutter module: seller's
+  dashboard/catalog/my_listings/orders/profile/subscription, admin's
+  dashboard/sellers/catalog_sync/orders/plans, buyer's home/product_details/cart/checkout/orders/profile
+  all have a matching directory under `lib/modules/`.
+- The project's auth-flow description ("splash → role select → sign in / register") is now stale: the
+  2026-09-13 entry below deleted `role_select_view.dart`/`register_buyer_view.dart`/`store_select_view.dart`
+  as part of the multi-tenant storefront rework. The design project predates that change and still shows
+  the old shared-marketplace role picker, not today's seller-only `/login` + per-store `/s/{slug}/login`.
+
+**Decision (confirmed with the user):** treat this as an external reference for prototyping, marketing
+collateral and decks outside Flutter — not an implementation spec. Reimplementing its screens in Flutter
+would rebuild what already exists, and its buyer/auth screens would reintroduce flows deleted this week.
+Same category of mistake as the 2026-09-06 marketplace-layer drop that was evaluated and deleted earlier
+(not logged in this file, but on record): treat the repo, not an externally-authored artifact, as the
+source of truth. No code was changed as a result of this review.
+
+**Still open:** the design project itself hasn't been corrected (its readme and auth mockups remain
+stale) — if it's kept as a living reference, a follow-up push via `DesignSync` to update the auth screens
+and note the storefront-per-seller model would keep it useful; not done this session since it wasn't
+requested.
+
+---
+
 ## 2026-09-13 — Sellora's own login becomes seller-only; buyer auth moves into the storefront
 
 **Status:** implemented and verified this session (`flutter analyze` clean — 4 pre-existing `info`

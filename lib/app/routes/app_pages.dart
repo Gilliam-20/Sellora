@@ -5,6 +5,7 @@ import '../../modules/admin/shell/admin_shell_view.dart';
 import '../../modules/auth/bindings/auth_binding.dart';
 import '../../modules/auth/views/login_view.dart';
 import '../../modules/auth/views/register_seller_view.dart';
+import '../../modules/auth/views/role_select_view.dart';
 import '../../modules/auth/views/splash_view.dart';
 import '../../modules/buyer/buyer_binding.dart';
 import '../../modules/buyer/checkout/checkout_view.dart';
@@ -36,6 +37,9 @@ class AppPages {
         name: Routes.marketing,
         page: () => MarketingView(),
         binding: MarketingBinding()),
+    GetPage(
+        name: Routes.roleSelect,
+        page: () => const RoleSelectView()),
     GetPage(
         name: Routes.login,
         page: () => const LoginView(),

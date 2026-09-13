@@ -38,8 +38,10 @@ class SelloraApp extends StatelessWidget {
       theme: AppTheme.light,
       themeMode: ThemeMode.light,
       // Web opens straight on the marketing/landing page, matching how a
-      // browser homepage behaves; the branded splash (with its
-      // session-check redirect) is a mobile-app-only affordance.
+      // browser homepage behaves. Mobile leads with the branded splash,
+      // which (once its session check finds nobody signed in) continues to
+      // role select and then sign-in — a mobile-app-only affordance, since
+      // there's no address bar to hand a first-time visitor a store's URL.
       initialRoute: kIsWeb ? Routes.marketing : Routes.splash,
       initialBinding: InitialBinding(),
       getPages: AppPages.pages,

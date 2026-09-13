@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../data/models/user_model.dart';
@@ -28,9 +29,11 @@ class AuthController extends GetxController {
     } catch (_) {
       // No session, or mock mode with nothing cached yet — fall through.
     }
-    // No signed-in user: lead with the marketing page rather than
-    // dropping a first-time visitor straight into role select.
-    Get.offAllNamed(Routes.marketing);
+    // No signed-in user: web leads with the marketing page (its
+    // initialRoute skips splash entirely, but this also covers a direct
+    // deep link to '/'); mobile has no address bar to hand a first-time
+    // visitor a store's URL, so it continues splash → role select instead.
+    Get.offAllNamed(kIsWeb ? Routes.marketing : Routes.roleSelect);
   }
 
   /// Sellora's own sign-in — seller/admin only. A buyer account is rejected

@@ -3,6 +3,7 @@ abstract class Routes {
 
   static const splash = '/';
   static const marketing = '/marketing';
+  static const roleSelect = '/role-select';
   static const login = '/login';
   static const registerSeller = '/register/seller';
 
