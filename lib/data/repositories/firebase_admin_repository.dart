@@ -26,13 +26,14 @@ class FirebaseAdminRepository extends GetxService implements AdminRepository {
 
   @override
   Future<int> syncCjCatalog() async {
-    final products = await _cj.searchProducts(page: 1);
-    final batch = _fs.catalog.firestore.batch();
-    for (final product in products) {
-      batch.set(_fs.catalog.doc(product.id), product.toMap());
-    }
-    await batch.commit();
+    // The real sync pipeline (categories + products + detail/variant
+    // enrichment + stale-deactivation) runs entirely server-side, admin-
+    // claim-gated — see functions/index.js's runCatalogSync and
+    // functions/lib/catalogSync.js. It writes Firestore's top-level
+    // `products`/`categories` collections directly via the Admin SDK, so
+    // there is nothing left for the client to batch-write itself.
+    final count = await _cj.runCatalogSync();
     _lastSyncedAt = DateTime.now();
-    return products.length;
+    return count;
   }
 }

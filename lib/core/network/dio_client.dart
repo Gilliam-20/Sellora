@@ -40,9 +40,15 @@ class DioClient extends GetxService {
   }
 
   Future<Map<String, dynamic>> post(String path,
-      {Map<String, dynamic>? data}) async {
+      {Map<String, dynamic>? data, Duration? receiveTimeout}) async {
     try {
-      final response = await dio.post(path, data: data);
+      final response = await dio.post(
+        path,
+        data: data,
+        options: receiveTimeout == null
+            ? null
+            : Options(receiveTimeout: receiveTimeout),
+      );
       return Map<String, dynamic>.from(response.data ?? {});
     } on DioException catch (e) {
       throw ApiException(

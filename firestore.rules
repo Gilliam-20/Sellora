@@ -91,12 +91,15 @@ service cloud.firestore {
     }
 
     // ---- shared CJ catalog -------------------------------------------
-    // Written only by the syncCjCatalog Cloud Function (admin SDK
-    // bypasses rules); readable by any signed-in seller browsing to list.
-    match /catalog/{productId} {
-      allow read: if isSignedIn();
-      allow write: if false;
-    }
+    // Top-level `products`/`categories` are written only by the
+    // runCatalogSync Cloud Function (Admin SDK bypasses rules) — see
+    // functions/index.js and functions/lib/catalogSync.js. No client code
+    // reads either collection directly today: catalog browsing goes
+    // through the public searchProducts/getProductDetail/getCategories
+    // HTTP endpoints instead (see CjDropshippingService), so there is
+    // deliberately no read rule here yet — both collections stay
+    // default-denied to clients until something actually needs to read
+    // them straight from Firestore.
 
     // ---- seller listings ----------------------------------------------
     match /listings/{listingId} {

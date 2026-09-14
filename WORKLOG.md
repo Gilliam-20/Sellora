@@ -6,6 +6,163 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-14 — IntasendService reconciled with the adopted backend; deeper checkout blocker confirmed
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`
+lints as every prior entry, `flutter test` 13/13, `flutter build web` succeeds).
+
+Picked up from the same day's catalog-plumbing entry below, which flagged `IntasendService`'s three
+order-checkout endpoints as "the same class of bug" as the catalog mismatch it had just fixed. Asked the
+user how to scope this before touching code, since a first pass at reading the real `payOrderMpesa`/
+`payOrderCard`/`confirmIntasendPayment`/`createOrder` contracts (`functions/index.js`,
+`functions/lib/orders.js`) showed it isn't actually the same class of bug: the adopted backend's
+checkout has no seller/store/fee concept at all, and `createOrder` requires CJ's own `pid`/`vid` per
+line item — a purchasable per-SKU id that doesn't exist anywhere client-side (`ProductVariant` is only
+`{name, options}` attribute strings, confirmed in the same-day catalog entry). Fixing
+`FirebaseOrderRepository.placeOrder` for real is therefore blocked on the same variant-id gap as PHASE
+4's import/variant-picker screen — not a same-day fix. User chose the narrow option: fix
+`IntasendService` itself (mechanical, self-contained) and explicitly leave `placeOrder`/
+`CheckoutController` documented as still broken, rather than either stopping entirely or wiring a
+placeholder `vid` through checkout just to make it "run."
+
+**Changed:**
+- **`lib/core/constants/app_constants.dart`**: replaced `intasendCollectMpesa`/`intasendCheckout`/
+  `intasendStatus` with the real `payOrderMpesa`/`payOrderCard`/`confirmIntasendPayment` endpoint
+  constants; expanded the `createOrder` doc comment with the specific `pid`/`vid` blocker found this
+  session (previously it only said "old shape," not why that shape can't just be swapped in).
+- **`lib/data/services/intasend_service.dart`**: rewritten. `collectMpesa`/`createCheckout`/
+  `checkStatus` (client-computed amount, generic "reference") replaced with `payOrderMpesa(orderId,
+  phoneNumber)` / `payOrderCard(orderId, method, redirectUrl)` / `confirmOrderPayment(orderId)` —
+  matching the real contract, where the server derives the amount from an order it already created and
+  every call keys off that order's id, not a client-supplied figure. `checkStatus` was a GET; the real
+  endpoint (`confirmIntasendPayment`) is a POST that also fulfills the order server-side when complete,
+  so the new `confirmOrderPayment` reflects that too. Removed the now-fully-unused `PaymentResult` class
+  (only ever constructed by the two rewritten methods).
+- **`lib/modules/buyer/checkout/checkout_controller.dart`**: updated its one call site
+  (`collectMpesa(phone:, amountKes:, narrative:)` → `payOrderMpesa(orderId:, phoneNumber:)`) so the
+  project keeps compiling, and expanded the surrounding comment to say plainly that this whole branch is
+  unreachable today (`useMockData` is always true) and would still fail if it ran, because `placeOrder`
+  above it sends the old request shape and has no real CJ `vid` to send. The `payOrderMpesa` call itself
+  is now correct; what it would be called with isn't, yet.
+
+**Deliberately not done (out of this pass's confirmed scope):** `FirebaseOrderRepository.placeOrder`'s
+request/response shape and `createOrder`'s missing seller/store/fee concept — reconciling either for
+real needs a variant-id-carrying product model first (PHASE 4's still-unstarted import/variant-picker
+screen), not a client-side endpoint fix. `createCheckout`/`payOrderCard` (card/Google Pay) has no caller
+anywhere in `lib/` today, same as before — left in place as correctly-shaped but unconsumed, matching
+`getCategories`/`calculateFreight`'s status.
+
+**Next step:** checkout end-to-end is now blocked on one concrete, named thing — a real per-SKU variant
+id reaching the cart/order — rather than a vague "Phase 8 scope" note. Whoever next works on either
+PHASE 4's import/product-detail screen or PHASE 8's checkout should treat those as the same unblocking
+step, not two independent ones.
+
+---
+
+## 2026-09-14 — PHASE 4 started: CJ catalog-browse plumbing reconciled with the adopted backend
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`
+lints as every prior entry, `flutter test` 13/13, `flutter build web` succeeds). No new test coverage
+added for `CjDropshippingService` itself — flagged below as a real gap, not silently skipped.
+
+Picking up PHASE 4 (catalog + CJ import), repeatedly flagged since the 2026-09-12 backend-adoption
+entry as "the real next step": the Flutter client's `ApiEndpoints`/`CjDropshippingService`/
+`ProductModel` parsing were still written against the *old*, deleted TypeScript backend and didn't
+match the adopted `functions/index.js` at all — wrong endpoint names, wrong query param names, and no
+awareness of the `{success, data, message}` response envelope every endpoint in the adopted backend
+uses. Confirmed with the user beforehand to scope this pass to catalog-browsing plumbing only (search,
+detail, admin sync) — not the checkout/payment path, and not any new UI.
+
+An `Explore` audit first read every relevant file on both sides (`functions/index.js` in full, plus
+`cjApi.js`/`catalogSync.js`/`pricing.js`/`marginPricingService.js`/`fx.js`/`regions.js` on the backend;
+`ApiEndpoints`, `CjDropshippingService`, `ProductModel`, both `ProductRepository` implementations, and
+their controllers on the client) and produced a field-by-field diff before any code changed.
+
+**What the audit found, beyond the wrapper mismatch:**
+- `ApiEndpoints.cjSearchProducts`/`cjProductDetail`/`cjCreateOrder`/`cjTrackShipment` don't exist as
+  exported functions at all; the real names are `searchProducts`/`getProductDetail`. `createFulfillmentOrder`/
+  `trackShipment` in `CjDropshippingService` were dead code (zero callers) that also didn't match any real
+  endpoint shape.
+- `searchProducts`'s live response has no `stock`/`rating`/`soldCount`/`discountPercent`/`compareAtPrice`/
+  `currency` — `ProductModel.fromMap` was reading all of those from a shape that can never supply them.
+- `getProductDetail` has no top-level price or stock at all — pricing lives per-variant; the real
+  variant shape (`{vid, sku, key, attributes, image, supplierPriceUsd, retailPriceUsd, weight}`) has no
+  overlap with `ProductVariant`'s existing `{name, options}` attribute-picker shape, so
+  `ProductModel.variants` was always `[]` regardless of what the backend returned.
+- `FirebaseAdminRepository.syncCjCatalog()` hand-rolled its own partial sync from the client (one page
+  of `searchProducts`, no categories/detail/variant/stock enrichment) and batch-wrote into a Firestore
+  collection named `catalog` — which the backend's real sync pipeline (`runCatalogSync`,
+  admin-claim-gated, up to 9 minutes) never touches; it writes `products`/`categories` instead. Two
+  independently-invented, non-overlapping collection names for the same concept, and the client path
+  bypassed the admin-claim gate entirely.
+- No seller/store field exists anywhere on the backend's catalog responses or Firestore docs — confirmed,
+  matches the 2026-09-12 entry. This is a real, load-bearing gap for PHASE 4/5 (mapping a shared catalog
+  onto per-seller listings has no backend hook to lean on), not something this pass could fix.
+- A second, unrelated stale-endpoint bug surfaced while cross-checking `ApiEndpoints`: `intasendCollectMpesa`/
+  `intasendCheckout`/`intasendStatus` (used by `IntasendService`, the buyer-checkout payment path — PHASE 8,
+  not this pass) also don't match anything the adopted backend exports (real names are
+  `payOrderMpesa`/`payOrderCard`/`confirmIntasendPayment`). Left alone and flagged inline in
+  `app_constants.dart` rather than fixed, since it's checkout/payment code deserving its own confirmed
+  pass, not catalog-browsing. Same for `FirebaseOrderRepository.placeOrder`/`createOrder`'s request/
+  response shape, which is likewise still written against the old deleted backend.
+
+**Changed:**
+- **`lib/core/constants/app_constants.dart`**: replaced the four wrong CJ endpoint names with the real
+  ones (`searchProducts`, `getProductDetail`, `getCategories`, `calculateFreight`, `runCatalogSync`);
+  added inline notes flagging the `createOrder`/IntaSend-checkout staleness found above for whoever picks
+  up PHASE 8.
+- **`lib/core/network/dio_client.dart`**: `post()` gained an optional `receiveTimeout` override — the
+  default 20s would always time out `runCatalogSync`, which can legitimately run for minutes.
+- **`lib/data/services/cj_dropshipping_service.dart`**: rewritten. `searchProducts`/`productDetail` now
+  call the correct paths with the correct query param names (`categoryId` not `category`, `pid` not
+  `id`, plus `size`), unwrap `data` themselves (matching the pattern `FirebaseSubscriptionRepository`
+  already established for `subscribeSeller` — no `success` boolean check needed since a `success:false`
+  response always carries a non-2xx status, which `DioClient` already turns into a thrown
+  `ApiException`), and map the real field names onto `ProductModel` via new private
+  `_summaryToProduct`/`_detailToProduct` helpers instead of relying on `ProductModel.fromMap` (deliberately
+  left untouched — it's the round-trip shape for the client's own persisted `listings` documents, a
+  different concern from parsing the backend's raw catalog response). Added `_variantOptions` to derive an
+  attribute-picker from the real per-SKU variant list (distinct values per attribute name) — the closest
+  a `{name, options}` shape can get to real variant data without a model change. Added `runCatalogSync()`.
+  Removed dead `createFulfillmentOrder`/`trackShipment`.
+- **`lib/data/repositories/firebase_admin_repository.dart`**: `syncCjCatalog()` now calls
+  `CjDropshippingService.runCatalogSync()` instead of hand-rolling a partial sync and batch-write;
+  interface (`Future<int>`) unchanged so `AdminCatalogSyncController` needed no changes.
+- **`lib/data/services/firestore_service.dart`**: removed the now-fully-unused `catalog` collection
+  getter (confirmed zero remaining references after the above).
+- **`firestore.rules`**: removed the stale `catalog/{productId}` block, which referenced a
+  `syncCjCatalog` Cloud Function that no longer exists in that form. Left `products`/`categories`
+  (the real, server-written collections) with no explicit client rule — default-denied, matching that
+  nothing in `lib/` reads either directly today (catalog browsing goes through the HTTP endpoints, not
+  Firestore reads); noted inline for whenever that changes.
+
+**Deliberately not done (out of this pass's confirmed scope):**
+- `getCategories`/`calculateFreight` are wired up as `ApiEndpoints` constants (accurate names for
+  whenever they're needed) but have no `CjDropshippingService` methods yet — nothing in `lib/` consumes
+  either today (no category-browsing UI, no shipping-estimate UI), so adding client methods now would be
+  speculative.
+- No dedicated "recalculate price for margin X" endpoint exists anywhere server-side — margin pricing
+  (`pricing.js`/`marginPricingService.js`) is baked silently into `retailPriceUsd` inside search/detail
+  responses with no way to ask "what if I set margin to Y%". If PHASE 4's import-editor screen wants an
+  interactive margin slider, that needs a new backend endpoint, not a client fix.
+- The IntaSend order-checkout path and `FirebaseOrderRepository.placeOrder`'s shape (flagged above) —
+  real bugs, same class as the ones just fixed, but PHASE 8 scope, not this pass.
+- Reconciling how a shared, unscoped CJ catalog maps onto per-seller `listings` at import time — the
+  plumbing this pass fixed makes that possible to build correctly, but no import-editor UI exists yet
+  (`SELLORA_IMPLEMENTATION_PLAN.md`'s PHASE 4 section, still not started as app-facing work).
+
+**Verification gap, disclosed:** no test exercises `CjDropshippingService`'s new parsing logic directly
+(mocking `DioClient`/Dio) — relied on `flutter analyze`/`flutter test`/`flutter build web` staying clean,
+which only proves the code compiles and every *other* code path is unaffected, not that the new mapping
+is correct against a live response. Also unverified against a real deployed `functions/index.js` — same
+"never run against real backend" caveat as every prior entry (`useMockData` is still `true`).
+
+**Next step:** PHASE 4's remaining app-facing work (a catalog browse/import screen actually using this
+now-correct plumbing) is still not started. PHASE 8's stale checkout-payment endpoints, found but not
+fixed here, are the next concrete gap if payments work resumes before catalog import screens do.
+
+---
+
 ## 2026-09-14 — Role select returns for mobile, seller-only this time
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`

@@ -8,8 +8,6 @@ class FirestoreService extends GetxService {
 
   CollectionReference<Map<String, dynamic>> get users =>
       _db.collection('users');
-  CollectionReference<Map<String, dynamic>> get catalog =>
-      _db.collection('catalog'); // shared CJ-sourced products
   CollectionReference<Map<String, dynamic>> get listings =>
       _db.collection('listings'); // seller-specific listings
   CollectionReference<Map<String, dynamic>> get orders =>

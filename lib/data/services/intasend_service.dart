@@ -4,67 +4,62 @@ import '../../core/network/dio_client.dart';
 
 enum PaymentStatus { pending, completed, failed }
 
-class PaymentResult {
-  PaymentResult(
-      {required this.reference, required this.status, this.checkoutUrl});
-  final String reference;
-  final PaymentStatus status;
-  final String?
-      checkoutUrl; // for card/hosted checkout, opened via url_launcher
-}
-
 /// Wraps IntaSend for both seller subscription billing and buyer
-/// checkout. The IntaSend secret key lives only in Cloud Functions
-/// (see /functions/src/intasend.ts); the app just triggers a collection
-/// request and polls/observes the resulting status.
+/// order checkout. The IntaSend secret key lives only in Cloud Functions
+/// (see /functions/index.js); the app just triggers a collection request
+/// and polls/observes the resulting status.
+///
+/// Order-checkout payment (this section) always acts on an order id that
+/// `OrderRepository.placeOrder` already created server-side — the server
+/// derives the amount from that order itself, never from a client-supplied
+/// figure. Billing payment (below) is the structurally identical mirror for
+/// a pending `billing_history` entry instead of an order.
 class IntasendService extends GetxService {
   final DioClient _dio = Get.find<DioClient>();
 
-  /// Triggers an M-Pesa STK push to [phone] (format 2547XXXXXXXX) for
-  /// [amountKes]. Used both for seller subscription payments and for
-  /// buyer checkout when they choose M-Pesa.
-  Future<PaymentResult> collectMpesa({
-    required String phone,
-    required double amountKes,
-    required String narrative,
+  /// Triggers an M-Pesa STK push to [phoneNumber] (format 2547XXXXXXXX) for
+  /// the already-created order [orderId]. Returns the IntaSend invoice id;
+  /// call [confirmOrderPayment] afterwards (or wait for the webhook) to
+  /// learn whether it actually completed.
+  Future<String> payOrderMpesa({
+    required String orderId,
+    required String phoneNumber,
   }) async {
-    final res = await _dio.post(ApiEndpoints.intasendCollectMpesa, data: {
-      'phone_number': phone,
-      'amount': amountKes,
-      'narrative': narrative,
+    final res = await _dio.post(ApiEndpoints.payOrderMpesa, data: {
+      'orderId': orderId,
+      'phoneNumber': phoneNumber,
     });
-    return PaymentResult(
-      reference:
-          res['invoice_id']?.toString() ?? res['reference']?.toString() ?? '',
-      status: _statusFrom(res['state']?.toString()),
-    );
+    final data = Map<String, dynamic>.from(res['data'] as Map? ?? {});
+    return data['invoiceId']?.toString() ?? '';
   }
 
-  /// Hosted checkout link for card payments (used for buyers paying in
-  /// USD/EUR/GBP outside Kenya, or sellers who prefer card billing).
-  Future<PaymentResult> createCheckout({
-    required double amount,
-    required String currency,
-    required String email,
-    required String narrative,
+  /// Hosted checkout link for order [orderId]. [method] is
+  /// `'CARD-PAYMENT'` or `'GOOGLE-PAY'`. IntaSend redirects to
+  /// [redirectUrl] when done; call [confirmOrderPayment] afterwards.
+  Future<String?> payOrderCard({
+    required String orderId,
+    required String method,
+    String? redirectUrl,
   }) async {
-    final res = await _dio.post(ApiEndpoints.intasendCheckout, data: {
-      'amount': amount,
-      'currency': currency,
-      'email': email,
-      'narrative': narrative,
+    final res = await _dio.post(ApiEndpoints.payOrderCard, data: {
+      'orderId': orderId,
+      'method': method,
+      'redirectUrl': redirectUrl,
     });
-    return PaymentResult(
-      reference: res['id']?.toString() ?? '',
-      status: PaymentStatus.pending,
-      checkoutUrl: res['url']?.toString(),
-    );
+    final data = Map<String, dynamic>.from(res['data'] as Map? ?? {});
+    return data['checkoutUrl']?.toString();
   }
 
-  Future<PaymentStatus> checkStatus(String reference) async {
-    final res = await _dio
-        .get(ApiEndpoints.intasendStatus, query: {'reference': reference});
-    return _statusFrom(res['state']?.toString());
+  /// Re-checks order [orderId]'s payment status directly with the server
+  /// (never trusts a client-side guess); a `completed` result means the
+  /// order has also just been marked paid and pushed to CJ server-side.
+  Future<PaymentStatus> confirmOrderPayment(String orderId) async {
+    final res = await _dio.post(ApiEndpoints.confirmIntasendPayment, data: {
+      'orderId': orderId,
+    });
+    final data = Map<String, dynamic>.from(res['data'] as Map? ?? {});
+    if (data['paid'] == true) return PaymentStatus.completed;
+    return _statusFrom(data['state']?.toString());
   }
 
   /// Starts an M-Pesa STK push for a pending subscription billing entry

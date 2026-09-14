@@ -1,6 +1,6 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-12 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-14 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
@@ -8,11 +8,11 @@
 | **1 — Foundation** | Done — theme, responsive shell, shared primitives, 0 analyzer issues |
 | **2 — Auth + seller onboarding** | In progress — signup creates a store, marketing page is the signed-out entry point, seller shell now guards on store resolution; still missing: multi-store switcher (blocked on open decision #4) |
 | **3 — Billing** | Security core done — server-side `subscribeSeller`, immutable billing ledger, locked-down subscription fields, configurable plan schema (orderLimit/storeLimit/features), listing usage tracked. Not done: order-limit enforcement/usage (blocked on PHASE 4's order-attribution gap), cancel/resume, invoices UI |
-| **4 — Catalog + CJ import** | Not started (product search/import screens; CJ integration itself is proxied but unverified against a real account) |
+| **4 — Catalog + CJ import** | Client plumbing (endpoints, response parsing, admin sync) reconciled with the real CJ backend 2026-09-14; product search/import screens themselves not started, and CJ integration is still unverified against a real account |
 | **5 — Seller product management** | Not started — blocked behind the deferred flat→`stores/{storeId}/products` write migration |
 | **6 — Store builder** | Not started |
 | **7 — Customer storefront** | Not started (`/s/:slug` shared buyer feed still marketplace-era) |
-| **8 — Payments + orders** | Slice done: server-side `createOrder` (re-prices, snapshots the 2% fee), `intasendWebhook` now actually confirms payment. Not done: provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
+| **8 — Payments + orders** | `IntasendService` (order-checkout payment) reconciled with the real backend 2026-09-14. Still broken, and now a confirmed blocker rather than unstarted work: `FirebaseOrderRepository.placeOrder`/`createOrder` need a real per-SKU CJ variant id nothing client-side captures yet — same gap blocking PHASE 4's import screen. Not done: provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
 | **9 — Analytics + marketing** | Not started |
 | **10 — Admin** | Not started (existing admin screens are marketplace-era mocks) |
 | **11 — i18n** | Not started |

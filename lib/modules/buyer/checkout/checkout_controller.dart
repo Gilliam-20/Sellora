@@ -72,11 +72,18 @@ class CheckoutController extends GetxController {
 
       // Real mode: create the order server-side — re-priced from
       // listings, ignoring whatever total this draft carries — *before*
-      // contacting IntaSend, so the server-assigned order id can be used
-      // as the payment's api_ref. See FirebaseOrderRepository.placeOrder
-      // and functions/src/intasend.ts's webhook, which is what actually
+      // contacting IntaSend, so the server-assigned order id can be the
+      // payment's orderId. See FirebaseOrderRepository.placeOrder and
+      // functions/index.js's intasendWebhook, which is what actually
       // confirms payment and starts CJ fulfillment; this controller does
       // neither itself anymore.
+      //
+      // NOTE: this whole branch is unreachable today (useMockData is always
+      // true) and would still fail if it ran — placeOrder above sends the
+      // old, unreconciled request shape and has no real CJ variant id to
+      // send in the first place (see ApiEndpoints.createOrder's doc
+      // comment). The payOrderMpesa call below is correct against the real
+      // backend; what it's called with isn't, yet.
       final draft = OrderModel(
         id: '',
         code: '',
@@ -94,10 +101,9 @@ class CheckoutController extends GetxController {
       final order = await _orderRepo.placeOrder(draft);
 
       final intasend = Get.find<IntasendService>();
-      await intasend.collectMpesa(
-        phone: Formatters.toMpesaFormat(mpesaPhone),
-        amountKes: order.total,
-        narrative: order.id,
+      await intasend.payOrderMpesa(
+        orderId: order.id,
+        phoneNumber: Formatters.toMpesaFormat(mpesaPhone),
       );
       _onOrderPlaced(order.code,
           'Order ${order.code} placed — complete the M-Pesa prompt on your phone to finish payment.');

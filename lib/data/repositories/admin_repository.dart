@@ -4,8 +4,10 @@ abstract class AdminRepository {
   Future<List<UserModel>> fetchSellers();
   Future<void> setSellerStatus(String sellerId, SellerStatus status);
 
-  /// Pulls fresh products from CJ Dropshipping into the shared `catalog`
-  /// collection sellers browse from. Returns how many products synced.
+  /// Triggers the server-side CJ catalog/category sync (writes Firestore's
+  /// shared `products`/`categories` collections directly via Admin SDK —
+  /// see functions/index.js's `runCatalogSync`). Returns how many products
+  /// were written this run.
   Future<int> syncCjCatalog();
   DateTime? get lastSyncedAt;
 }

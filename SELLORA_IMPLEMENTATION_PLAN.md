@@ -81,14 +81,38 @@ plan-comparison screen — none of this was in the confirmed scope for the 2026-
 ## PHASE 4 — Catalog, pricing, and CJ import
 
 Confirm the CJ account/API contract, add a supplier adapter, shipping quote contract, integer-minor-
-unit `Money` type, configurable pricing rules, import drafts. Not started as app-facing work, but
-`functions/`'s backend for this phase changed underneath it 2026-09-12 (see `WORKLOG.md`): a real CJ
-auth/catalog-sync/tracking pipeline and a margin-based pricing engine (FX, region/VAT) now exist
-server-side, adopted from a rebranded external codebase — well past the old `cj.ts` sketch. Still
-unstarted: reconciling any of it with the Flutter client (`ApiEndpoints`, `ProductModel.fromMap`,
-`CjDropshippingService` all expect different request/response shapes than this backend returns) and
-deciding how a shared CJ catalog (`products`/`categories`, no seller scoping) maps onto per-seller
-`listings` at import time.
+unit `Money` type, configurable pricing rules, import drafts.
+
+**Done (2026-09-14, see `WORKLOG.md`):** the catalog-browsing plumbing is now reconciled with the
+adopted backend — `ApiEndpoints`/`CjDropshippingService`/`FirebaseAdminRepository.syncCjCatalog`
+call the real endpoint names (`searchProducts`/`getProductDetail`/`runCatalogSync`) with the real
+query param names, unwrap the `{success, data, message}` envelope, and map the actual response field
+names onto `ProductModel` (via new parsing helpers, not `ProductModel.fromMap`, which stays reserved
+for the client's own persisted `listings` shape). The admin catalog-sync screen now triggers the real
+server-side pipeline instead of a hand-rolled partial client-side sync into a dead `catalog` collection
+(removed, along with its now-stale `firestore.rules` block).
+
+Still not started as app-facing work: any catalog browse/import screen actually using this plumbing;
+`getCategories`/`calculateFreight` client methods (endpoints are correctly named in `ApiEndpoints` but
+unconsumed — no category-browsing or shipping-estimate UI exists yet); a backend endpoint for
+interactive margin-slider pricing (today's margin math is baked silently into search/detail responses,
+with no "recalculate for margin X" call to make); and deciding how a shared CJ catalog (`products`/
+`categories`, confirmed no seller/store scoping anywhere) maps onto per-seller `listings` at import
+time. Real per-variant SKU/price/stock also still isn't representable client-side — `ProductVariant`
+stays an attribute-picker (`{name, options}`) derived from the backend's richer per-SKU variant list,
+not a purchasable-variant model; extending it is deferred until an import/variant-picker screen actually
+needs it.
+
+**Found 2026-09-14, `IntasendService` fixed the same day (see PHASE 8 below):** while reconciling
+`ApiEndpoints`, `IntasendService`'s three order-checkout endpoint constants and
+`FirebaseOrderRepository.placeOrder`'s request/response shape were confirmed to have the same class of
+bug just fixed for catalog — both still targeted the old, deleted TypeScript backend's shapes. Digging
+in turned up a deeper, genuine blocker rather than a same-day fix for both: `createOrder`'s real item
+shape needs CJ's own `pid`/`vid` per line, and no `vid` (a purchasable per-SKU id) exists anywhere
+client-side — `ProductVariant` is only `{name, options}` attribute strings. So `IntasendService` itself
+was fixed (mechanical — see PHASE 8), but `FirebaseOrderRepository.placeOrder`/`CheckoutController`
+were deliberately left broken: reconciling them for real needs a variant-id-carrying product model,
+i.e. the import/variant-picker screen work directly above, not a client-side endpoint fix.
 
 ## PHASE 5 — Seller product management
 
@@ -128,6 +152,16 @@ none of "not started" above is actually closed by it. The old `createOrder`/`int
 description above (server-priced from `listings`, 2% fee snapshot, `sellerId`/`storeId` on the order)
 describes code that no longer exists on disk (only at git history) — this phase's real next step is
 reconciling the two rather than resuming where the old code left off.
+
+**2026-09-14 update:** `IntasendService` (order-checkout payment) reconciled with the adopted backend —
+`payOrderMpesa`/`payOrderCard`/`confirmOrderPayment` now call the real endpoints with the real
+`{orderId, ...}` request shape and unwrap the real `{success, data}` response, replacing the old
+client-computed-amount `collectMpesa`/`createCheckout`/`checkStatus` (dead code beyond one call site,
+same pattern as `CjDropshippingService`'s earlier dead-code removal). `CheckoutController`'s one call
+site was updated to compile against the new signature. Confirmed, not fixed: `createOrder`'s side of
+the flow (`FirebaseOrderRepository.placeOrder`) is genuinely blocked, not just unstarted — see the PHASE
+4 note above. So `IntasendService` is now correct in isolation, but nothing in the app can reach it with
+a valid order id yet.
 
 ## PHASE 9 — Analytics + marketing
 

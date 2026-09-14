@@ -15,7 +15,7 @@ class FirebaseProductRepository extends GetxService
   @override
   Future<List<ProductModel>> browseCatalog(
       {String? keyword, String? category}) {
-    return _cj.searchProducts(keyword: keyword, category: category);
+    return _cj.searchProducts(keyword: keyword, categoryId: category);
   }
 
   @override
