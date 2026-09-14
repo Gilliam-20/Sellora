@@ -6,6 +6,83 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-15 — ProductVariant carries CJ's real per-SKU `vid`; threaded through cart/checkout
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`
+lints, `flutter test` 13/13, `flutter build web` succeeds).
+
+Picked up the concrete next step named at the end of the 2026-09-14 entry below: `ProductVariant` was
+only `{name, options}` attribute strings, so no real CJ purchasable-SKU id (`vid`) existed anywhere
+client-side — the confirmed blocker for both PHASE 4's import screen and PHASE 8's checkout (`createOrder`
+requires `{pid, vid, quantity}` per line). Asked the user how to scope this before touching code, given
+three genuinely different-sized options (model+wiring only, model+wiring+seller variant-picker screen,
+model+wiring+buyer variant-picker screen). User chose the narrowest: model + wiring only, no new UI.
+
+Confirmed the exact real shape against `functions/lib/cjApi.js`'s `getProductDetail` (per variant:
+`{vid, sku, key, attributes, image, supplierPriceUsd, retailPriceUsd, weight}` — no per-variant stock;
+CJ stock is a separate internal-only lookup used by `catalogSync.js`, not exposed to the client) and
+`functions/lib/orders.js`'s `createOrder`/`validateOrderRequest` (every item requires a non-empty
+string `vid`, or the request is rejected outright).
+
+Also confirmed neither `product_details_view.dart` nor `seller_catalog_view.dart` ever actually
+rendered variant data (the old `selectedVariant` just silently auto-picked "first option" with no
+picker UI) — so this really was a pure model/wiring change with zero UI to update, matching the chosen
+scope exactly.
+
+**Changed:**
+- **`lib/data/models/product_model.dart`**: `ProductVariant` redesigned from `{name, options}` (an
+  attribute-picker dimension) to one purchasable SKU: `{vid, sku, attributes: Map<String,String>, price,
+  costPrice, image}`, with `label` (e.g. "Black / M"), `fromMap`/`toMap`. `ProductModel.toMap`/`fromMap`
+  now round-trip `variants` (previously dropped entirely — a real CJ `vid` would have been lost the
+  moment a seller's `listings` doc was written/read back).
+- **`lib/data/services/cj_dropshipping_service.dart`**: `_detailToProduct` now maps CJ's real per-SKU
+  variant list straight onto `ProductVariant` (`_mapVariants`, replacing the old `_variantOptions` that
+  collapsed the list into distinct attribute values and threw the per-SKU `vid` away).
+- **`lib/data/models/cart_item_model.dart`**: `selectedVariant` is now `ProductVariant?` (was `String?`).
+  Line pricing deliberately still comes from `product.sellPrice` (the seller's own listing price), not
+  the variant's CJ price — no pricing-model change was in scope here.
+- **`lib/data/repositories/cart_repository.dart`**: `add()` takes `ProductVariant?`; the
+  same-product-different-variant cart-line check now compares by `vid` instead of object/string equality.
+- **`lib/modules/buyer/product_details/product_details_controller.dart`**: `selectedVariant` is now
+  `Rxn<ProductVariant>`, auto-picking `product.variants.first` (unchanged behavior, now the whole variant
+  rather than one attribute string).
+- **`lib/data/models/order_model.dart`**: `OrderItem` gained `cjProductId` (CJ's `pid`) and split the old
+  `variant` string into `variantId` (CJ's `vid`) + `variantLabel` (display). Confirmed zero UI ever read
+  `OrderItem.variant` before renaming it.
+- **`lib/modules/buyer/checkout/checkout_controller.dart`**: `OrderItem` construction now passes
+  `cjProductId`/`variantId`/`variantLabel` from the cart line's product/variant.
+- **`lib/data/repositories/firebase_order_repository.dart`**: `placeOrder`'s `createOrder` request now
+  sends `{pid, vid, quantity}` per item (previously `{productId, quantity, variant}`, which matched
+  neither the adopted backend nor any prior one).
+- **`lib/core/constants/app_constants.dart`**: `createOrder`'s doc comment updated — the `vid` gap is
+  closed; documents precisely what's still unreconciled (see below).
+
+**Deliberately not done (out of this pass's confirmed scope):**
+- No seller-facing variant-picker/import-detail screen and no buyer-facing variant-selector UI — the
+  user explicitly chose model+wiring only. A seller importing a multi-variant product still lists it at
+  one flat price with whatever `variants` the CJ detail call returned; a buyer's product-detail page still
+  silently defaults to the first variant, same as before.
+- `FirebaseOrderRepository.placeOrder`'s two other known-broken parts, deliberately left alone rather
+  than half-fixed: (1) `shippingAddress` is still a free-text string; `createOrder` requires
+  `{countryCode, ...}`, and `CheckoutController` has no UI to collect anything more than a string
+  address. (2) The response parsing (`res['orderId']`/`res['code']`/`res['serviceFeeAmount']`) still
+  assumes fields the adopted single-vendor backend's `createOrder` doesn't return at all (real shape:
+  `{id, totalAmount, currency, items, ...}`, no seller/store/fee concept). Fixing either is a real
+  reconciliation of two different checkout models (marketplace-with-fee-split vs. single-vendor), the
+  same "reconciling the two backends" work flagged as its own step since the 2026-09-12 backend-adoption
+  entry — not a mechanical fix alongside the variant-id wiring.
+- `CartItemModel`/checkout pricing still ignores the variant's own CJ `price`/`costPrice` — intentional;
+  `sellPrice` is the seller's single chosen price for the whole listing, and changing that would be a
+  pricing-model decision, not wiring.
+
+**Next step:** the per-SKU variant id gap is closed at the model layer. What's left for PHASE 8 checkout
+to actually work end-to-end against the real backend is exactly the two items above (shippingAddress
+shape, response parsing) — both already scoped out here, not newly discovered. For PHASE 4, the seller
+still has no screen to actually see/pick a specific variant before importing; today's flat-price import
+just carries whichever variants CJ returned along for the ride.
+
+---
+
 ## 2026-09-14 — IntasendService reconciled with the adopted backend; deeper checkout blocker confirmed
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`

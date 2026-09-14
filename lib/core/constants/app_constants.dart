@@ -54,13 +54,14 @@ class ApiEndpoints {
   /// order document directly; firestore.rules denies it (`orders` create
   /// is `if false`). NOTE: this is the single-vendor backend's own
   /// `createOrder` (items keyed by CJ's own `pid`/`vid`, no seller/store/fee
-  /// concept at all) — `FirebaseOrderRepository.placeOrder` still sends/reads
-  /// the *old*, deleted TS backend's shape (`productId`, `orderId`/`code`/
-  /// `serviceFeeAmount` in the response) and has no real CJ `vid` to send in
-  /// the first place: `ProductVariant` is only `{name, options}` strings, not
-  /// a purchasable per-SKU id (see SELLORA_IMPLEMENTATION_PLAN.md's PHASE 4).
-  /// Not reconciled by this pass — genuinely blocked on that variant-id gap,
-  /// not just unstarted work.
+  /// concept at all). The `vid` gap is now closed — `ProductVariant` carries
+  /// CJ's real per-SKU `vid`/`sku`/price (2026-09-15), and
+  /// `FirebaseOrderRepository.placeOrder` sends `{pid, vid, quantity}` per
+  /// item. Still unreconciled: `shippingAddress` must be `{countryCode,
+  /// ...}` (checkout only collects a free-text string today), and the
+  /// response has no `orderId`/`code`/`serviceFeeAmount` — the real shape is
+  /// `{id, totalAmount, currency, items, ...}` (see SELLORA_IMPLEMENTATION_
+  /// PLAN.md's PHASE 8).
   static const String createOrder = '$baseFunctionsUrl/createOrder';
 
   /// Order-checkout payment (not billing) — functions/index.js's

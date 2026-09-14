@@ -34,11 +34,13 @@ class CheckoutController extends GetxController {
       final items = cartRepo.items
           .map((i) => OrderItem(
                 productId: i.product.id,
+                cjProductId: i.product.cjProductId,
                 title: i.product.title,
                 imageUrl: i.product.imageUrl,
                 quantity: i.quantity,
                 unitPrice: i.product.sellPrice,
-                variant: i.selectedVariant,
+                variantId: i.selectedVariant?.vid,
+                variantLabel: i.selectedVariant?.label,
               ))
           .toList();
 
@@ -79,11 +81,15 @@ class CheckoutController extends GetxController {
       // neither itself anymore.
       //
       // NOTE: this whole branch is unreachable today (useMockData is always
-      // true) and would still fail if it ran — placeOrder above sends the
-      // old, unreconciled request shape and has no real CJ variant id to
-      // send in the first place (see ApiEndpoints.createOrder's doc
-      // comment). The payOrderMpesa call below is correct against the real
-      // backend; what it's called with isn't, yet.
+      // true) and would still fail if it ran. The real CJ variant id gap is
+      // now closed (ProductVariant carries CJ's own `vid`, threaded through
+      // here), but placeOrder still builds `shippingAddress` as a plain
+      // string when createOrder requires `{countryCode, ...}`, and its
+      // response parsing still assumes fields (`orderId`/`code`/
+      // `serviceFeeAmount`) the adopted single-vendor backend doesn't return
+      // (see ApiEndpoints.createOrder's doc comment). The payOrderMpesa call
+      // below is correct against the real backend; what it's called with
+      // isn't, yet.
       final draft = OrderModel(
         id: '',
         code: '',

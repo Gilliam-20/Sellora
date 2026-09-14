@@ -12,16 +12,27 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
   @override
   Future<OrderModel> placeOrder(OrderModel order) async {
     // The order doc is never written directly from the client — the
-    // Cloud Function re-reads each listing's price/seller itself, so a
-    // tampered `order.total`/`sellerId`/fee field here is simply ignored.
-    // See functions/src/orders.ts's createOrder and firestore.rules
-    // (`orders` create is `if false`).
+    // Cloud Function re-prices every item from CJ's own live price itself,
+    // so a tampered `order.total`/fee field here is simply ignored. See
+    // functions/lib/orders.js's createOrder and firestore.rules (`orders`
+    // create is `if false`).
+    //
+    // `pid`/`vid` per item is now correct — [OrderItem.cjProductId] and
+    // [OrderItem.variantId] carry CJ's own ids all the way from the
+    // catalog/variant model. Still unreconciled, and NOT fixed by this
+    // wiring pass: `shippingAddress` needs to be `{countryCode, ...}`, not
+    // a free-text string (see CheckoutController, which only collects the
+    // latter), and the response below reads `orderId`/`code`/
+    // `serviceFeeAmount` — fields the adopted single-vendor backend's
+    // `createOrder` doesn't return (it returns `{id, totalAmount, currency,
+    // items, ...}` with no seller/fee/store concept at all). Both need a
+    // real reconciliation pass, not a mechanical fix.
     final res = await _dio.post(ApiEndpoints.createOrder, data: {
       'items': order.items
           .map((i) => {
-                'productId': i.productId,
+                'pid': i.cjProductId ?? i.productId,
+                'vid': i.variantId,
                 'quantity': i.quantity,
-                'variant': i.variant,
               })
           .toList(),
       'shippingAddress': order.shippingAddress,

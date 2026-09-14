@@ -30,38 +30,57 @@ extension OrderPaymentStatusX on OrderPaymentStatus {
 class OrderItem {
   OrderItem({
     required this.productId,
+    this.cjProductId,
     required this.title,
     required this.imageUrl,
     required this.quantity,
     required this.unitPrice,
-    this.variant,
+    this.variantId,
+    this.variantLabel,
   });
 
   final String productId;
+
+  /// CJ's own product id (`pid`) — the value `createOrder`'s
+  /// `{pid, vid, quantity}` line-item shape needs (functions/lib/orders.js).
+  /// Null for a listing with no CJ origin.
+  final String? cjProductId;
   final String title;
   final String imageUrl;
   final int quantity;
   final double unitPrice;
-  final String? variant;
+
+  /// CJ's own purchasable per-SKU id (`vid`) for the chosen [ProductVariant].
+  /// Required by `createOrder` alongside [cjProductId]; null when the
+  /// product has no real CJ variant data.
+  final String? variantId;
+
+  /// Human-readable variant label for display/receipts (e.g. "Black / M") —
+  /// see [ProductVariant.label].
+  final String? variantLabel;
 
   double get total => unitPrice * quantity;
 
   Map<String, dynamic> toMap() => {
         'productId': productId,
+        'cjProductId': cjProductId,
         'title': title,
         'imageUrl': imageUrl,
         'quantity': quantity,
         'unitPrice': unitPrice,
-        'variant': variant,
+        'variantId': variantId,
+        'variantLabel': variantLabel,
       };
 
   factory OrderItem.fromMap(Map<String, dynamic> map) => OrderItem(
         productId: map['productId'] as String,
+        cjProductId: map['cjProductId'] as String?,
         title: map['title'] as String,
         imageUrl: map['imageUrl'] as String? ?? '',
         quantity: map['quantity'] as int? ?? 1,
         unitPrice: (map['unitPrice'] as num?)?.toDouble() ?? 0,
-        variant: map['variant'] as String?,
+        variantId: map['variantId'] as String?,
+        variantLabel: map['variantLabel'] as String?,
       );
 }
 

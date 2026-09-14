@@ -114,6 +114,15 @@ was fixed (mechanical — see PHASE 8), but `FirebaseOrderRepository.placeOrder`
 were deliberately left broken: reconciling them for real needs a variant-id-carrying product model,
 i.e. the import/variant-picker screen work directly above, not a client-side endpoint fix.
 
+**Closed 2026-09-15 (model + wiring only, see WORKLOG.md):** `ProductVariant` now carries CJ's real
+per-SKU `vid`/`sku`/`attributes`/price straight from `getProductDetail`'s variant list (previously
+collapsed into an attribute-picker that discarded `vid` entirely). `ProductModel.toMap`/`fromMap` now
+round-trip `variants`, so a real `vid` survives from CJ import through a seller's `listings` doc to
+checkout. User explicitly scoped this to model + wiring — no seller variant-picker/import-detail screen
+and no buyer variant-selector UI were built; a multi-variant product still imports and displays exactly
+as before, just with real ids riding along underneath. See PHASE 8 below for how far this actually
+unblocks checkout.
+
 ## PHASE 5 — Seller product management
 
 Store-scoped products/variants/inventory/collections/SEO, server-authorized write paths, paginated
@@ -162,6 +171,19 @@ site was updated to compile against the new signature. Confirmed, not fixed: `cr
 the flow (`FirebaseOrderRepository.placeOrder`) is genuinely blocked, not just unstarted — see the PHASE
 4 note above. So `IntasendService` is now correct in isolation, but nothing in the app can reach it with
 a valid order id yet.
+
+**2026-09-15 update:** the per-SKU variant-id blocker named above is closed at the model layer (see
+PHASE 4's 2026-09-15 note) and threaded all the way through: `CartItemModel.selectedVariant` is now a
+real `ProductVariant`, `OrderItem` carries `cjProductId`/`variantId`, and
+`FirebaseOrderRepository.placeOrder` sends `createOrder` the correct `{pid, vid, quantity}` per item.
+This closes exactly one of the two things blocking real checkout, confirmed by reading
+`functions/lib/orders.js` directly: `createOrder` also requires `shippingAddress.countryCode` (a
+structured object) where `CheckoutController` only ever collects a free-text address string, and its
+response (`{id, totalAmount, currency, items, ...}`) has no `orderId`/`code`/`serviceFeeAmount` for
+`placeOrder`'s return mapping to read — both deliberately left alone this pass (user scoped it to
+variant-id wiring only), and both are the same class of "reconcile two different checkout models"
+problem flagged since 2026-09-12, not new discoveries. Checkout end-to-end is still blocked, just on a
+smaller, more precisely-named remainder than before.
 
 ## PHASE 9 — Analytics + marketing
 

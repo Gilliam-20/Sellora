@@ -94,9 +94,9 @@ class CjDropshippingService extends GetxService {
   /// [ProductModel]. The detail endpoint carries no top-level price or
   /// stock at all — pricing lives per-variant, so this uses the first
   /// variant's price as the product's default (a seller still sets their
-  /// own sell price when listing). Real per-variant SKU/price/stock isn't
-  /// representable by [ProductVariant] today (see [_variantOptions]) —
-  /// only the attribute names/options survive, for a picker UI.
+  /// own sell price when listing). [_mapVariants] carries each variant's
+  /// real CJ `vid` through so it survives to checkout — see
+  /// [ProductVariant].
   ProductModel _detailToProduct(Map<String, dynamic> data) {
     final id = data['id'] as String? ?? '';
     final variants = (data['variants'] as List? ?? [])
@@ -115,28 +115,25 @@ class CjDropshippingService extends GetxService {
           (data['categoryId'] as String?) ??
           'General',
       description: data['description'] as String? ?? '',
-      variants: _variantOptions(
-        attributeNames: List<String>.from(data['attributeNames'] as List? ?? []),
-        variants: variants,
-      ),
+      variants: _mapVariants(variants),
     );
   }
 
-  /// Derives an attribute-picker ([ProductVariant]'s `{name, options}`
-  /// shape) from CJ's real per-SKU variant list by collecting the distinct
-  /// values seen for each attribute name across all variants.
-  List<ProductVariant> _variantOptions({
-    required List<String> attributeNames,
-    required List<Map<String, dynamic>> variants,
-  }) {
-    return attributeNames.map((name) {
-      final options = <String>{};
-      for (final v in variants) {
-        final attrs = Map<String, dynamic>.from(v['attributes'] as Map? ?? {});
-        final value = attrs[name];
-        if (value != null) options.add(value.toString());
-      }
-      return ProductVariant(name: name, options: options.toList());
+  /// Maps CJ's real per-SKU variant list (each already carrying its own
+  /// `vid`/`sku`/`attributes`/price — see functions/lib/cjApi.js's
+  /// `getProductDetail`) directly onto [ProductVariant], one purchasable
+  /// SKU per entry.
+  List<ProductVariant> _mapVariants(List<Map<String, dynamic>> variants) {
+    return variants.map((v) {
+      final attrs = Map<String, dynamic>.from(v['attributes'] as Map? ?? {});
+      return ProductVariant(
+        vid: v['vid'] as String? ?? '',
+        sku: v['sku'] as String? ?? '',
+        attributes: attrs.map((key, value) => MapEntry(key, value.toString())),
+        price: (v['retailPriceUsd'] as num?)?.toDouble() ?? 0,
+        costPrice: (v['supplierPriceUsd'] as num?)?.toDouble() ?? 0,
+        image: v['image'] as String?,
+      );
     }).toList();
   }
 }

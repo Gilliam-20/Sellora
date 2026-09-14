@@ -26,9 +26,10 @@ class CartRepository extends GetxService {
   double get subtotal => items.fold(0, (sum, item) => sum + item.lineTotal);
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
 
-  void add(ProductModel product, {String? variant, int quantity = 1}) {
-    final existingIndex = items.indexWhere(
-        (i) => i.product.id == product.id && i.selectedVariant == variant);
+  void add(ProductModel product, {ProductVariant? variant, int quantity = 1}) {
+    final existingIndex = items.indexWhere((i) =>
+        i.product.id == product.id &&
+        i.selectedVariant?.vid == variant?.vid);
     if (existingIndex != -1) {
       items[existingIndex].quantity += quantity;
       items.refresh();

@@ -7,14 +7,14 @@ class ProductDetailsController extends GetxController {
 
   late final ProductModel product;
   final quantity = 1.obs;
-  final selectedVariant = RxnString();
+  final selectedVariant = Rxn<ProductVariant>();
 
   @override
   void onInit() {
     super.onInit();
     product = Get.arguments as ProductModel;
     if (product.variants.isNotEmpty) {
-      selectedVariant.value = product.variants.first.options.first;
+      selectedVariant.value = product.variants.first;
     }
   }
 

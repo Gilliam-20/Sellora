@@ -96,6 +96,9 @@ class ProductModel {
       currency: map['currency'] as String? ?? 'USD',
       category: map['category'] as String? ?? 'General',
       description: map['description'] as String? ?? '',
+      variants: (map['variants'] as List? ?? [])
+          .map((v) => ProductVariant.fromMap(Map<String, dynamic>.from(v as Map)))
+          .toList(),
       sellerId: map['sellerId'] as String?,
       isListed: map['isListed'] as bool? ?? false,
       soldCount: map['soldCount'] as int? ?? 0,
@@ -118,6 +121,7 @@ class ProductModel {
       'currency': currency,
       'category': category,
       'description': description,
+      'variants': variants.map((v) => v.toMap()).toList(),
       'sellerId': sellerId,
       'isListed': isListed,
       'soldCount': soldCount,
@@ -128,8 +132,53 @@ class ProductModel {
   }
 }
 
+/// One purchasable CJ SKU. `vid` is CJ's own per-variant id — the exact
+/// value `createOrder`'s `{pid, vid, quantity}` line-item shape requires
+/// (functions/lib/orders.js), so it has to survive from catalog import all
+/// the way to checkout, not just describe the option for display.
+///
+/// `price`/`costPrice` are CJ's own per-SKU retail/supplier price, kept for
+/// reference — they do NOT feed [ProductModel.sellPrice], which stays the
+/// seller's single chosen price for the whole listing.
 class ProductVariant {
-  ProductVariant({required this.name, required this.options});
-  final String name; // e.g. "Color"
-  final List<String> options; // e.g. ["Black", "White"]
+  ProductVariant({
+    required this.vid,
+    this.sku = '',
+    this.attributes = const {},
+    this.price = 0,
+    this.costPrice = 0,
+    this.image,
+  });
+
+  final String vid;
+  final String sku;
+  final Map<String, String> attributes; // e.g. {"Color": "Black", "Size": "M"}
+  final double price; // CJ's retailPriceUsd for this SKU
+  final double costPrice; // CJ's supplierPriceUsd for this SKU
+  final String? image;
+
+  /// Human-readable label for display/receipts, e.g. "Black / M".
+  String get label => attributes.isNotEmpty ? attributes.values.join(' / ') : sku;
+
+  factory ProductVariant.fromMap(Map<String, dynamic> map) {
+    return ProductVariant(
+      vid: map['vid'] as String? ?? '',
+      sku: map['sku'] as String? ?? '',
+      attributes: Map<String, String>.from(map['attributes'] as Map? ?? {}),
+      price: (map['price'] as num?)?.toDouble() ?? 0,
+      costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0,
+      image: map['image'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'vid': vid,
+      'sku': sku,
+      'attributes': attributes,
+      'price': price,
+      'costPrice': costPrice,
+      'image': image,
+    };
+  }
 }
