@@ -123,6 +123,21 @@ and no buyer variant-selector UI were built; a multi-variant product still impor
 as before, just with real ids riding along underneath. See PHASE 8 below for how far this actually
 unblocks checkout.
 
+**Closed 2026-09-15, later same day (app-facing import screen, see WORKLOG.md):** the seller
+variant-picker/import-detail screen named as missing above now exists —
+`lib/modules/seller/product_import/`, pushed from the catalog list instead of the old flat-price bottom
+sheet. Re-fetches the full CJ detail (search results carry no description/variants), shows a real image
+gallery, a variant chip picker priced against that SKU's own CJ cost, and a smart-pricing card (quick
+margin presets + an editable price field with a live profit/margin readout) feeding `listProduct`'s new
+`isListed` flag for save-as-draft vs. publish. Still no buyer-facing variant selector (buyer product
+detail still auto-picks `variants.first`) and still no category browsing or shipping-cost estimate UI —
+`getCategories`/`calculateFreight` remain unconsumed `ApiEndpoints`, unchanged from 2026-09-14. Also
+fixed in passing: `MyListingsController`/`SellerDashboardController` only loaded their data once in
+`onInit()` and never refreshed on tab-switch (`SellerShellView` keeps every tab alive in one
+`IndexedStack`) — a seller importing a product wouldn't see it in My listings or the dashboard's
+listing count without leaving and re-entering the seller shell. Fixed by having the import screen call
+`.load()` on both after a successful write.
+
 ## PHASE 5 — Seller product management
 
 Store-scoped products/variants/inventory/collections/SEO, server-authorized write paths, paginated

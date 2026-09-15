@@ -103,10 +103,11 @@ class MockProductRepository extends GetxService implements ProductRepository {
   Future<void> listProduct(
       {required ProductModel catalogProduct,
       required String sellerId,
-      required double sellPrice}) async {
+      required double sellPrice,
+      bool isListed = true}) async {
     await Future.delayed(const Duration(milliseconds: 300));
     _listings.add(catalogProduct.copyWith(
-        sellerId: sellerId, isListed: true, sellPrice: sellPrice));
+        sellerId: sellerId, isListed: isListed, sellPrice: sellPrice));
   }
 
   @override

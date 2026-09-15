@@ -15,6 +15,10 @@ class MockSeedData {
           title: 'Wireless Earbuds — Active Noise Cancelling',
           imageUrl:
               'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600',
+          images: const [
+            'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600',
+            'https://images.unsplash.com/photo-1572536147248-ac59a8abfa4b?w=600',
+          ],
           costPrice: 14.20,
           sellPrice: 34.99,
           compareAtPrice: 49.99,
@@ -25,6 +29,31 @@ class MockSeedData {
           rating: 4.6,
           stock: 480,
           discountPercent: 30,
+          // Sample per-SKU variants so the seller import screen's variant
+          // picker/margin calculator has something real to demonstrate in
+          // mock mode — the live CJ backend's `getProductDetail` returns
+          // this same {vid, sku, attributes, price, costPrice, image} shape
+          // (see CjDropshippingService._mapVariants).
+          variants: [
+            ProductVariant(
+              vid: 'CJ-88214-BLK',
+              sku: 'EB-BLK',
+              attributes: const {'Color': 'Black'},
+              price: 34.99,
+              costPrice: 14.20,
+              image:
+                  'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=600',
+            ),
+            ProductVariant(
+              vid: 'CJ-88214-WHT',
+              sku: 'EB-WHT',
+              attributes: const {'Color': 'White'},
+              price: 34.99,
+              costPrice: 15.10,
+              image:
+                  'https://images.unsplash.com/photo-1572536147248-ac59a8abfa4b?w=600',
+            ),
+          ],
         ),
         ProductModel(
           id: 'p2',
@@ -40,6 +69,22 @@ class MockSeedData {
           soldCount: 96,
           rating: 4.4,
           stock: 260,
+          variants: [
+            ProductVariant(
+              vid: 'CJ-77031-38',
+              sku: 'WA-38MM',
+              attributes: const {'Size': '38mm'},
+              price: 27.50,
+              costPrice: 9.80,
+            ),
+            ProductVariant(
+              vid: 'CJ-77031-42',
+              sku: 'WA-42MM',
+              attributes: const {'Size': '42mm'},
+              price: 29.99,
+              costPrice: 11.40,
+            ),
+          ],
         ),
         ProductModel(
           id: 'p3',
@@ -63,7 +108,7 @@ class MockSeedData {
           cjProductId: 'CJ-65123',
           title: 'Ceramic Pour-Over Coffee Set',
           imageUrl:
-              'https://images.unsplash.com/photo-1621241441204-abb731a1f5b8?w=600',
+              'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=600',
           costPrice: 13.40,
           sellPrice: 32.00,
           category: 'Home',

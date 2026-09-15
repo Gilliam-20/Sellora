@@ -72,9 +72,10 @@ class FirebaseProductRepository extends GetxService
   Future<void> listProduct(
       {required ProductModel catalogProduct,
       required String sellerId,
-      required double sellPrice}) async {
+      required double sellPrice,
+      bool isListed = true}) async {
     final listed = catalogProduct.copyWith(
-        sellerId: sellerId, isListed: true, sellPrice: sellPrice);
+        sellerId: sellerId, isListed: isListed, sellPrice: sellPrice);
     await _fs.listings
         .doc('${sellerId}_${catalogProduct.id}')
         .set(listed.toMap());

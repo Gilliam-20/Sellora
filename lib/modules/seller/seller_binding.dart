@@ -3,6 +3,7 @@ import 'catalog/seller_catalog_controller.dart';
 import 'dashboard/seller_dashboard_controller.dart';
 import 'my_listings/my_listings_controller.dart';
 import 'orders/seller_orders_controller.dart';
+import 'product_import/product_import_controller.dart';
 import 'shell/seller_shell_controller.dart';
 import 'subscription/seller_subscription_controller.dart';
 
@@ -22,5 +23,12 @@ class SellerSubscriptionBinding extends Bindings {
   void dependencies() {
     Get.lazyPut<SellerSubscriptionController>(
         () => SellerSubscriptionController());
+  }
+}
+
+class ProductImportBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<ProductImportController>(() => ProductImportController());
   }
 }

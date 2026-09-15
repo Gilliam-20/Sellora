@@ -109,7 +109,8 @@ class _FakeProductRepository implements ProductRepository {
   Future<void> listProduct(
           {required ProductModel catalogProduct,
           required String sellerId,
-          required double sellPrice}) =>
+          required double sellPrice,
+          bool isListed = true}) =>
       throw UnimplementedError();
 
   @override

@@ -15,6 +15,7 @@ import '../../modules/marketing/marketing_controller.dart';
 import '../../modules/marketing/marketing_view.dart';
 import '../../modules/onboarding/bindings/seller_onboarding_binding.dart';
 import '../../modules/onboarding/views/seller_onboarding_view.dart';
+import '../../modules/seller/product_import/product_import_view.dart';
 import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
 import '../../modules/seller/subscription/seller_subscription_view.dart';
@@ -100,6 +101,12 @@ class AppPages {
       name: Routes.sellerSubscription,
       page: () => const SellerSubscriptionView(),
       binding: SellerSubscriptionBinding(),
+      middlewares: [RoleMiddleware(UserRole.seller)],
+    ),
+    GetPage(
+      name: Routes.sellerProductImport,
+      page: () => const ProductImportView(),
+      binding: ProductImportBinding(),
       middlewares: [RoleMiddleware(UserRole.seller)],
     ),
 

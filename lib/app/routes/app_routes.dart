@@ -25,7 +25,7 @@ abstract class Routes {
 
   // Seller portal
   static const sellerShell = '/seller';
-  static const sellerAddListing = '/seller/add-listing';
+  static const sellerProductImport = '/seller/import';
   static const sellerSubscription = '/seller/subscription';
 
   // Admin portal

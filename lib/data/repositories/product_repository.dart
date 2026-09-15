@@ -22,10 +22,14 @@ abstract class ProductRepository {
   Future<ProductModel> productDetail(String productId);
 
   /// A seller lists a catalog product in their store at their own price.
+  /// [isListed] false imports it as a draft — the same unpublished state
+  /// [unlistProduct] leaves an existing listing in, so it shows up in My
+  /// listings but not on the storefront.
   Future<void> listProduct(
       {required ProductModel catalogProduct,
       required String sellerId,
-      required double sellPrice});
+      required double sellPrice,
+      bool isListed = true});
 
   Future<void> updateListing(ProductModel product);
 

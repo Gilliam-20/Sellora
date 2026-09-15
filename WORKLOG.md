@@ -6,6 +6,97 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-15 — PHASE 4: seller product-import screen (variant picker + smart pricing)
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 3 pre-existing
+`info` lints, `flutter test` 13/13, live-verified in a browser).
+
+Picked up PHASE 4's last-named gap (2026-09-14 entry below, `SELLORA_IMPLEMENTATION_PLAN.md`): the
+catalog-browsing plumbing was reconciled with the real backend, but no screen actually used it beyond
+a flat-price bottom sheet with a single price field — no variant UI, no images beyond the summary
+thumbnail. Asked the user to scope Phase 4's remaining surface (search polish only / full import
+experience / full import + categories+shipping); chose "full import experience": a real product-detail
+screen plus a margin-based smart-pricing calculator and draft/publish. Explicitly out of scope:
+title/description/tags/collections/SEO editing and category browsing/shipping-estimate UI — those need
+concepts (collections, SEO slugs) that don't exist anywhere in the app yet.
+
+**Changed:**
+- **New `lib/modules/seller/product_import/`** (`product_import_controller.dart`,
+  `product_import_view.dart`): replaces the old catalog bottom sheet. `ProductImportController`
+  re-fetches the full CJ detail via the existing `ProductRepository.productDetail` (search results are
+  summary-only — no description/variants at all, confirmed against `functions/lib/cjApi.js`'s
+  `searchProducts`), tracks the selected `ProductVariant`, and prices against that variant's own CJ cost
+  (sizes/colors of the same product routinely cost different amounts) rather than always the first one.
+  The view shows a real image gallery (main image + thumbnails, swapping to a variant's own photo when
+  one is picked), a variant chip picker (only rendered when there's more than one SKU), and a "Smart
+  pricing" card: cost price, four quick-margin chips (+20/30/50/100%) that set the price field, and a
+  live profit/margin readout recomputed from cost + whatever's in the price field — editable directly,
+  not locked to a preset. "Save as draft" / "Publish to store" both call the same `import()`, differing
+  only in the `isListed` flag passed through.
+- **`lib/data/repositories/product_repository.dart`** (+ both implementations, + the test fake in
+  `test/mock_subscription_repository_test.dart`): `listProduct` gained `bool isListed = true` — the
+  "save as draft" half of the import workflow needed a way to list unpublished, matching the same
+  unpublished state `unlistProduct` already leaves an existing listing in.
+- **`lib/modules/seller/catalog/seller_catalog_controller.dart`/`seller_catalog_view.dart`**: the
+  controller's `listProduct`/`isListing` (the old bottom-sheet's logic) and the view's
+  `_ListProductSheet` are gone — tapping a catalog tile now pushes the new import screen
+  (`Get.toNamed(Routes.sellerProductImport, arguments: product)`) instead of opening a sheet with one
+  price field.
+- **`lib/app/routes/app_routes.dart`**: renamed the long-dead, never-registered `sellerAddListing`
+  constant to `sellerProductImport` (`/seller/import`) and actually registered it —
+  `lib/app/routes/app_pages.dart` gained the `GetPage` (seller-role-gated, matching every other seller
+  route), `lib/modules/seller/seller_binding.dart` gained `ProductImportBinding`.
+- **`lib/data/mock/mock_seed_data.dart`**: gave the earbuds (`p1`) and watch (`p2`) mock catalog
+  products real sample `ProductVariant`s (distinct per-SKU cost/price, one with its own image) — every
+  mock product had zero variants before this, so the variant picker had nothing to demonstrate in demo
+  mode. Also fixed three broken Unsplash photo ids that 404'd (`p1`'s intended second image, `p2`'s new
+  White-variant image, and `p4`'s long-standing `imageUrl` — the last one predates this session and was
+  simply never noticed before, since nothing rendered a coffee-set image next to a working one to
+  compare against).
+
+**Bug found and fixed along the way, unrelated to the plumbing above:** `MyListingsController`/
+`SellerDashboardController` only call their own `load()` from `onInit()`, but `SellerShellView` builds
+all five tabs into one `IndexedStack` up front (see `AdaptiveShellScaffold`) — so both controllers are
+created and loaded exactly once, immediately after login, and never again. Importing a product and
+switching to "My listings" or "Dashboard" showed stale pre-import data (verified live: a fresh import
+didn't appear, and "Active listings" didn't increment) until the whole seller shell was torn down and
+rebuilt. Fixed by having `ProductImportController.import()` call `.load()` on both controllers (guarded
+by `Get.isRegistered`) right after a successful write — the same self-refresh pattern
+`MyListingsController.unlist`/`relist` already use on themselves, just triggered from the sibling screen
+that actually changed the data.
+
+**Deliberately not done (out of this pass's confirmed scope):** title/description/SKU/tags editing,
+collection assignment, SEO fields — no "collection" or SEO-slug concept exists anywhere in the app yet,
+so this would be new modeling, not wiring; category browsing and a shipping-cost estimate
+(`getCategories`/`calculateFreight` stay unconsumed `ApiEndpoints`, same as the 2026-09-14 entry left
+them — no category-browsing or shipping-estimate UI exists to call them from); a buyer-facing variant
+selector (the buyer product-detail page still auto-picks `variants.first`, unchanged from the same-day
+vid-wiring entry).
+
+**Verified live in a browser this session**: `flutter run -d web-server` driven by a headless Chrome via
+Playwright (system Chrome — Playwright's own browser download has no path to its CDN from this sandbox;
+navigated with `networkidle` + coordinate clicks, since Flutter's CanvasKit renderer exposes no DOM for
+label/role-based queries, and a `--disable-gpu`/software-rendering launch-flag combination crashed the
+page outright, so the plain no-extra-flags recipe was kept). Signed in as the seller quick-login
+shortcut and imported the earbuds product: switched Black→White and watched the cost price and gallery
+image update reactively without touching the price field, tapped "+30%" and confirmed the price field
+became exactly `cost × 1.3`, typed a manual override and watched profit/margin recompute live, then
+saved as a draft. Separately published the watch product and confirmed — in the same session, without
+navigating away — that "Active listings" on the dashboard went 3→4 and the new row appeared in My
+listings switched on, both immediately (the refresh bug above, caught by this exact check). Confirmed a
+product with 0/1 variants (Ceramic Pour-Over Coffee Set) skips the variant-picker section entirely
+rather than rendering an empty one, and that its draft-saved row shows the toggle off, distinct from the
+three active rows. Zero console/page errors across every step.
+
+**Next step:** PHASE 4's app-facing surface now has a real import workflow; what's left of the phase
+(per `SELLORA_IMPLEMENTATION_PLAN.md`) is category browsing, a shipping-cost estimate, and reconciling
+how a shared CJ catalog maps onto per-seller `listings` at scale (still just
+`${sellerId}_${catalogProduct.id}` doc ids) — none of that was in this session's scope. PHASE 5 (seller
+product management — editing an existing listing's title/price/variants after import) is the natural
+next consumer of this same screen's pricing card.
+
+---
+
 ## 2026-09-15 — Fixed buyer-home GetX crash (category chips)
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing
