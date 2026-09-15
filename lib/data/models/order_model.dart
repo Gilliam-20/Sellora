@@ -27,6 +27,29 @@ extension OrderPaymentStatusX on OrderPaymentStatus {
       };
 }
 
+/// Where an order ships. `countryCode` is the only field
+/// `functions/lib/orders.js`'s `createOrder` validates — it derives the
+/// order's region/currency from it (see `functions/lib/regions.js`) and
+/// rejects a request without one. `line` is the free-text street/city
+/// address collected before this class existed.
+///
+/// NOT yet the full `{fullName, phone, email, line1, line2, city, province,
+/// zip}` shape `functions/lib/cjApi.js` needs to actually push a fulfillment
+/// to CJ — that's a separate, still-open gap (see WORKLOG.md 2026-09-15).
+class ShippingAddress {
+  ShippingAddress({required this.countryCode, required this.line});
+
+  final String countryCode;
+  final String line;
+
+  Map<String, dynamic> toMap() => {'countryCode': countryCode, 'line': line};
+
+  factory ShippingAddress.fromMap(Map<String, dynamic> map) => ShippingAddress(
+        countryCode: map['countryCode'] as String? ?? '',
+        line: map['line'] as String? ?? '',
+      );
+}
+
 class OrderItem {
   OrderItem({
     required this.productId,
@@ -114,6 +137,7 @@ class OrderModel {
     String? id,
     String? code,
     double? total,
+    String? currency,
     String? paymentReference,
     OrderStatus? status,
     OrderPaymentStatus? paymentStatus,
@@ -130,7 +154,7 @@ class OrderModel {
       items: items,
       status: status ?? this.status,
       total: total ?? this.total,
-      currency: currency,
+      currency: currency ?? this.currency,
       shippingAddress: shippingAddress,
       paymentMethod: paymentMethod,
       paymentReference: paymentReference ?? this.paymentReference,
@@ -156,7 +180,7 @@ class OrderModel {
   final OrderStatus status;
   final double total;
   final String currency;
-  final String shippingAddress;
+  final ShippingAddress shippingAddress;
   final String paymentMethod;
   final String? paymentReference;
   final String? trackingNumber;
@@ -190,7 +214,10 @@ class OrderModel {
           orElse: () => OrderStatus.pending),
       total: (map['total'] as num?)?.toDouble() ?? 0,
       currency: map['currency'] as String? ?? 'USD',
-      shippingAddress: map['shippingAddress'] as String? ?? '',
+      shippingAddress: map['shippingAddress'] is Map
+          ? ShippingAddress.fromMap(
+              Map<String, dynamic>.from(map['shippingAddress'] as Map))
+          : ShippingAddress(countryCode: '', line: ''),
       paymentMethod: map['paymentMethod'] as String? ?? 'IntaSend',
       paymentReference: map['paymentReference'] as String?,
       trackingNumber: map['trackingNumber'] as String?,
@@ -216,7 +243,7 @@ class OrderModel {
         'status': status.name,
         'total': total,
         'currency': currency,
-        'shippingAddress': shippingAddress,
+        'shippingAddress': shippingAddress.toMap(),
         'paymentMethod': paymentMethod,
         'paymentReference': paymentReference,
         'trackingNumber': trackingNumber,

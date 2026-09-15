@@ -6,6 +6,84 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-15 — Checkout: real `shippingAddress` shape + `createOrder` response parsing
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`
+lints, `flutter test` 13/13, `flutter build web` succeeds).
+
+Picked up the two items named at the end of the same-day variant-id entry below. Asked the user how to
+scope this first, since reading `functions/lib/orders.js` showed the response-parsing half isn't purely
+mechanical: the adopted backend has no seller/store/fee concept at all, while `OrderModel` is built
+around Sellora's marketplace fee-split (`sellerId`, `storeId`, `serviceFeeRate`, `sellerRevenue`,
+`code`). Fixing that "for real" is either a client-side decision to treat those fields as unused/zeroed
+bookkeeping (this session's scope), or a bigger change to add seller/store/2% fee support to the backend
+itself (named as its own, separate option; not started). User chose the client-only fix.
+
+**Changed:**
+- **`lib/data/models/order_model.dart`**: new `ShippingAddress` class (`{countryCode, line}`,
+  `fromMap`/`toMap`) — `countryCode` is the only field `createOrder` validates (it derives
+  region/currency from it via `functions/lib/regions.js`); `line` is the same free-text address the UI
+  collected before. `OrderModel.shippingAddress` is now `ShippingAddress` (was `String`). `copyWith`
+  gained a `currency` override — needed because the server derives currency from the shipping address
+  and can disagree with the client's draft guess.
+- **`lib/data/repositories/firebase_order_repository.dart`**: `placeOrder` now sends
+  `order.shippingAddress.toMap()`, and its response parsing reads the real shape
+  (`id`/`totalAmount`/`currency`) instead of the nonexistent `orderId`/`code`/`serviceFeeAmount`. There's
+  no human-readable order code in this backend, so the order id doubles as `code`. Deliberately keeps
+  the client-built `items` list rather than the response's own (which lacks `imageUrl`/`variantLabel`) —
+  only the fields the server actually recomputed are trusted from it.
+- **`lib/modules/buyer/checkout/checkout_controller.dart`**: `placeOrder` takes a new `countryCode`
+  param and builds a `ShippingAddress` from it + the existing address text, used in both the mock- and
+  real-mode order construction.
+- **`lib/modules/buyer/checkout/checkout_view.dart`**: added a country dropdown above the address field
+  (Kenya first, plus US/GB/DE/FR — the countries `functions/lib/regions.js` names its own pricing region
+  for; any other country still works, falling back to us/USD region pricing). Wired into `placeOrder`.
+- **`lib/core/constants/app_constants.dart`**: `createOrder`'s doc comment updated — both gaps closed;
+  documents the one still open (see below).
+
+**Deliberately not done (out of this pass's confirmed scope):**
+- No richer CJ-fulfillment address (`fullName`/`phone`/`email`/`line1`/`line2`/`city`/`province`/`zip` —
+  what `functions/lib/cjApi.js` actually needs to push a fulfillment to CJ later). `shippingAddress.line`
+  stays one free-text field, same shape the UI already collected; only `countryCode` was added.
+- No backend change. `sellerId`/`storeId`/`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/
+  `paymentFee` on `OrderModel` stay client-side-only bookkeeping the real order doc in Firestore has no
+  matching fields for — the 2% platform fee is not actually computed or collected by this backend for
+  any order. That's the "add seller/store/fee support to createOrder" option the user didn't pick this
+  session.
+
+**Verified live in a browser this session** (not just analyze/test/build): ran `flutter run -d web-server`
+and drove it with a headless Chrome via Playwright — signed up a seller, subscribed, signed in as a
+buyer at that store's `/s/{slug}/login`, added a seeded product to cart, and placed an order through the
+new checkout form. Confirmed the Country dropdown renders (Kenya default, plus US/GB/DE/FR), the order
+summary/total render correctly, and submitting produces the "Order placed" snackbar with the order
+showing up on the buyer's Orders tab — the mock-mode path works end to end with the new shape.
+
+**Bug found and fixed along the way, unrelated to this change:** `StorefrontLoginView`/
+`StorefrontRegisterView` called `_scope.resolveSlug(slug)` synchronously from `initState()`, which flips
+`StoreScope.isResolving` (an Rx an `Obx` in the same build depends on) while the widget is still
+mid-build — Flutter throws "setState()/markNeedsBuild() called during build" and the page is stuck on
+its loading spinner forever. This was a full block on **any** buyer ever signing in or registering at a
+storefront, confirmed via a browser console `pageerror`, and would have blocked this session's own live
+verification. Fixed in both files by deferring the call with
+`WidgetsBinding.instance.addPostFrameCallback`, the standard fix for this class of GetX/Flutter bug —
+confirmed fixed by rerunning the same browser flow (the spinner now resolves to the real sign-in form).
+
+**Second, separate bug surfaced but NOT fixed (out of this session's confirmed scope):** the buyer home
+screen (`BuyerHomeController`/its view) throws "[Get] the improper use of a GetX has been detected" as a
+visible red error banner over the product grid for a freshly-created store's buyer session — the
+underlying product data still renders correctly beneath it, and it didn't block navigating to product
+details/cart/checkout, so it was left alone rather than pulled into this pass's scope. Worth a dedicated
+look next time someone is in `lib/modules/buyer/home/`.
+
+**Next step:** PHASE 8 checkout is no longer blocked on any *named* mechanical gap — what's left is the
+real architectural fork flagged above (extend the adopted single-vendor backend with seller/store/2% fee
+support, or accept single-vendor and rethink what `OrderModel`'s marketplace fields mean) and the CJ
+fulfillment-address shape. For PHASE 4, the seller still has no screen to pick a specific variant before
+importing (unchanged from the entry below). The buyer-home GetX error banner above is a loose thread
+worth picking up too.
+
+---
+
 ## 2026-09-15 — ProductVariant carries CJ's real per-SKU `vid`; threaded through cart/checkout
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`

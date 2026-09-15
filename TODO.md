@@ -12,7 +12,7 @@
 | **5 — Seller product management** | Not started — blocked behind the deferred flat→`stores/{storeId}/products` write migration |
 | **6 — Store builder** | Not started |
 | **7 — Customer storefront** | Not started (`/s/:slug` shared buyer feed still marketplace-era) |
-| **8 — Payments + orders** | `IntasendService` (order-checkout payment) reconciled with the real backend 2026-09-14; the per-SKU CJ variant id gap closed 2026-09-15 — `FirebaseOrderRepository.placeOrder` now sends real `{pid, vid, quantity}` per item. Still broken: `shippingAddress` needs to be `{countryCode, ...}` (checkout only collects a string), and the response parsing assumes fields (`orderId`/`code`/`serviceFeeAmount`) the adopted single-vendor backend doesn't return. Not done: provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
+| **8 — Payments + orders** | `IntasendService` (order-checkout payment) reconciled with the real backend 2026-09-14; the per-SKU CJ variant id gap closed 2026-09-15 — `FirebaseOrderRepository.placeOrder` now sends real `{pid, vid, quantity}` per item. `shippingAddress`/response-shape gap also closed 2026-09-15 — checkout now collects a country and sends `{countryCode, line}`, and `placeOrder` reads the real `{id, totalAmount, currency, items, ...}` response. Still open: `shippingAddress.line` is one free-text string, not CJ's full fulfillment-address shape; no provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
 | **9 — Analytics + marketing** | Not started |
 | **10 — Admin** | Not started (existing admin screens are marketplace-era mocks) |
 | **11 — i18n** | Not started |

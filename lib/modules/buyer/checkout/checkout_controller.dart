@@ -17,13 +17,17 @@ class CheckoutController extends GetxController {
   final errorMessage = RxnString();
 
   Future<void> placeOrder(
-      {required String address, required String mpesaPhone}) async {
+      {required String address,
+      required String countryCode,
+      required String mpesaPhone}) async {
     final user = _authRepo.cachedUser;
     if (user == null || cartRepo.items.isEmpty) return;
 
     isPlacingOrder.value = true;
     errorMessage.value = null;
     try {
+      final shippingAddress =
+          ShippingAddress(countryCode: countryCode, line: address);
       // A real multi-seller cart would split into one order per seller.
       // Simplified here to a single order against the first item's
       // seller — matches functions/src/orders.ts's createOrder, which
@@ -59,10 +63,9 @@ class CheckoutController extends GetxController {
           status: OrderStatus.pending,
           total: cartRepo.subtotal,
           currency: 'KES',
-          shippingAddress: address,
+          shippingAddress: shippingAddress,
           paymentMethod: 'IntaSend M-Pesa',
-          paymentReference:
-              'MOCK-PAY-${DateTime.now().millisecondsSinceEpoch}',
+          paymentReference: 'MOCK-PAY-${DateTime.now().millisecondsSinceEpoch}',
           paymentStatus: OrderPaymentStatus.paid,
           createdAt: DateTime.now(),
         );
@@ -81,15 +84,12 @@ class CheckoutController extends GetxController {
       // neither itself anymore.
       //
       // NOTE: this whole branch is unreachable today (useMockData is always
-      // true) and would still fail if it ran. The real CJ variant id gap is
-      // now closed (ProductVariant carries CJ's own `vid`, threaded through
-      // here), but placeOrder still builds `shippingAddress` as a plain
-      // string when createOrder requires `{countryCode, ...}`, and its
-      // response parsing still assumes fields (`orderId`/`code`/
-      // `serviceFeeAmount`) the adopted single-vendor backend doesn't return
-      // (see ApiEndpoints.createOrder's doc comment). The payOrderMpesa call
-      // below is correct against the real backend; what it's called with
-      // isn't, yet.
+      // true), but should now actually work against the real backend once
+      // it is: the CJ variant id gap, the shippingAddress shape, and
+      // placeOrder's response parsing are all closed (see
+      // ApiEndpoints.createOrder's doc comment for what's still open —
+      // shippingAddress.line stays one free-text string, not CJ's full
+      // fulfillment-address shape).
       final draft = OrderModel(
         id: '',
         code: '',
@@ -100,7 +100,7 @@ class CheckoutController extends GetxController {
         status: OrderStatus.pending,
         total: cartRepo.subtotal,
         currency: 'KES',
-        shippingAddress: address,
+        shippingAddress: shippingAddress,
         paymentMethod: 'IntaSend M-Pesa',
         createdAt: DateTime.now(),
       );

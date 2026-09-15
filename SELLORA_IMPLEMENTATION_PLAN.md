@@ -185,6 +185,20 @@ variant-id wiring only), and both are the same class of "reconcile two different
 problem flagged since 2026-09-12, not new discoveries. Checkout end-to-end is still blocked, just on a
 smaller, more precisely-named remainder than before.
 
+**2026-09-15 update (later same day):** both remaining items above are closed, client-side only (user's
+explicit scope choice — see `WORKLOG.md`). `OrderModel.shippingAddress` is now a `ShippingAddress`
+(`{countryCode, line}`); `CheckoutView` collects a country; `FirebaseOrderRepository.placeOrder` sends
+that shape and reads the real `{id, totalAmount, currency, items, ...}` response instead of the
+nonexistent `orderId`/`code`/`serviceFeeAmount`. Checkout is no longer blocked on a named mechanical gap.
+What's left is the real fork flagged in the 2026-09-12 update above, now sharper: `OrderModel`'s
+`sellerId`/`storeId`/`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/`paymentFee` are client-side
+bookkeeping only — the adopted backend computes and stores none of them, so the 2% platform fee this
+whole product is named after isn't actually collected by any order today. Closing that for real means
+either adding seller/store/fee support to `functions/lib/orders.js`, or making a deliberate call that
+single-vendor is fine for now and those fields should shrink/go away. Separately, `shippingAddress.line`
+is still one free-text field, not the `{fullName, phone, email, line1, line2, city, province, zip}` shape
+`functions/lib/cjApi.js` needs to actually push a fulfillment to CJ later.
+
 ## PHASE 9 — Analytics + marketing
 
 Not started.

@@ -14,8 +14,7 @@ class StorefrontRegisterView extends StatefulWidget {
   const StorefrontRegisterView({super.key});
 
   @override
-  State<StorefrontRegisterView> createState() =>
-      _StorefrontRegisterViewState();
+  State<StorefrontRegisterView> createState() => _StorefrontRegisterViewState();
 }
 
 class _StorefrontRegisterViewState extends State<StorefrontRegisterView> {
@@ -30,7 +29,13 @@ class _StorefrontRegisterViewState extends State<StorefrontRegisterView> {
     super.initState();
     final slug = Get.parameters['slug'];
     if (slug != null && slug.isNotEmpty) {
-      _scope.resolveSlug(slug);
+      // Deferred a frame: calling this synchronously here flips
+      // StoreScope.isResolving (an Rx an Obx below depends on) while this
+      // very widget is still mid-build (initState runs during Element.mount),
+      // which throws "setState()/markNeedsBuild() called during build" and
+      // leaves the page stuck on its loading spinner forever.
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _scope.resolveSlug(slug));
     }
   }
 
@@ -79,8 +84,7 @@ class _StorefrontRegisterViewState extends State<StorefrontRegisterView> {
                     const SizedBox(height: AppSpacing.lg),
                     TextFormField(
                       controller: _nameCtrl,
-                      decoration:
-                          const InputDecoration(labelText: 'Full name'),
+                      decoration: const InputDecoration(labelText: 'Full name'),
                       validator: (v) => Validators.notEmpty(v, label: 'Name'),
                     ),
                     const SizedBox(height: AppSpacing.md),

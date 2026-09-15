@@ -28,7 +28,13 @@ class _StorefrontLoginViewState extends State<StorefrontLoginView> {
     super.initState();
     final slug = Get.parameters['slug'];
     if (slug != null && slug.isNotEmpty) {
-      _scope.resolveSlug(slug);
+      // Deferred a frame: calling this synchronously here flips
+      // StoreScope.isResolving (an Rx an Obx below depends on) while this
+      // very widget is still mid-build (initState runs during Element.mount),
+      // which throws "setState()/markNeedsBuild() called during build" and
+      // leaves the page stuck on its loading spinner forever.
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _scope.resolveSlug(slug));
     }
   }
 

@@ -15,6 +15,19 @@ class CheckoutView extends StatefulWidget {
   State<CheckoutView> createState() => _CheckoutViewState();
 }
 
+/// Curated against `functions/lib/regions.js`'s `REGION_CONFIG`: these are
+/// the country codes with their own named pricing region (kenya/us/uk/eu);
+/// anything else still works (the backend falls back to us/USD) but isn't
+/// worth listing here. Kenya defaults first per the product's Kenya-first
+/// positioning.
+const _countries = [
+  ('KE', 'Kenya'),
+  ('US', 'United States'),
+  ('GB', 'United Kingdom'),
+  ('DE', 'Germany'),
+  ('FR', 'France'),
+];
+
 class _CheckoutViewState extends State<CheckoutView> {
   // Owned here rather than created in build() — a rebuild (e.g. from
   // the responsive width check below) would otherwise hand every field
@@ -22,6 +35,7 @@ class _CheckoutViewState extends State<CheckoutView> {
   final _formKey = GlobalKey<FormState>();
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  String _countryCode = _countries.first.$1;
 
   @override
   void dispose() {
@@ -86,11 +100,24 @@ class _CheckoutViewState extends State<CheckoutView> {
                 Text('Shipping address',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
+                DropdownButtonFormField<String>(
+                  value: _countryCode,
+                  decoration: const InputDecoration(labelText: 'Country'),
+                  items: _countries
+                      .map((c) => DropdownMenuItem(
+                            value: c.$1,
+                            child: Text(c.$2),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _countryCode = v);
+                  },
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 TextFormField(
                   controller: _addressCtrl,
                   maxLines: 2,
-                  decoration:
-                      const InputDecoration(hintText: 'Street, city, country'),
+                  decoration: const InputDecoration(hintText: 'Street, city'),
                   validator: (v) => Validators.notEmpty(v, label: 'Address'),
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -124,6 +151,7 @@ class _CheckoutViewState extends State<CheckoutView> {
             if (_formKey.currentState!.validate()) {
               controller.placeOrder(
                   address: _addressCtrl.text.trim(),
+                  countryCode: _countryCode,
                   mpesaPhone: _phoneCtrl.text.trim());
             }
           },

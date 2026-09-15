@@ -17,16 +17,14 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
     // functions/lib/orders.js's createOrder and firestore.rules (`orders`
     // create is `if false`).
     //
-    // `pid`/`vid` per item is now correct — [OrderItem.cjProductId] and
+    // `pid`/`vid` per item is correct — [OrderItem.cjProductId] and
     // [OrderItem.variantId] carry CJ's own ids all the way from the
-    // catalog/variant model. Still unreconciled, and NOT fixed by this
-    // wiring pass: `shippingAddress` needs to be `{countryCode, ...}`, not
-    // a free-text string (see CheckoutController, which only collects the
-    // latter), and the response below reads `orderId`/`code`/
-    // `serviceFeeAmount` — fields the adopted single-vendor backend's
-    // `createOrder` doesn't return (it returns `{id, totalAmount, currency,
-    // items, ...}` with no seller/fee/store concept at all). Both need a
-    // real reconciliation pass, not a mechanical fix.
+    // catalog/variant model. `shippingAddress` now sends the
+    // `{countryCode, line}` shape `createOrder` requires (see
+    // [ShippingAddress]). `storeId`/`paymentMethod`/`currency` are sent for
+    // this app's own bookkeeping only — the adopted single-vendor backend
+    // ignores all three: it has no seller/store/fee concept, and derives
+    // `currency` itself from `shippingAddress.countryCode`.
     final res = await _dio.post(ApiEndpoints.createOrder, data: {
       'items': order.items
           .map((i) => {
@@ -35,17 +33,23 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
                 'quantity': i.quantity,
               })
           .toList(),
-      'shippingAddress': order.shippingAddress,
+      'shippingAddress': order.shippingAddress.toMap(),
       'storeId': order.storeId,
       'paymentMethod': order.paymentMethod,
       'currency': order.currency,
     });
 
+    // The real response is `{id, totalAmount, currency, items, ...}` — no
+    // `orderId`/`code`/`serviceFeeAmount` (no seller/fee/store concept at
+    // all). There's no human-readable code either, so the order id doubles
+    // as one. The response's own `items` lack imageUrl/variantLabel, so
+    // this keeps the richer client-built list rather than overwriting it —
+    // only the fields the server actually recomputed are trusted here.
     return order.copyWith(
-      id: res['orderId'] as String,
-      code: res['code'] as String,
-      total: (res['total'] as num).toDouble(),
-      serviceFeeAmount: (res['serviceFeeAmount'] as num).toDouble(),
+      id: res['id'] as String,
+      code: res['id'] as String,
+      total: (res['totalAmount'] as num).toDouble(),
+      currency: res['currency'] as String?,
       paymentStatus: OrderPaymentStatus.pending,
     );
   }
@@ -72,8 +76,10 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
 
   @override
   Future<List<OrderModel>> storeOrders(String storeId) async {
-    final snap =
-        await _fs.storeOrders(storeId).orderBy('createdAt', descending: true).get();
+    final snap = await _fs
+        .storeOrders(storeId)
+        .orderBy('createdAt', descending: true)
+        .get();
     return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
   }
 

@@ -54,14 +54,16 @@ class ApiEndpoints {
   /// order document directly; firestore.rules denies it (`orders` create
   /// is `if false`). NOTE: this is the single-vendor backend's own
   /// `createOrder` (items keyed by CJ's own `pid`/`vid`, no seller/store/fee
-  /// concept at all). The `vid` gap is now closed — `ProductVariant` carries
-  /// CJ's real per-SKU `vid`/`sku`/price (2026-09-15), and
-  /// `FirebaseOrderRepository.placeOrder` sends `{pid, vid, quantity}` per
-  /// item. Still unreconciled: `shippingAddress` must be `{countryCode,
-  /// ...}` (checkout only collects a free-text string today), and the
-  /// response has no `orderId`/`code`/`serviceFeeAmount` — the real shape is
-  /// `{id, totalAmount, currency, items, ...}` (see SELLORA_IMPLEMENTATION_
-  /// PLAN.md's PHASE 8).
+  /// concept at all). The `vid` gap is closed — `ProductVariant` carries
+  /// CJ's real per-SKU `vid`/`sku`/price (2026-09-15). The `shippingAddress`/
+  /// response-shape gap is closed too (2026-09-15) — `FirebaseOrderRepository
+  /// .placeOrder` sends `{pid, vid, quantity}` per item and a real
+  /// `{countryCode, line}` shippingAddress ([ShippingAddress]), and reads the
+  /// actual `{id, totalAmount, currency, items, ...}` response shape. Still
+  /// unreconciled: `shippingAddress.line` is one free-text string, not the
+  /// `{fullName, phone, email, line1, line2, city, province, zip}` shape
+  /// functions/lib/cjApi.js needs to actually push a fulfillment to CJ later
+  /// (see SELLORA_IMPLEMENTATION_PLAN.md's PHASE 8).
   static const String createOrder = '$baseFunctionsUrl/createOrder';
 
   /// Order-checkout payment (not billing) — functions/index.js's
