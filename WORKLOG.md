@@ -6,6 +6,45 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-15 — Fixed buyer-home GetX crash (category chips)
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing
+`info` lints, `flutter test` 13/13).
+
+Picked up the loose thread named at the end of the same-day checkout entry below: a fresh buyer
+session showed a "[Get] the improper use of a GetX has been detected" red error banner over the
+product grid. Reproduced it live (`flutter run -d web-server`, driven by a headless Chrome via
+Playwright — pointed at the system-installed Chrome directly, since `npx playwright install`
+couldn't reach its CDN from this sandbox) and captured the real stack trace rather than guessing:
+the error-causing widget was `Obx` at `buyer_home_view.dart:53`, the category-chips row.
+
+**Root cause:** that `Obx` wraps a `ListView.separated`. `ListView`'s `itemBuilder` is invoked
+lazily during layout, *after* the wrapping `Obx`'s own synchronous `build()` has already returned —
+so the only reactive read in there (`controller.selectedCategory.value`, used to highlight the
+selected chip) never happens inside the Obx's own build scope. GetX's `Obx` throws this specific
+error when its first build registers zero observable dependencies, which is exactly what happened:
+`controller.categories` is a plain `const List`, not `.obs`, so nothing else in the builder read a
+reactive value either. Beyond the crash, this was a real (if less visible) reactivity bug too:
+since the dependency was never registered, tapping a category chip would never have re-highlighted
+the selection, even if the crash weren't there.
+
+**Changed:**
+- **`lib/modules/buyer/home/buyer_home_view.dart`**: the category-chips `Obx`'s builder now reads
+  `controller.selectedCategory.value` once at the top of its own scope (before constructing the
+  `ListView.separated`), and the `itemBuilder` closes over that captured value instead of
+  re-reading `.value` itself. Registers the dependency where GetX can actually see it, fixing both
+  the crash and the dead reactivity in one change — no other file touched.
+
+**Verified live in a browser this session**: registered a fresh buyer at `/s/aminas-picks/register`
+(mock mode) and landed on buyer home — no error banner, "All" chip highlighted navy by default.
+Clicked "Electronics" — chip highlight correctly moved and the grid filtered to the 2 electronics
+listings, confirming the reactivity now actually works, not just that the crash is gone.
+
+**Next step:** the two PHASE 4/8 threads named in the entry below are both still open (the seller
+variant-picker screen, and the order-model architectural fork). Neither was in this session's scope.
+
+---
+
 ## 2026-09-15 — Checkout: real `shippingAddress` shape + `createOrder` response parsing
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing `info`

@@ -50,8 +50,16 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
               sliver: SliverToBoxAdapter(
                 child: SizedBox(
                   height: 36,
-                  child: Obx(
-                    () => ListView.separated(
+                  child: Obx(() {
+                    // ListView's itemBuilder is invoked lazily during layout,
+                    // after this Obx's own build() has already returned — a
+                    // read of selectedCategory.value in there never registers
+                    // as this Obx's dependency (GetX throws "improper use of
+                    // GetX" on first build, since it finds zero dependencies).
+                    // Reading it here, in the Obx's own synchronous scope,
+                    // is what makes chip selection actually reactive.
+                    final selected = controller.selectedCategory.value;
+                    return ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: EdgeInsets.symmetric(
                           horizontal: sliverPadding.horizontal / 2),
@@ -60,8 +68,7 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
                           const SizedBox(width: AppSpacing.sm),
                       itemBuilder: (context, index) {
                         final category = controller.categories[index];
-                        final isSelected =
-                            controller.selectedCategory.value == category;
+                        final isSelected = selected == category;
                         return ChoiceChip(
                           label: Text(category),
                           selected: isSelected,
@@ -74,8 +81,8 @@ class BuyerHomeView extends GetView<BuyerHomeController> {
                               controller.selectCategory(category),
                         );
                       },
-                    ),
-                  ),
+                    );
+                  }),
                 ),
               ),
             ),
