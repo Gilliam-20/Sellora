@@ -48,6 +48,26 @@ service cloud.firestore {
          !touchesAny(['subscriptionPlanId', 'subscriptionActiveUntil', 'sellerStatus',
            'sellerTermsAcceptedAt', 'sellerTermsVersion']));
       allow delete: if false;
+
+      // ---- personal notification inbox ---------------------------------
+      // An order participant may create the paired party's order alert, but
+      // only when the order itself proves the relationship. Recipients can
+      // only mark their own messages read; they cannot alter the message,
+      // recipient, or linked order.
+      match /notifications/{notificationId} {
+        allow read: if isOwner(uid);
+        allow create: if isSignedIn() &&
+          (isOwner(uid) ||
+           (request.resource.data.orderId is string &&
+            get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.buyerId == request.auth.uid &&
+            get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.sellerId == uid) ||
+           (request.resource.data.orderId is string &&
+            get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.sellerId == request.auth.uid &&
+            get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.buyerId == uid));
+        allow update: if isOwner(uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+        allow delete: if false;
+      }
     }
 
     // ---- stores (multi-tenant storefronts) -----------------------------

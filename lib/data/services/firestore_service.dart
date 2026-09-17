@@ -35,4 +35,8 @@ class FirestoreService extends GetxService {
 
   CollectionReference<Map<String, dynamic>> storeOrders(String storeId) =>
       stores.doc(storeId).collection('orders');
+
+  /// A private inbox below each user's document.
+  CollectionReference<Map<String, dynamic>> userNotifications(String userId) =>
+      users.doc(userId).collection('notifications');
 }

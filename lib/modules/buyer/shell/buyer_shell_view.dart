@@ -7,6 +7,8 @@ import '../cart/cart_view.dart';
 import '../home/buyer_home_view.dart';
 import '../orders/buyer_orders_view.dart';
 import '../profile/buyer_profile_view.dart';
+import '../../notifications/notification_center.dart';
+import '../../notifications/notifications_view.dart';
 import 'buyer_shell_controller.dart';
 
 class BuyerShellView extends GetView<BuyerShellController> {
@@ -16,12 +18,14 @@ class BuyerShellView extends GetView<BuyerShellController> {
     BuyerHomeView(),
     CartView(),
     BuyerOrdersView(),
+    NotificationsView(),
     BuyerProfileView()
   ];
 
   @override
   Widget build(BuildContext context) {
     final cart = Get.find<CartRepository>();
+    final notifications = Get.find<NotificationCenter>();
 
     return Obx(
       () => AdaptiveShellScaffold(
@@ -45,6 +49,16 @@ class BuyerShellView extends GetView<BuyerShellController> {
           ),
           const ShellDestination(
               icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
+          ShellDestination(
+            icon: Obx(
+              () => Badge(
+                isLabelVisible: notifications.unreadCount > 0,
+                label: Text('${notifications.unreadCount}'),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+            ),
+            label: 'Alerts',
+          ),
           const ShellDestination(
               icon: Icon(Icons.person_outline), label: 'Profile'),
         ],

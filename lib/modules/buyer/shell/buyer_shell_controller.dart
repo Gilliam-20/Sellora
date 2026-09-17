@@ -1,4 +1,6 @@
 import 'package:get/get.dart';
+import '../../../data/repositories/auth_repository.dart';
+import '../../notifications/notification_center.dart';
 
 class BuyerShellController extends GetxController {
   final tabIndex = 0.obs;
@@ -14,6 +16,8 @@ class BuyerShellController extends GetxController {
     final args = Get.arguments as Map?;
     final initialTab = args?['tab'];
     if (initialTab is int) tabIndex.value = initialTab;
+    final user = Get.find<AuthRepository>().cachedUser;
+    if (user != null) Get.find<NotificationCenter>().start(user.uid);
   }
 
   void changeTab(int index) => tabIndex.value = index;

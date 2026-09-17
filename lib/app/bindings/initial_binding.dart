@@ -6,16 +6,19 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/cart_repository.dart';
 import '../../data/repositories/firebase_admin_repository.dart';
 import '../../data/repositories/firebase_order_repository.dart';
+import '../../data/repositories/firebase_notification_repository.dart';
 import '../../data/repositories/firebase_product_repository.dart';
 import '../../data/repositories/firebase_store_repository.dart';
 import '../../data/repositories/firebase_subscription_repository.dart';
 import '../../data/repositories/mock/mock_admin_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
 import '../../data/repositories/mock/mock_order_repository.dart';
+import '../../data/repositories/mock/mock_notification_repository.dart';
 import '../../data/repositories/mock/mock_product_repository.dart';
 import '../../data/repositories/mock/mock_store_repository.dart';
 import '../../data/repositories/mock/mock_subscription_repository.dart';
 import '../../data/repositories/order_repository.dart';
+import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/store_repository.dart';
 import '../../data/repositories/subscription_repository.dart';
@@ -25,6 +28,7 @@ import '../../data/services/firestore_service.dart';
 import '../../data/services/intasend_service.dart';
 import '../../data/services/storage_service.dart';
 import '../../modules/storefront/store_scope.dart';
+import '../../modules/notifications/notification_center.dart';
 
 /// Everything the whole app needs for its entire lifetime is registered
 /// here, once, as `permanent: true` — services, and whichever
@@ -52,6 +56,8 @@ class InitialBinding extends Bindings {
       Get.put<AuthRepository>(MockAuthRepository(), permanent: true);
       Get.put<ProductRepository>(MockProductRepository(), permanent: true);
       Get.put<OrderRepository>(MockOrderRepository(), permanent: true);
+      Get.put<NotificationRepository>(MockNotificationRepository(),
+          permanent: true);
       Get.put<SubscriptionRepository>(MockSubscriptionRepository(),
           permanent: true);
       Get.put<AdminRepository>(MockAdminRepository(), permanent: true);
@@ -66,6 +72,8 @@ class InitialBinding extends Bindings {
       Get.put<AuthRepository>(FirebaseAuthRepository(), permanent: true);
       Get.put<ProductRepository>(FirebaseProductRepository(), permanent: true);
       Get.put<OrderRepository>(FirebaseOrderRepository(), permanent: true);
+      Get.put<NotificationRepository>(FirebaseNotificationRepository(),
+          permanent: true);
       Get.put<SubscriptionRepository>(FirebaseSubscriptionRepository(),
           permanent: true);
       Get.put<AdminRepository>(FirebaseAdminRepository(), permanent: true);
@@ -74,5 +82,6 @@ class InitialBinding extends Bindings {
     // StoreScope resolves StoreRepository in its constructor, so it must be
     // registered after either the mock or Firebase repository set above.
     Get.put(StoreScope(), permanent: true);
+    Get.put(NotificationCenter(), permanent: true);
   }
 }

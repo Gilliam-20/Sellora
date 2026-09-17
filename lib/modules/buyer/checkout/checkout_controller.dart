@@ -6,12 +6,15 @@ import '../../../data/models/order_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/cart_repository.dart';
 import '../../../data/repositories/order_repository.dart';
+import '../../../data/repositories/notification_repository.dart';
 import '../../../data/services/intasend_service.dart';
 
 class CheckoutController extends GetxController {
   final CartRepository cartRepo = Get.find<CartRepository>();
   final OrderRepository _orderRepo = Get.find<OrderRepository>();
   final AuthRepository _authRepo = Get.find<AuthRepository>();
+  final NotificationRepository _notificationRepo =
+      Get.find<NotificationRepository>();
 
   final isPlacingOrder = false.obs;
   final errorMessage = RxnString();
@@ -70,6 +73,7 @@ class CheckoutController extends GetxController {
           createdAt: DateTime.now(),
         );
         await _orderRepo.placeOrder(order);
+        await _notificationRepo.notifyOrderPlaced(order);
         _onOrderPlaced(order.code,
             'Your order ${order.code} is on its way to processing.');
         return;
@@ -105,6 +109,7 @@ class CheckoutController extends GetxController {
         createdAt: DateTime.now(),
       );
       final order = await _orderRepo.placeOrder(draft);
+      await _notificationRepo.notifyOrderPlaced(order);
 
       final intasend = Get.find<IntasendService>();
       await intasend.payOrderMpesa(

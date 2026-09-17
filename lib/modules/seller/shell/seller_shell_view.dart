@@ -9,6 +9,8 @@ import '../dashboard/seller_dashboard_view.dart';
 import '../my_listings/my_listings_view.dart';
 import '../orders/seller_orders_view.dart';
 import '../profile/seller_profile_view.dart';
+import '../../notifications/notification_center.dart';
+import '../../notifications/notifications_view.dart';
 import 'seller_shell_controller.dart';
 
 class SellerShellView extends GetView<SellerShellController> {
@@ -19,6 +21,7 @@ class SellerShellView extends GetView<SellerShellController> {
     SellerCatalogView(),
     MyListingsView(),
     SellerOrdersView(),
+    NotificationsView(),
     SellerProfileView(),
   ];
 
@@ -29,11 +32,13 @@ class SellerShellView extends GetView<SellerShellController> {
     ShellDestination(icon: Icon(Icons.storefront_outlined), label: 'Listings'),
     ShellDestination(
         icon: Icon(Icons.local_shipping_outlined), label: 'Orders'),
+    ShellDestination(icon: Icon(Icons.notifications_outlined), label: 'Alerts'),
     ShellDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final notifications = Get.find<NotificationCenter>();
     return Obx(() {
       final scope = controller.scope;
       // Product/order screens below read from the store the seller owns —
@@ -71,7 +76,20 @@ class SellerShellView extends GetView<SellerShellController> {
         currentIndex: controller.tabIndex.value,
         onDestinationSelected: controller.changeTab,
         tabs: _tabs,
-        destinations: _destinations,
+        destinations: [
+          ..._destinations.take(4),
+          ShellDestination(
+            icon: Obx(
+              () => Badge(
+                isLabelVisible: notifications.unreadCount > 0,
+                label: Text('${notifications.unreadCount}'),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+            ),
+            label: 'Alerts',
+          ),
+          _destinations.last,
+        ],
       );
     });
   }

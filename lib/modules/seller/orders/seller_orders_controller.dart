@@ -2,10 +2,13 @@ import 'package:get/get.dart';
 import '../../../data/models/order_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/order_repository.dart';
+import '../../../data/repositories/notification_repository.dart';
 
 class SellerOrdersController extends GetxController {
   final OrderRepository _orderRepo = Get.find<OrderRepository>();
   final AuthRepository _authRepo = Get.find<AuthRepository>();
+  final NotificationRepository _notificationRepo =
+      Get.find<NotificationRepository>();
 
   final orders = <OrderModel>[].obs;
   final isLoading = true.obs;
@@ -34,6 +37,7 @@ class SellerOrdersController extends GetxController {
     };
     if (next == order.status) return;
     await _orderRepo.updateStatus(order.id, next);
+    await _notificationRepo.notifyOrderStatusChanged(order.copyWith(status: next));
     load();
   }
 }

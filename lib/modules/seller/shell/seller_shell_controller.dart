@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../storefront/store_scope.dart';
+import '../../notifications/notification_center.dart';
 
 class SellerShellController extends GetxController {
   SellerShellController({AuthRepository? authRepository, StoreScope? scope})
@@ -18,6 +19,8 @@ class SellerShellController extends GetxController {
   void onInit() {
     super.onInit();
     resolveStore();
+    final user = _authRepository.cachedUser;
+    if (user != null) Get.find<NotificationCenter>().start(user.uid);
   }
 
   void resolveStore() {
