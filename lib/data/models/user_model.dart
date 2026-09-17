@@ -9,6 +9,11 @@ UserRole userRoleFromString(String value) {
 
 enum SellerStatus { pendingApproval, active, suspended }
 
+/// The version a seller agrees to when opening a Sellora store. Keeping this
+/// alongside the acceptance record lets us ask for a new agreement when the
+/// terms materially change.
+const sellerTermsVersion = '2026-09-17';
+
 class UserModel {
   UserModel({
     required this.uid,
@@ -21,6 +26,8 @@ class UserModel {
     this.storeName,
     this.subscriptionPlanId,
     this.subscriptionActiveUntil,
+    this.sellerTermsAcceptedAt,
+    this.sellerTermsVersion,
     this.currencyCode = 'USD',
     this.storeId,
     this.createdAt,
@@ -38,6 +45,8 @@ class UserModel {
   final String? storeName;
   final String? subscriptionPlanId;
   final DateTime? subscriptionActiveUntil;
+  final DateTime? sellerTermsAcceptedAt;
+  final String? sellerTermsVersion;
   final String currencyCode;
 
   // Buyer-only: the store (see StoreModel) they registered as a customer
@@ -59,6 +68,8 @@ class UserModel {
     String? storeName,
     String? subscriptionPlanId,
     DateTime? subscriptionActiveUntil,
+    DateTime? sellerTermsAcceptedAt,
+    String? sellerTermsVersion,
     String? currencyCode,
   }) {
     return UserModel(
@@ -73,6 +84,9 @@ class UserModel {
       subscriptionPlanId: subscriptionPlanId ?? this.subscriptionPlanId,
       subscriptionActiveUntil:
           subscriptionActiveUntil ?? this.subscriptionActiveUntil,
+      sellerTermsAcceptedAt:
+          sellerTermsAcceptedAt ?? this.sellerTermsAcceptedAt,
+      sellerTermsVersion: sellerTermsVersion ?? this.sellerTermsVersion,
       currencyCode: currencyCode ?? this.currencyCode,
       createdAt: createdAt,
     );
@@ -95,6 +109,10 @@ class UserModel {
       subscriptionActiveUntil: map['subscriptionActiveUntil'] != null
           ? DateTime.tryParse(map['subscriptionActiveUntil'] as String)
           : null,
+      sellerTermsAcceptedAt: map['sellerTermsAcceptedAt'] != null
+          ? DateTime.tryParse(map['sellerTermsAcceptedAt'] as String)
+          : null,
+      sellerTermsVersion: map['sellerTermsVersion'] as String?,
       currencyCode: map['currencyCode'] as String? ?? 'USD',
       storeId: map['storeId'] as String?,
       createdAt: map['createdAt'] != null
@@ -115,6 +133,8 @@ class UserModel {
       'storeName': storeName,
       'subscriptionPlanId': subscriptionPlanId,
       'subscriptionActiveUntil': subscriptionActiveUntil?.toIso8601String(),
+      'sellerTermsAcceptedAt': sellerTermsAcceptedAt?.toIso8601String(),
+      'sellerTermsVersion': sellerTermsVersion,
       'currencyCode': currencyCode,
       'storeId': storeId,
       'createdAt': createdAt?.toIso8601String(),

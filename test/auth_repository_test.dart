@@ -14,6 +14,7 @@ void main() {
       password: 'password123',
       storeName: "Amina's Curated Picks",
       phone: '0712345678',
+      hasAcceptedTerms: true,
     );
 
     final stores = await storeRepo.storesForSeller(user.uid);
@@ -39,10 +40,43 @@ void main() {
       password: 'password123',
       storeName: "Amina's Store",
       phone: '0712345678',
+      hasAcceptedTerms: true,
     );
 
     final stores = await storeRepo.storesForSeller(user.uid);
     expect(stores.single.slug, 'aminas-store-2');
+  });
+
+  test('signUpSeller records the agreed seller terms version', () async {
+    final auth = MockAuthRepository(storeRepository: _FakeStoreRepository());
+
+    final user = await auth.signUpSeller(
+      name: 'Amina',
+      email: 'amina@example.com',
+      password: 'password123',
+      storeName: "Amina's Store",
+      phone: '0712345678',
+      hasAcceptedTerms: true,
+    );
+
+    expect(user.sellerTermsAcceptedAt, isNotNull);
+    expect(user.sellerTermsVersion, sellerTermsVersion);
+  });
+
+  test('signUpSeller rejects registration without terms acceptance', () async {
+    final auth = MockAuthRepository(storeRepository: _FakeStoreRepository());
+
+    await expectLater(
+      auth.signUpSeller(
+        name: 'Amina',
+        email: 'amina@example.com',
+        password: 'password123',
+        storeName: "Amina's Store",
+        phone: '0712345678',
+        hasAcceptedTerms: false,
+      ),
+      throwsArgumentError,
+    );
   });
 }
 

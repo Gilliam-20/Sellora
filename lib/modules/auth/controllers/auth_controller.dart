@@ -113,7 +113,12 @@ class AuthController extends GetxController {
     required String password,
     required String storeName,
     required String phone,
+    required bool hasAcceptedTerms,
   }) async {
+    if (!hasAcceptedTerms) {
+      errorMessage.value = 'Please accept the Seller Terms & Conditions to continue.';
+      return;
+    }
     isLoading.value = true;
     errorMessage.value = null;
     try {
@@ -123,6 +128,7 @@ class AuthController extends GetxController {
         password: password,
         storeName: storeName,
         phone: phone,
+        hasAcceptedTerms: hasAcceptedTerms,
       );
       _storage.lastRole = user.role.name;
       Get.offAllNamed(Routes.sellerOnboarding);

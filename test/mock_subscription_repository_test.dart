@@ -22,6 +22,7 @@ void main() {
       password: 'password123',
       storeName: "Amina's Store",
       phone: '0712345678',
+      hasAcceptedTerms: true,
     );
     final repo = MockSubscriptionRepository(authRepository: auth);
 
@@ -44,6 +45,7 @@ void main() {
       password: 'password123',
       storeName: "Amina's Store",
       phone: '0712345678',
+      hasAcceptedTerms: true,
     );
     final products = _FakeProductRepository([
       ProductModel(

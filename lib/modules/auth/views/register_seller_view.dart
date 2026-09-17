@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../app/routes/app_routes.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
@@ -22,6 +23,7 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  bool _hasAcceptedTerms = false;
 
   @override
   void dispose() {
@@ -98,6 +100,87 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
                     validator: Validators.password,
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  FormField<bool>(
+                    initialValue: _hasAcceptedTerms,
+                    validator: (value) => value == true
+                        ? null
+                        : 'You must accept the Seller Terms & Conditions.',
+                    builder: (field) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: AppColors.cloud,
+                            border: Border.all(
+                              color: field.hasError
+                                  ? AppColors.danger
+                                  : AppColors.hairline,
+                            ),
+                            borderRadius:
+                                BorderRadius.circular(AppRadii.stub + 8),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Checkbox(
+                                value: _hasAcceptedTerms,
+                                activeColor: AppColors.manifestGoldDeep,
+                                checkColor: AppColors.ink,
+                                onChanged: (value) => setState(() {
+                                  _hasAcceptedTerms = value ?? false;
+                                  field.didChange(_hasAcceptedTerms);
+                                }),
+                              ),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(
+                                      top: AppSpacing.xs),
+                                  child: Wrap(
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text('I have read and agree to the ',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Get.toNamed(Routes.sellerTerms),
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        child: const Text(
+                                            'Seller Terms & Conditions'),
+                                      ),
+                                      Text('.',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (field.hasError)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                left: AppSpacing.md, top: AppSpacing.xs),
+                            child: Text(field.errorText!,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: AppColors.danger)),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
                   Obx(() {
                     final error = controller.errorMessage.value;
                     if (error == null) return const SizedBox.shrink();
@@ -121,6 +204,7 @@ class _RegisterSellerViewState extends State<RegisterSellerView> {
                                     password: _passwordCtrl.text,
                                     storeName: _storeCtrl.text.trim(),
                                     phone: _phoneCtrl.text.trim(),
+                                    hasAcceptedTerms: _hasAcceptedTerms,
                                   );
                                 }
                               },

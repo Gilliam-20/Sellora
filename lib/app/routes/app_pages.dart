@@ -5,6 +5,7 @@ import '../../modules/admin/shell/admin_shell_view.dart';
 import '../../modules/auth/bindings/auth_binding.dart';
 import '../../modules/auth/views/login_view.dart';
 import '../../modules/auth/views/register_seller_view.dart';
+import '../../modules/auth/views/seller_terms_view.dart';
 import '../../modules/auth/views/role_select_view.dart';
 import '../../modules/auth/views/splash_view.dart';
 import '../../modules/buyer/buyer_binding.dart';
@@ -49,6 +50,7 @@ class AppPages {
         name: Routes.registerSeller,
         page: () => const RegisterSellerView(),
         binding: AuthBinding()),
+    GetPage(name: Routes.sellerTerms, page: () => const SellerTermsView()),
     GetPage(
       name: Routes.storefront,
       page: () => const StorefrontView(),

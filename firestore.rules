@@ -36,10 +36,17 @@ service cloud.firestore {
     // `subscriptions/{sellerId}` below.
     match /users/{uid} {
       allow read: if isOwner(uid) || role() == 'admin';
-      allow create: if isOwner(uid);
+      // Seller signups must capture a versioned terms acceptance. The
+      // acceptance fields are immutable afterwards, preserving the original
+      // agreement record even when a profile is edited later.
+      allow create: if isOwner(uid) &&
+        (request.resource.data.role != 'seller' ||
+         (request.resource.data.sellerTermsAcceptedAt is string &&
+          request.resource.data.sellerTermsVersion == '2026-09-17'));
       allow update: if role() == 'admin' ||
         (isOwner(uid) && request.resource.data.role == resource.data.role &&
-         !touchesAny(['subscriptionPlanId', 'subscriptionActiveUntil', 'sellerStatus']));
+         !touchesAny(['subscriptionPlanId', 'subscriptionActiveUntil', 'sellerStatus',
+           'sellerTermsAcceptedAt', 'sellerTermsVersion']));
       allow delete: if false;
     }
 

@@ -31,6 +31,7 @@ abstract class AuthRepository {
     required String password,
     required String storeName,
     required String phone,
+    required bool hasAcceptedTerms,
   });
   Future<void> sendPasswordReset(String email);
   Future<void> signOut();
@@ -119,7 +120,11 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
     required String password,
     required String storeName,
     required String phone,
+    required bool hasAcceptedTerms,
   }) async {
+    if (!hasAcceptedTerms) {
+      throw ArgumentError('Seller terms must be accepted before registration.');
+    }
     final cred = await _auth.signUp(email: email, password: password);
     final user = UserModel(
       uid: cred.user!.uid,
@@ -129,6 +134,8 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
       role: UserRole.seller,
       storeName: storeName,
       sellerStatus: SellerStatus.pendingApproval,
+      sellerTermsAcceptedAt: DateTime.now(),
+      sellerTermsVersion: sellerTermsVersion,
       createdAt: DateTime.now(),
     );
     await _fs.users.doc(user.uid).set(user.toMap());

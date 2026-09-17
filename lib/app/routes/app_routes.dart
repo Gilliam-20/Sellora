@@ -6,6 +6,7 @@ abstract class Routes {
   static const roleSelect = '/role-select';
   static const login = '/login';
   static const registerSeller = '/register/seller';
+  static const sellerTerms = '/seller-terms';
 
   static const sellerOnboarding = '/seller/onboarding';
 

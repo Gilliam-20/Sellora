@@ -108,7 +108,11 @@ class MockAuthRepository extends GetxService implements AuthRepository {
     required String password,
     required String storeName,
     required String phone,
+    required bool hasAcceptedTerms,
   }) async {
+    if (!hasAcceptedTerms) {
+      throw ArgumentError('Seller terms must be accepted before registration.');
+    }
     await Future.delayed(const Duration(milliseconds: 600));
     final user = UserModel(
       uid: 'mock-seller-${DateTime.now().millisecondsSinceEpoch}',
@@ -118,6 +122,8 @@ class MockAuthRepository extends GetxService implements AuthRepository {
       role: UserRole.seller,
       storeName: storeName,
       sellerStatus: SellerStatus.pendingApproval,
+      sellerTermsAcceptedAt: DateTime.now(),
+      sellerTermsVersion: sellerTermsVersion,
       currencyCode: 'KES',
       createdAt: DateTime.now(),
     );
