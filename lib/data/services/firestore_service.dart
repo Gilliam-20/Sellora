@@ -8,8 +8,6 @@ class FirestoreService extends GetxService {
 
   CollectionReference<Map<String, dynamic>> get users =>
       _db.collection('users');
-  CollectionReference<Map<String, dynamic>> get listings =>
-      _db.collection('listings'); // seller-specific listings
   CollectionReference<Map<String, dynamic>> get orders =>
       _db.collection('orders');
   CollectionReference<Map<String, dynamic>> get plans =>
@@ -28,13 +26,22 @@ class FirestoreService extends GetxService {
   CollectionReference<Map<String, dynamic>> storeCustomers(String storeId) =>
       stores.doc(storeId).collection('customers');
 
-  /// Tenant-owned resources. These paths are introduced additively; the
-  /// legacy flat listing/order collections remain readable during migration.
+  /// Tenant-owned resources. The legacy flat `orders` collection remains
+  /// readable during that migration; `listings` doesn't need the same
+  /// treatment — nothing reads or writes it any more (see WORKLOG.md,
+  /// PHASE 5 write-path migration).
   CollectionReference<Map<String, dynamic>> storeProducts(String storeId) =>
       stores.doc(storeId).collection('products');
 
   CollectionReference<Map<String, dynamic>> storeOrders(String storeId) =>
       stores.doc(storeId).collection('orders');
+
+  /// Every store's products in one query, for reads that used to span the
+  /// flat `listings` collection (a seller's own listings by id, or the
+  /// active-listings feed) and now have to span `stores/*/products`
+  /// instead. Requires the matching collection-group field overrides in
+  /// `firestore.indexes.json`.
+  Query<Map<String, dynamic>> get productsGroup => _db.collectionGroup('products');
 
   /// A private inbox below each user's document.
   CollectionReference<Map<String, dynamic>> userNotifications(String userId) =>

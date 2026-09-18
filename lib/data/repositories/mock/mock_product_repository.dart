@@ -13,13 +13,12 @@ class MockProductRepository extends GetxService implements ProductRepository {
     // *same* first three catalog items on first access below, and the
     // store tenant boundary would have nothing visible to demonstrate.
     _listings.addAll([
-      ..._catalog
-          .take(3)
-          .map((p) => p.copyWith(sellerId: 'mock-seller', isListed: true)),
-      ..._catalog
-          .skip(3)
-          .take(3)
-          .map((p) => p.copyWith(sellerId: 'mock-seller-2', isListed: true)),
+      ..._catalog.take(3).map((p) => p.copyWith(
+          sellerId: 'mock-seller', storeId: 'store-aminas', isListed: true)),
+      ..._catalog.skip(3).take(3).map((p) => p.copyWith(
+          sellerId: 'mock-seller-2',
+          storeId: 'store-jengo',
+          isListed: true)),
     ]);
   }
 
@@ -74,9 +73,10 @@ class MockProductRepository extends GetxService implements ProductRepository {
       // onboarding demo) so their dashboard isn't empty on first run. The
       // two known mock stores above are pre-seeded in the constructor
       // instead, with distinct products rather than this generic set.
-      _listings.addAll(_catalog
-          .take(3)
-          .map((p) => p.copyWith(sellerId: sellerId, isListed: true)));
+      final stores = await Get.find<StoreRepository>().storesForSeller(sellerId);
+      final storeId = stores.isEmpty ? null : stores.first.id;
+      _listings.addAll(_catalog.take(3).map((p) => p.copyWith(
+          sellerId: sellerId, storeId: storeId, isListed: true)));
     }
     return _listings.where((p) => p.sellerId == sellerId).toList();
   }
@@ -130,12 +130,16 @@ class MockProductRepository extends GetxService implements ProductRepository {
   @override
   Future<void> listProduct(
       {required ProductModel catalogProduct,
+      required String storeId,
       required String sellerId,
       required double sellPrice,
       bool isListed = true}) async {
     await Future.delayed(const Duration(milliseconds: 300));
     _listings.add(catalogProduct.copyWith(
-        sellerId: sellerId, isListed: isListed, sellPrice: sellPrice));
+        sellerId: sellerId,
+        storeId: storeId,
+        isListed: isListed,
+        sellPrice: sellPrice));
   }
 
   @override
@@ -146,10 +150,11 @@ class MockProductRepository extends GetxService implements ProductRepository {
   }
 
   @override
-  Future<void> unlistProduct(String productId) async {
+  Future<void> unlistProduct(String storeId, String productId) async {
     await Future.delayed(const Duration(milliseconds: 200));
     final index = _listings.indexWhere((p) => p.id == productId);
-    if (index != -1)
+    if (index != -1) {
       _listings[index] = _listings[index].copyWith(isListed: false);
+    }
   }
 }

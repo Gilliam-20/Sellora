@@ -25,7 +25,9 @@ class MyListingsController extends GetxController {
   }
 
   Future<void> unlist(String productId) async {
-    await _productRepo.unlistProduct(productId);
+    final product = listings.firstWhereOrNull((p) => p.id == productId);
+    if (product?.storeId == null) return;
+    await _productRepo.unlistProduct(product!.storeId!, productId);
     load();
   }
 

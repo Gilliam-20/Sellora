@@ -20,6 +20,7 @@ class ProductModel {
     this.description = '',
     this.variants = const [],
     this.sellerId,
+    this.storeId,
     this.isListed = false,
     this.soldCount = 0,
     this.rating = 0,
@@ -45,6 +46,11 @@ class ProductModel {
   /// Null while sitting in the shared CJ catalog; set once a seller
   /// lists it in their own store.
   final String? sellerId;
+
+  /// Which store's `stores/{storeId}/products` subcollection this listing
+  /// lives in. Null while sitting in the shared CJ catalog, same as
+  /// [sellerId] — set together by [ProductRepository.listProduct].
+  final String? storeId;
   final bool isListed;
 
   final int soldCount;
@@ -58,6 +64,7 @@ class ProductModel {
   ProductModel copyWith({
     double? sellPrice,
     String? sellerId,
+    String? storeId,
     bool? isListed,
     int? stock,
   }) {
@@ -75,6 +82,7 @@ class ProductModel {
       description: description,
       variants: variants,
       sellerId: sellerId ?? this.sellerId,
+      storeId: storeId ?? this.storeId,
       isListed: isListed ?? this.isListed,
       soldCount: soldCount,
       rating: rating,
@@ -100,6 +108,7 @@ class ProductModel {
           .map((v) => ProductVariant.fromMap(Map<String, dynamic>.from(v as Map)))
           .toList(),
       sellerId: map['sellerId'] as String?,
+      storeId: map['storeId'] as String?,
       isListed: map['isListed'] as bool? ?? false,
       soldCount: map['soldCount'] as int? ?? 0,
       rating: (map['rating'] as num?)?.toDouble() ?? 0,
@@ -123,6 +132,7 @@ class ProductModel {
       'description': description,
       'variants': variants.map((v) => v.toMap()).toList(),
       'sellerId': sellerId,
+      'storeId': storeId,
       'isListed': isListed,
       'soldCount': soldCount,
       'rating': rating,

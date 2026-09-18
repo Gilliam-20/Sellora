@@ -40,7 +40,7 @@ class FirebaseProductRepository extends GetxService
   @override
   Future<List<ProductModel>> sellerListings(String sellerId) async {
     final snap =
-        await _fs.listings.where('sellerId', isEqualTo: sellerId).get();
+        await _fs.productsGroup.where('sellerId', isEqualTo: sellerId).get();
     return snap.docs.map((d) => ProductModel.fromMap(d.data())).toList();
   }
 
@@ -66,7 +66,7 @@ class FirebaseProductRepository extends GetxService
   @override
   Future<List<ProductModel>> storefrontFeed(
       {String? keyword, String? category}) async {
-    var query = _fs.listings.where('isListed', isEqualTo: true);
+    var query = _fs.productsGroup.where('isListed', isEqualTo: true);
     if (category != null && category != 'All') {
       query = query.where('category', isEqualTo: category);
     }
@@ -82,31 +82,45 @@ class FirebaseProductRepository extends GetxService
 
   @override
   Future<ProductModel> productDetail(String productId) async {
-    final doc = await _fs.listings.doc(productId).get();
-    if (doc.exists) return ProductModel.fromMap(doc.data()!);
+    // A listed product's own id, not the Firestore document id under
+    // stores/{storeId}/products (see [listProduct]'s doc-id comment) — so
+    // this has to search by field, not `.doc(productId).get()`.
+    final snap = await _fs.productsGroup
+        .where('id', isEqualTo: productId)
+        .limit(1)
+        .get();
+    if (snap.docs.isNotEmpty) return ProductModel.fromMap(snap.docs.first.data());
     return _cj.productDetail(productId);
   }
 
   @override
   Future<void> listProduct(
       {required ProductModel catalogProduct,
+      required String storeId,
       required String sellerId,
       required double sellPrice,
       bool isListed = true}) async {
     final listed = catalogProduct.copyWith(
-        sellerId: sellerId, isListed: isListed, sellPrice: sellPrice);
-    await _fs.listings
-        .doc('${sellerId}_${catalogProduct.id}')
-        .set(listed.toMap());
+        sellerId: sellerId,
+        storeId: storeId,
+        isListed: isListed,
+        sellPrice: sellPrice);
+    // Store-scoped now, so the old `${sellerId}_${catalogProduct.id}`
+    // cross-seller collision-avoidance key is no longer needed.
+    await _fs.storeProducts(storeId).doc(catalogProduct.id).set(listed.toMap());
   }
 
   @override
   Future<void> updateListing(ProductModel product) async {
-    await _fs.listings.doc(product.id).update(product.toMap());
+    final storeId = product.storeId;
+    if (storeId == null) {
+      throw StateError('Cannot update a listing with no storeId: ${product.id}');
+    }
+    await _fs.storeProducts(storeId).doc(product.id).update(product.toMap());
   }
 
   @override
-  Future<void> unlistProduct(String productId) async {
-    await _fs.listings.doc(productId).update({'isListed': false});
+  Future<void> unlistProduct(String storeId, String productId) async {
+    await _fs.storeProducts(storeId).doc(productId).update({'isListed': false});
   }
 }

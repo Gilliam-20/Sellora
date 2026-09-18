@@ -6,6 +6,78 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-18 — PHASE 5: `stores/{storeId}/products` write-path migration
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 3 of the 4
+pre-existing baseline issues, confirmed via `git stash` A/B check; `flutter test` same 10/12 pass
+rate, confirmed the same way; live-verified in a browser). Closes the blocker
+`SELLORA_IMPLEMENTATION_PLAN.md`/`TODO.md` named for PHASE 5: `listProduct`/`updateListing`/
+`unlistProduct` wrote flat `listings` while `stores/{storeId}/products` sat rules-ready but always
+empty, since nothing wrote to it. User explicitly scoped this session to *just* the write-path
+migration — variants management, collections, inventory, SEO, and bulk operations (the rest of
+PHASE 5's TODO.md scope) are still not started.
+
+**Found while investigating:** `firestore.rules` already allowed seller-owned create/update on
+`stores/{storeId}/products` (lines 101-105) — the "read-only" framing in the prior docs described
+the missing application code, not a rules gap. No rules changes were needed for this migration.
+
+**Changed:**
+- **`ProductModel`** gained a `storeId` field (nullable — null while sitting in the shared CJ
+  catalog, same as `sellerId`), threaded through `copyWith`/`fromMap`/`toMap`.
+- **`ProductRepository`**: `listProduct` gained a required `storeId` param; `unlistProduct` now
+  takes `(storeId, productId)` instead of just `productId` — both needed to address the new
+  subcollection path. `updateListing(ProductModel product)` keeps its old signature since the
+  product now carries its own `storeId`.
+- **`FirebaseProductRepository`**: `listProduct`/`updateListing`/`unlistProduct` now write
+  `stores/{storeId}/products` instead of flat `listings`, using `catalogProduct.id` as the doc id
+  directly — the old `${sellerId}_${catalogProduct.id}` cross-seller collision-avoidance key
+  (flagged as a wart in every PHASE 4 entry back to 2026-09-14) is no longer needed once each
+  seller's products live in their own subcollection. `sellerListings`/`storefrontFeed`/
+  `productDetail` were **also** repointed off flat `listings` onto a new `FirestoreService
+  .productsGroup` (`collectionGroup('products')`) query — without this, those three reads would've
+  kept hitting a collection nothing writes to anymore the moment `useMockData` flips off, which
+  would make this a half-migration, not a real one. `storeProducts()` (the customer storefront's
+  read path) was already correct and untouched. The flat `listings` getter on `FirestoreService`
+  is now dead and removed; `firestore.rules`' `listings` block was deliberately left alone (a rules
+  change wasn't required, and removing it is a separate security-pass decision, not bundled here).
+- **`firestore.indexes.json`**: added `COLLECTION_GROUP`-scoped field overrides for `products.sellerId`
+  /`.id`/`.isListed`, plus a composite `isListed`+`category` index mirroring the existing flat-
+  `listings` one — needed for the three collection-group queries above. Unverified against a real
+  Firebase project, same caveat as every other backend-shape change in this repo.
+- **`MyListingsController.unlist`**: now looks up the listing's own `storeId` before calling
+  `unlistProduct` (mirrors `relist`'s existing find-by-id pattern) — no view changes needed.
+- **`ProductImportController.import`**: now reads `storeId` from `StoreScope.current.value?.id`
+  (already resolved by the seller shell before this screen is reachable) and passes it to
+  `listProduct`; bails out (returns `false`) if it's somehow null, same as the existing user/product
+  null-guards.
+- **`MockProductRepository`**: mirrors the interface change — seeds the two known demo listings with
+  their real `store-aminas`/`store-jengo` ids, and its "seed a starter storefront for any other
+  seller" fallback now resolves a real storeId via `StoreRepository.storesForSeller` instead of
+  leaving it null.
+- **`test/mock_subscription_repository_test.dart`**'s fake `ProductRepository` updated to match the
+  new signatures.
+
+**Verified live in a browser this session** (same Playwright-driven headless-Chrome approach as
+prior sessions — CanvasKit has no queryable DOM, so coordinate clicks + screenshots): signed in as
+the seller quick-login shortcut, imported "Wireless Earbuds" (Black, $34.99, publish) — it appeared
+in My Listings immediately without leaving the seller shell, exactly as before. Toggled an existing
+seeded listing off then on (unlist/relist) — both worked, switch state updated correctly. Opened
+`/s/aminas-picks` and confirmed all 3 seeded products still render on the storefront. Zero console
+errors across every step tied to this change.
+
+**Found in passing, unrelated to this migration, not fixed:** the storefront's category-chip row
+(`storefront_view.dart:86`) trips a "GetX improper use" debug warning — reads an `Obx`-watched value
+inside a lazy `ListView.separated` `itemBuilder` rather than in the `Obx`'s synchronous build scope.
+Pre-existing (confirmed the file isn't among this session's changes); left alone since it's out of
+scope for a product write-path migration.
+
+**Next step:** PHASE 5's write-path blocker is closed. What's left of PHASE 5 per TODO.md §10 —
+variants management UI, collections, real inventory tracking beyond the flat `stock` int, SEO
+fields, bulk select/edit/delete — is all still open and needs its own scoping pass, same as this
+session's.
+
+---
+
 ## 2026-09-18 — PHASE 4: category browsing, shipping-cost estimate, buyer variant selector
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing

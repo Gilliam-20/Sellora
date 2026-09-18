@@ -120,6 +120,7 @@ class _FakeProductRepository implements ProductRepository {
   @override
   Future<void> listProduct(
           {required ProductModel catalogProduct,
+          required String storeId,
           required String sellerId,
           required double sellPrice,
           bool isListed = true}) =>
@@ -130,7 +131,8 @@ class _FakeProductRepository implements ProductRepository {
       throw UnimplementedError();
 
   @override
-  Future<void> unlistProduct(String productId) => throw UnimplementedError();
+  Future<void> unlistProduct(String storeId, String productId) =>
+      throw UnimplementedError();
 }
 
 class _FakeStoreRepository implements StoreRepository {

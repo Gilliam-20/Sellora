@@ -36,17 +36,21 @@ abstract class ProductRepository {
 
   Future<ProductModel> productDetail(String productId);
 
-  /// A seller lists a catalog product in their store at their own price.
-  /// [isListed] false imports it as a draft — the same unpublished state
-  /// [unlistProduct] leaves an existing listing in, so it shows up in My
-  /// listings but not on the storefront.
+  /// A seller lists a catalog product in their own store
+  /// (`stores/{storeId}/products`) at their own price. [isListed] false
+  /// imports it as a draft — the same unpublished state [unlistProduct]
+  /// leaves an existing listing in, so it shows up in My listings but not
+  /// on the storefront.
   Future<void> listProduct(
       {required ProductModel catalogProduct,
+      required String storeId,
       required String sellerId,
       required double sellPrice,
       bool isListed = true});
 
+  /// [product.storeId] locates which store's subcollection to update —
+  /// always set by [listProduct], since a listing can't exist without one.
   Future<void> updateListing(ProductModel product);
 
-  Future<void> unlistProduct(String productId);
+  Future<void> unlistProduct(String storeId, String productId);
 }

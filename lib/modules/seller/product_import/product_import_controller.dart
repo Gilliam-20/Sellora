@@ -4,6 +4,7 @@ import '../../../data/models/product_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/subscription_repository.dart';
+import '../../storefront/store_scope.dart';
 import '../dashboard/seller_dashboard_controller.dart';
 import '../my_listings/my_listings_controller.dart';
 
@@ -20,6 +21,7 @@ class ProductImportController extends GetxController {
   final AuthRepository _authRepo = Get.find<AuthRepository>();
   final SubscriptionRepository _subscriptionRepo =
       Get.find<SubscriptionRepository>();
+  final StoreScope _storeScope = Get.find<StoreScope>();
 
   final product = Rxn<ProductModel>();
   final selectedVariant = Rxn<ProductVariant>();
@@ -133,7 +135,8 @@ class ProductImportController extends GetxController {
   Future<bool> import({required double sellPrice, required bool publish}) async {
     final user = _authRepo.cachedUser;
     final full = product.value;
-    if (user == null || full == null) return false;
+    final storeId = _storeScope.current.value?.id;
+    if (user == null || full == null || storeId == null) return false;
 
     // Soft, client-side only — listing creation isn't server-authoritative
     // yet (Phase 5's job), so this is an upsell prompt, not real
@@ -155,6 +158,7 @@ class ProductImportController extends GetxController {
     try {
       await _productRepo.listProduct(
         catalogProduct: full,
+        storeId: storeId,
         sellerId: user.uid,
         sellPrice: sellPrice,
         isListed: publish,

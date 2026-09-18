@@ -19,9 +19,12 @@ execute section-by-section in one pass; each phase below still only does what th
 - Platform service fee: **2%** of order subtotal (TODOD §15), snapshotted per order
   (`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/`paymentFee` on `OrderModel`), never
   shipping/tax unless configured, never retroactively changed on historical orders.
-- The `listings`/`orders` flat collections → `stores/{storeId}/products` / `stores/{storeId}/orders`
-  write-path migration is **deferred** — today those subcollections are read-only and always empty.
-  Don't build new features against them until that migration lands.
+- The `listings` → `stores/{storeId}/products` write-path migration **landed 2026-09-18** (see
+  WORKLOG.md) — `listProduct`/`updateListing`/`unlistProduct` and the `sellerListings`/
+  `storefrontFeed`/`productDetail` reads all target the store-scoped subcollection now; flat
+  `listings` is fully dead application code. The `orders` → `stores/{storeId}/orders` half of this
+  is **still deferred** — that subcollection remains read-only and always empty until PHASE 8's
+  order-creation Cloud Function is updated to write it.
 - Payment custody model (platform collect-and-disburse vs. each seller connects their own IntaSend
   account) is still **open** — see the two conflicting 2026-09-08 `WORKLOG.md` entries. Work done so
   far (order creation, webhook confirmation) is written to be compatible with either: it confirms *a*
@@ -141,8 +144,22 @@ listing count without leaving and re-entering the seller shell. Fixed by having 
 ## PHASE 5 — Seller product management
 
 Store-scoped products/variants/inventory/collections/SEO, server-authorized write paths, paginated
-query contracts, responsive list/table/grid states, bulk operations. Not started — blocked behind the
-deferred `stores/{storeId}/products` write-path migration above.
+query contracts, responsive list/table/grid states, bulk operations.
+
+**Done (2026-09-18, see WORKLOG.md):** the write-path migration this phase was blocked behind —
+`ProductModel` gained `storeId`; `listProduct`/`updateListing`/`unlistProduct` now write
+`stores/{storeId}/products` instead of flat `listings`; `sellerListings`/`storefrontFeed`/
+`productDetail` moved to a `products` collection-group query so they don't silently break once
+`useMockData` flips off. `My Listings`/`Product Import`/dashboard call sites updated accordingly.
+Deliberately scoped to just the write path, per user decision — everything else below is still not
+started.
+
+Not started: variants management UI (today's `ProductVariant` is import-time-only, no seller-side
+editing after import), collections, real inventory tracking beyond the flat `stock` int, SEO fields
+(meta title/description/slug), bulk select/edit/delete, pagination on any of the list reads above
+(all still unbounded `.get()` calls), and server-authorized writes (today's write path is still a
+direct client Firestore write gated only by security rules, not a Cloud Function re-validating
+plan limits/ownership the way `createOrder` does for orders).
 
 ## PHASE 6 — Store builder
 
