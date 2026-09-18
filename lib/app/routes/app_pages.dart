@@ -16,6 +16,7 @@ import '../../modules/marketing/marketing_controller.dart';
 import '../../modules/marketing/marketing_view.dart';
 import '../../modules/onboarding/bindings/seller_onboarding_binding.dart';
 import '../../modules/onboarding/views/seller_onboarding_view.dart';
+import '../../modules/seller/manage_variants/manage_variants_view.dart';
 import '../../modules/seller/product_import/product_import_view.dart';
 import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
@@ -109,6 +110,12 @@ class AppPages {
       name: Routes.sellerProductImport,
       page: () => const ProductImportView(),
       binding: ProductImportBinding(),
+      middlewares: [RoleMiddleware(UserRole.seller)],
+    ),
+    GetPage(
+      name: Routes.sellerManageVariants,
+      page: () => const ManageVariantsView(),
+      binding: ManageVariantsBinding(),
       middlewares: [RoleMiddleware(UserRole.seller)],
     ),
 

@@ -67,6 +67,7 @@ class ProductModel {
     String? storeId,
     bool? isListed,
     int? stock,
+    List<ProductVariant>? variants,
   }) {
     return ProductModel(
       id: id,
@@ -80,7 +81,7 @@ class ProductModel {
       currency: currency,
       category: category,
       description: description,
-      variants: variants,
+      variants: variants ?? this.variants,
       sellerId: sellerId ?? this.sellerId,
       storeId: storeId ?? this.storeId,
       isListed: isListed ?? this.isListed,
@@ -89,6 +90,15 @@ class ProductModel {
       stock: stock ?? this.stock,
       discountPercent: discountPercent,
     );
+  }
+
+  /// Variants a buyer can actually pick, after the seller has disabled any
+  /// via [ManageVariantsController]. Falls back to the full list if the
+  /// seller has disabled every variant, so a listing can never end up with
+  /// zero pickable SKUs.
+  List<ProductVariant> get visibleVariants {
+    final enabled = variants.where((v) => v.enabled).toList();
+    return enabled.isNotEmpty ? enabled : variants;
   }
 
   factory ProductModel.fromMap(Map<String, dynamic> map) {
@@ -158,6 +168,7 @@ class ProductVariant {
     this.price = 0,
     this.costPrice = 0,
     this.image,
+    this.enabled = true,
   });
 
   final String vid;
@@ -167,8 +178,25 @@ class ProductVariant {
   final double costPrice; // CJ's supplierPriceUsd for this SKU
   final String? image;
 
+  /// Whether a buyer can pick this SKU. Seller-controlled, defaults to true
+  /// on import — see [ManageVariantsController]. Purely a visibility switch;
+  /// disabling a variant never deletes it, so it can be turned back on.
+  final bool enabled;
+
   /// Human-readable label for display/receipts, e.g. "Black / M".
   String get label => attributes.isNotEmpty ? attributes.values.join(' / ') : sku;
+
+  ProductVariant copyWith({String? sku, bool? enabled}) {
+    return ProductVariant(
+      vid: vid,
+      sku: sku ?? this.sku,
+      attributes: attributes,
+      price: price,
+      costPrice: costPrice,
+      image: image,
+      enabled: enabled ?? this.enabled,
+    );
+  }
 
   factory ProductVariant.fromMap(Map<String, dynamic> map) {
     return ProductVariant(
@@ -178,6 +206,7 @@ class ProductVariant {
       price: (map['price'] as num?)?.toDouble() ?? 0,
       costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0,
       image: map['image'] as String?,
+      enabled: map['enabled'] as bool? ?? true,
     );
   }
 
@@ -189,6 +218,7 @@ class ProductVariant {
       'price': price,
       'costPrice': costPrice,
       'image': image,
+      'enabled': enabled,
     };
   }
 }

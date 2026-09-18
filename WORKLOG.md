@@ -6,6 +6,76 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-18 — PHASE 5: variants management UI
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 3 pre-existing
+baseline issues as before this session's changes; `flutter test` same 10/12 pass rate; live-verified
+in a browser for the seller-side flow). User explicitly picked this slice out of PHASE 5's remaining
+list (variants UI, collections, real inventory, SEO fields, bulk ops, pagination, server-authorized
+writes) — the rest are still not started, same as the prior entry left them.
+
+**Scope decision:** `ProductVariant` was import-time-only (set once from CJ, never editable after).
+Scoped this pass to what's safe to edit without reaching into checkout pricing or the still-unstarted
+"real inventory tracking" phase item: a per-variant **enable/disable** switch (which SKUs a buyer can
+pick) and a seller-facing **SKU** override. Deliberately did *not* add per-variant price overrides
+(would require rewiring `CartItemModel.lineTotal` and the server-side `createOrder` re-pricing logic —
+checkout-pricing-engine work, not "management UI") or per-variant stock (that's what PHASE 5's own
+"real inventory tracking" item is for — adding a half-version of it here would preempt and conflict
+with that session). CJ's own attributes/price/costPrice/image stay read-only — supplier-of-record
+facts, not the seller's to edit.
+
+**Changed:**
+- **`ProductVariant`** gained `enabled` (bool, defaults `true`) and a `copyWith`; threaded through
+  `fromMap`/`toMap`. **`ProductModel.copyWith`** gained a `variants` param (previously impossible to
+  update the variant list at all after construction) and a new `visibleVariants` getter — enabled
+  variants, falling back to the full list if a seller has disabled every one, so a listing can never
+  end up with zero pickable SKUs.
+- **New `lib/modules/seller/manage_variants/`** (`ManageVariantsController` + `ManageVariantsView`):
+  takes a `ProductModel` via `Get.arguments`, edits a local copy of its variants (toggle
+  enabled/disabled, edit SKU), and saves via the existing `ProductRepository.updateListing` — no
+  repository or Firestore-rules changes needed, since `updateListing` already writes the whole
+  product document. New route `Routes.sellerManageVariants` (`/seller/variants`), bound in
+  `ManageVariantsBinding` (added to `seller_binding.dart`), registered in `app_pages.dart` behind the
+  same `RoleMiddleware(UserRole.seller)` every other seller route uses.
+- **`MyListingsView`**: each listing tile is now an `InkWell` that opens Manage Variants for that
+  product (`Get.toNamed(Routes.sellerManageVariants, arguments: product)`); listings with more than
+  one variant show a "N variants · tap to manage" hint. The switch keeps its own tap target, so
+  toggling listed/unlisted still works independently of the new navigation.
+- **Buyer-facing filter**: `ProductDetailsController`/`ProductDetailsView` now read
+  `product.visibleVariants` instead of `product.variants` for both the initial variant selection and
+  the picker chip row — a disabled variant simply stops being offered to buyers, without deleting it
+  or touching the CJ `vid` fulfillment needs.
+
+**Verified live in a browser this session**: `flutter run -d web-server`, driven by a
+`playwright-core` script against headless system Chrome (no bundled browser download). Getting a
+screenshot out of headless Chrome required `--enable-unsafe-swiftshader` in addition to
+`--use-gl=swiftshader`/`--use-angle=swiftshader-webgl` — without it CanvasKit's WebGL2 context never
+attaches (`flt-glass-pane` never appears in the DOM) and every screenshot comes back blank white; this
+is a headless-Chrome/CanvasKit environment quirk, not an app bug, and is worth remembering for the
+next session that needs to drive this app. Signed in as the seller quick-login shortcut
+(`seller@test.com`), opened My Listings (3 seeded listings, "Wireless Earbuds" showing its "2 variants
+· tap to manage" hint), tapped into it, disabled the "White" SKU, changed its SKU field to
+`EARBUD-WHITE-01`, and saved — got the "Variants updated" snackbar and landed back on My Listings with
+the listing intact. Zero console errors across every step of the seller-side flow.
+
+**Not verified live:** the buyer-facing consequence (that a disabled variant disappears from the
+storefront's variant picker). Jumping to `/s/aminas-picks` in the same page session (needed since the
+mock repository is in-memory and per-app-instance, not per-login) reliably hit the same
+software-rendering flakiness described above — sometimes a partial render, twice a full blank frame
+even after polling for `flt-glass-pane` and waiting several more seconds — and repeating it further
+felt like chasing headless-Chrome flakiness rather than the app. The code path itself is small,
+symmetric with the already-verified seller-side change, and analyzer-clean:
+`ProductDetailsController.onInit`/`selectVariant` and the picker in `product_details_view.dart` both
+now read `product.visibleVariants`, the same getter exercised indirectly by
+`ManageVariantsController.save()` writing `enabled: false` for the White SKU. Worth a real
+browser click-through next time this screen is touched, rather than assumed safe indefinitely.
+
+**Next step:** PHASE 5 still has collections, real inventory tracking, SEO fields, bulk
+select/edit/delete, pagination on the unbounded list reads, and server-authorized writes — each needs
+its own scoping pass, same as this one.
+
+---
+
 ## 2026-09-18 — PHASE 5: `stores/{storeId}/products` write-path migration
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 3 of the 4

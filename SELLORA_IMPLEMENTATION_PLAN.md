@@ -154,12 +154,21 @@ query contracts, responsive list/table/grid states, bulk operations.
 Deliberately scoped to just the write path, per user decision — everything else below is still not
 started.
 
-Not started: variants management UI (today's `ProductVariant` is import-time-only, no seller-side
-editing after import), collections, real inventory tracking beyond the flat `stock` int, SEO fields
-(meta title/description/slug), bulk select/edit/delete, pagination on any of the list reads above
-(all still unbounded `.get()` calls), and server-authorized writes (today's write path is still a
-direct client Firestore write gated only by security rules, not a Cloud Function re-validating
-plan limits/ownership the way `createOrder` does for orders).
+**Done (2026-09-18, see WORKLOG.md):** variants management UI — `ProductVariant` gained `enabled`
+(seller-controlled visibility switch) and stayed editable for its own `sku`; a new
+`lib/modules/seller/manage_variants/` screen, reachable by tapping a listing in My Listings, lets a
+seller toggle which imported SKUs a buyer can pick and rename their own SKU reference.
+`ProductModel.visibleVariants` filters the buyer-facing picker in `product_details_view.dart`
+accordingly. Deliberately left CJ's own attributes/price/costPrice/image read-only, and deliberately
+did not add per-variant pricing (touches checkout's `CartItemModel.lineTotal` and the server-side
+`createOrder` re-pricing — its own scoped pass) or per-variant stock (that's this phase's own "real
+inventory tracking" item, not to be half-done here).
+
+Not started: collections, real inventory tracking beyond the flat `stock` int, SEO fields (meta
+title/description/slug), bulk select/edit/delete, pagination on any of the list reads above (all
+still unbounded `.get()` calls), and server-authorized writes (today's write path is still a direct
+client Firestore write gated only by security rules, not a Cloud Function re-validating plan
+limits/ownership the way `createOrder` does for orders).
 
 ## PHASE 6 — Store builder
 

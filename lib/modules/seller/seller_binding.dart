@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'catalog/seller_catalog_controller.dart';
 import 'dashboard/seller_dashboard_controller.dart';
+import 'manage_variants/manage_variants_controller.dart';
 import 'my_listings/my_listings_controller.dart';
 import 'orders/seller_orders_controller.dart';
 import 'product_import/product_import_controller.dart';
@@ -30,5 +31,12 @@ class ProductImportBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<ProductImportController>(() => ProductImportController());
+  }
+}
+
+class ManageVariantsBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<ManageVariantsController>(() => ManageVariantsController());
   }
 }

@@ -15,8 +15,8 @@ class ProductDetailsController extends GetxController {
     super.onInit();
     product = Get.arguments as ProductModel;
     previewImage.value = product.imageUrl;
-    if (product.variants.isNotEmpty) {
-      selectVariant(product.variants.first);
+    if (product.visibleVariants.isNotEmpty) {
+      selectVariant(product.visibleVariants.first);
     }
   }
 

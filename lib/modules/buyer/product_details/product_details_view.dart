@@ -88,13 +88,13 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
                         : product.description,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
-                  if (product.variants.length > 1) ...[
+                  if (product.visibleVariants.length > 1) ...[
                     const SizedBox(height: AppSpacing.lg),
                     Text('Choose an option',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: AppSpacing.sm),
                     Obx(() => _BuyerVariantPicker(
-                          variants: product.variants,
+                          variants: product.visibleVariants,
                           selected: controller.selectedVariant.value,
                           onSelect: controller.selectVariant,
                         )),
