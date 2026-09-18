@@ -40,6 +40,17 @@ class Validators {
     return null;
   }
 
+  /// Only enforces `#RRGGBB` formatting when [value] is non-empty — this
+  /// field (a store's accent color) is optional.
+  static String? hexColor(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    final pattern = RegExp(r'^#?[0-9A-Fa-f]{6}$');
+    if (!pattern.hasMatch(value.trim())) {
+      return 'Enter a 6-digit hex color, e.g. #16213E';
+    }
+    return null;
+  }
+
   static String? price(String? value) {
     if (value == null || value.trim().isEmpty) return 'Enter a price';
     final parsed = double.tryParse(value.trim());

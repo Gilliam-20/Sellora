@@ -1,9 +1,11 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_metrics.dart';
+import '../../core/utils/color_utils.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/widgets/app_page.dart';
 import '../../core/widgets/empty_state.dart';
@@ -24,6 +26,17 @@ class StorefrontView extends GetView<StorefrontController> {
       appBar: AppBar(
         title:
             Obx(() => Text(controller.scope.current.value?.name ?? 'Sellora')),
+        leading: Obx(() {
+          final logoUrl = controller.scope.current.value?.logoUrl;
+          if (logoUrl == null || logoUrl.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.all(AppSpacing.xs),
+            child: CircleAvatar(
+              backgroundImage: CachedNetworkImageProvider(logoUrl),
+              backgroundColor: AppColors.mist,
+            ),
+          );
+        }),
         actions: [
           Obx(() {
             final store = controller.scope.current.value;
@@ -47,6 +60,35 @@ class StorefrontView extends GetView<StorefrontController> {
         onRefresh: controller.load,
         child: CustomScrollView(
           slivers: [
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                sliverPadding.horizontal / 2,
+                AppSpacing.md,
+                sliverPadding.horizontal / 2,
+                0,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: Obx(() {
+                  final bannerUrl = controller.scope.current.value?.bannerUrl;
+                  if (bannerUrl == null || bannerUrl.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadii.card),
+                    child: CachedNetworkImage(
+                      imageUrl: bannerUrl,
+                      height: 140,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          Container(height: 140, color: AppColors.mist),
+                      errorWidget: (_, __, ___) =>
+                          Container(height: 140, color: AppColors.mist),
+                    ),
+                  );
+                }),
+              ),
+            ),
             SliverPadding(
               padding: EdgeInsets.fromLTRB(
                 sliverPadding.horizontal / 2,
@@ -95,10 +137,13 @@ class StorefrontView extends GetView<StorefrontController> {
                           final category = controller.categories[index];
                           final selected =
                               controller.selectedCategory.value == category;
+                          final accent = hexToColor(
+                                  controller.scope.current.value?.primaryColorHex) ??
+                              AppColors.cargoNavy;
                           return ChoiceChip(
                             label: Text(category),
                             selected: selected,
-                            selectedColor: AppColors.cargoNavy,
+                            selectedColor: accent,
                             labelStyle: TextStyle(
                               color: selected ? AppColors.cloud : AppColors.ink,
                               fontWeight: FontWeight.w600,

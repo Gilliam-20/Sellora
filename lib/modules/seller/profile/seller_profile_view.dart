@@ -54,6 +54,13 @@ class SellerProfileView extends StatelessWidget {
             const Divider(),
             ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('Customize store'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Get.toNamed(Routes.sellerStoreCustomize),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.payments_outlined),
               title: const Text('Subscription & billing'),
               trailing: const Icon(Icons.chevron_right),

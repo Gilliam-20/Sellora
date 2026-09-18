@@ -28,6 +28,7 @@ abstract class Routes {
   static const sellerShell = '/seller';
   static const sellerProductImport = '/seller/import';
   static const sellerManageVariants = '/seller/variants';
+  static const sellerStoreCustomize = '/seller/store/customize';
   static const sellerSubscription = '/seller/subscription';
 
   // Admin portal
