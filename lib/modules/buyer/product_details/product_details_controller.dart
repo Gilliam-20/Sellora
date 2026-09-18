@@ -8,14 +8,26 @@ class ProductDetailsController extends GetxController {
   late final ProductModel product;
   final quantity = 1.obs;
   final selectedVariant = Rxn<ProductVariant>();
+  final previewImage = ''.obs;
 
   @override
   void onInit() {
     super.onInit();
     product = Get.arguments as ProductModel;
+    previewImage.value = product.imageUrl;
     if (product.variants.isNotEmpty) {
-      selectedVariant.value = product.variants.first;
+      selectVariant(product.variants.first);
     }
+  }
+
+  /// Swaps the preview image when the chosen SKU has its own photo. No price
+  /// recalculation: the buyer always pays [ProductModel.sellPrice] regardless
+  /// of variant (see [ProductVariant]'s own doc comment) — this is purely
+  /// about picking which physical SKU ships.
+  void selectVariant(ProductVariant variant) {
+    selectedVariant.value = variant;
+    final image = variant.image;
+    if (image != null && image.isNotEmpty) previewImage.value = image;
   }
 
   void increment() => quantity.value++;

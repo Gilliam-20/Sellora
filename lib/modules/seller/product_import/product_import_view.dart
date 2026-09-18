@@ -163,6 +163,10 @@ class _ProductImportViewState extends State<ProductImportView> {
                   const SizedBox(height: AppSpacing.lg),
                   _PricingCard(
                     costPrice: controller.costPrice,
+                    shippingCost: controller.shippingCost,
+                    landedCost: controller.landedCost,
+                    isLoadingShipping: controller.isLoadingShipping.value,
+                    shippingError: controller.shippingError.value,
                     currency: controller.currencyCode,
                     priceCtrl: _priceCtrl,
                     marginPresets: _marginPresets,
@@ -373,6 +377,10 @@ class _VariantPicker extends StatelessWidget {
 class _PricingCard extends StatelessWidget {
   const _PricingCard({
     required this.costPrice,
+    required this.shippingCost,
+    required this.landedCost,
+    required this.isLoadingShipping,
+    required this.shippingError,
     required this.currency,
     required this.priceCtrl,
     required this.marginPresets,
@@ -380,6 +388,10 @@ class _PricingCard extends StatelessWidget {
   });
 
   final double costPrice;
+  final double shippingCost;
+  final double landedCost;
+  final bool isLoadingShipping;
+  final String? shippingError;
   final String currency;
   final TextEditingController priceCtrl;
   final List<int> marginPresets;
@@ -388,8 +400,8 @@ class _PricingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
-    final profit = price - costPrice;
-    final marginPercent = costPrice == 0 ? 0.0 : (profit / costPrice) * 100;
+    final profit = price - landedCost;
+    final marginPercent = landedCost == 0 ? 0.0 : (profit / landedCost) * 100;
     final isHealthy = profit > 0;
 
     return Container(
@@ -409,6 +421,34 @@ class _PricingCard extends StatelessWidget {
             children: [
               Text('CJ cost price', style: Theme.of(context).textTheme.bodyMedium),
               Text(Formatters.currency(costPrice, code: currency),
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Est. shipping to Kenya',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              if (isLoadingShipping)
+                const SizedBox(
+                    height: 14,
+                    width: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+              else if (shippingError != null)
+                Text('—', style: Theme.of(context).textTheme.bodyMedium)
+              else
+                Text(Formatters.currency(shippingCost, code: currency),
+                    style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          const Divider(height: AppSpacing.md),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Landed cost', style: Theme.of(context).textTheme.titleSmall),
+              Text(Formatters.currency(landedCost, code: currency),
                   style: AppTypography.price(size: 16)),
             ],
           ),

@@ -1,6 +1,6 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-15, later same day — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-18 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
@@ -8,7 +8,7 @@
 | **1 — Foundation** | Done — theme, responsive shell, shared primitives, 0 analyzer issues |
 | **2 — Auth + seller onboarding** | In progress — signup creates a store, marketing page is the signed-out entry point, seller shell now guards on store resolution; still missing: multi-store switcher (blocked on open decision #4) |
 | **3 — Billing** | Security core done — server-side `subscribeSeller`, immutable billing ledger, locked-down subscription fields, configurable plan schema (orderLimit/storeLimit/features), listing usage tracked. Not done: order-limit enforcement/usage (blocked on PHASE 4's order-attribution gap), cancel/resume, invoices UI |
-| **4 — Catalog + CJ import** | Client plumbing (endpoints, response parsing, admin sync) reconciled with the real CJ backend 2026-09-14; `ProductVariant` carries CJ's real per-SKU `vid`/`sku`/price 2026-09-15; a real seller import screen (variant picker + margin-based smart pricing + draft/publish) shipped 2026-09-15, replacing the old flat-price bottom sheet. Still not started: category browsing, shipping-cost estimate UI, buyer-facing variant selector; CJ integration is still unverified against a real account |
+| **4 — Catalog + CJ import** | Client plumbing (endpoints, response parsing, admin sync) reconciled with the real CJ backend 2026-09-14; `ProductVariant` carries CJ's real per-SKU `vid`/`sku`/price 2026-09-15; a real seller import screen (variant picker + margin-based smart pricing + draft/publish) shipped 2026-09-15, replacing the old flat-price bottom sheet. Category browsing (chip filter), a shipping-cost estimate feeding the import screen's landed-cost pricing, and a buyer-facing variant selector all shipped 2026-09-18. Still open: catalog-to-per-seller-listing mapping at scale (still `${sellerId}_${catalogProduct.id}` doc ids); CJ integration is still unverified against a real account |
 | **5 — Seller product management** | Not started — blocked behind the deferred flat→`stores/{storeId}/products` write migration |
 | **6 — Store builder** | Not started |
 | **7 — Customer storefront** | Not started (`/s/:slug` shared buyer feed still marketplace-era) |

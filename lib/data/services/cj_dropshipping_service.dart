@@ -1,6 +1,8 @@
 import 'package:get/get.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/network/dio_client.dart';
+import '../models/cj_category.dart';
+import '../models/freight_estimate.dart';
 import '../models/product_model.dart';
 
 /// Talks to CJ Dropshipping ONLY through Sellora's own Cloud Functions
@@ -54,6 +56,49 @@ class CjDropshippingService extends GetxService {
         .get(ApiEndpoints.getProductDetail, query: {'pid': cjProductId});
     final data = Map<String, dynamic>.from(res['data'] as Map? ?? {});
     return _detailToProduct(data);
+  }
+
+  /// Top-level CJ categories, for the catalog browse screen's filter chip
+  /// row. CJ's raw tree is 3 levels deep; only level 0 is parsed here (see
+  /// [CjCategory]) — this is a filter, not a drill-down browser.
+  Future<List<CjCategory>> getCategories() async {
+    final res = await _dio.get(ApiEndpoints.getCategories);
+    return CjCategory.topLevelFromRawTree(res['data'] as List? ?? []);
+  }
+
+  /// Cheapest freight option for [products] (`{vid, quantity}` each)
+  /// shipping to [endCountryCode]. Mirrors the cheapest-of-`logisticPrice`
+  /// selection functions/lib/orders.js already does server-side at checkout
+  /// — this client-side call feeds the seller import screen's landed-cost
+  /// pricing card, a separate concern from what checkout actually charges.
+  Future<FreightEstimate> calculateFreight({
+    required String endCountryCode,
+    required List<Map<String, dynamic>> products,
+  }) async {
+    final res = await _dio.post(ApiEndpoints.calculateFreight, data: {
+      'endCountryCode': endCountryCode,
+      'products': products,
+    });
+    final options = (res['data'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    Map<String, dynamic>? cheapest;
+    double cheapestPrice = double.infinity;
+    for (final option in options) {
+      final price = double.tryParse('${option['logisticPrice']}') ?? -1;
+      if (price >= 0 && price < cheapestPrice) {
+        cheapestPrice = price;
+        cheapest = option;
+      }
+    }
+    if (cheapest == null || !cheapestPrice.isFinite) {
+      throw StateError('No shipping option is available for this destination');
+    }
+    return FreightEstimate(
+      cost: cheapestPrice,
+      logisticName: cheapest['logisticName'] as String? ?? '',
+    );
   }
 
   /// Admin-only. Triggers the full CJ catalog/category sync pipeline

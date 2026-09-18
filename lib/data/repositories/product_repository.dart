@@ -1,8 +1,23 @@
+import '../models/cj_category.dart';
+import '../models/freight_estimate.dart';
 import '../models/product_model.dart';
 
 abstract class ProductRepository {
   /// The full CJ Dropshipping-sourced catalog available to list from.
+  /// [category] is a CJ category id (see [categories]), not a display name.
   Future<List<ProductModel>> browseCatalog({String? keyword, String? category});
+
+  /// Top-level categories for the catalog browse screen's filter chip row.
+  Future<List<CjCategory>> categories();
+
+  /// Cheapest freight estimate for one SKU shipping to [endCountryCode]
+  /// (Kenya by default). Feeds the seller import screen's landed-cost
+  /// pricing card only — buyer checkout prices real freight server-side.
+  Future<FreightEstimate> estimateShipping({
+    required String vid,
+    int quantity = 1,
+    String endCountryCode = 'KE',
+  });
 
   /// Products a specific seller has listed in their own store.
   Future<List<ProductModel>> sellerListings(String sellerId);

@@ -1,4 +1,6 @@
 import 'package:get/get.dart';
+import '../models/cj_category.dart';
+import '../models/freight_estimate.dart';
 import '../models/product_model.dart';
 import '../services/cj_dropshipping_service.dart';
 import '../services/firestore_service.dart';
@@ -16,6 +18,23 @@ class FirebaseProductRepository extends GetxService
   Future<List<ProductModel>> browseCatalog(
       {String? keyword, String? category}) {
     return _cj.searchProducts(keyword: keyword, categoryId: category);
+  }
+
+  @override
+  Future<List<CjCategory>> categories() => _cj.getCategories();
+
+  @override
+  Future<FreightEstimate> estimateShipping({
+    required String vid,
+    int quantity = 1,
+    String endCountryCode = 'KE',
+  }) {
+    return _cj.calculateFreight(
+      endCountryCode: endCountryCode,
+      products: [
+        {'vid': vid, 'quantity': quantity}
+      ],
+    );
   }
 
   @override

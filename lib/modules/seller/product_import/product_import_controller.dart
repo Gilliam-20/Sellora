@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../../../data/models/freight_estimate.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/product_repository.dart';
@@ -27,6 +28,10 @@ class ProductImportController extends GetxController {
   final isLoading = true.obs;
   final errorMessage = RxnString();
   final isSubmitting = false.obs;
+
+  final shippingEstimate = Rxn<FreightEstimate>();
+  final isLoadingShipping = false.obs;
+  final shippingError = RxnString();
 
   late final ProductModel _summary;
 
@@ -61,9 +66,28 @@ class ProductImportController extends GetxController {
     selectedVariant.value = variant;
     final image = variant.image;
     if (image != null && image.isNotEmpty) previewImage.value = image;
+    _loadShippingEstimate();
   }
 
   void showImage(String url) => previewImage.value = url;
+
+  Future<void> _loadShippingEstimate() async {
+    final vid = selectedVariant.value?.vid;
+    if (vid == null || vid.isEmpty) {
+      shippingEstimate.value = null;
+      return;
+    }
+    isLoadingShipping.value = true;
+    shippingError.value = null;
+    try {
+      shippingEstimate.value = await _productRepo.estimateShipping(vid: vid);
+    } catch (e) {
+      shippingError.value = 'Shipping estimate unavailable';
+      shippingEstimate.value = null;
+    } finally {
+      isLoadingShipping.value = false;
+    }
+  }
 
   /// What the margin calculator prices against — the selected SKU's own CJ
   /// supplier price when it has one, since sizes/colors of the same product
@@ -73,6 +97,15 @@ class ProductImportController extends GetxController {
     if (variantCost > 0) return variantCost;
     return product.value?.costPrice ?? 0;
   }
+
+  double get shippingCost => shippingEstimate.value?.cost ?? 0;
+
+  /// CJ cost + estimated shipping to Kenya — the basis the quick-margin
+  /// presets and the live profit/margin readout price against (landed cost,
+  /// not bare CJ cost). Local to this screen only — doesn't touch
+  /// ProductModel.costPrice/marginPercent, which stay CJ-cost-only
+  /// elsewhere (e.g. the dashboard).
+  double get landedCost => costPrice + shippingCost;
 
   /// CJ's own suggested retail for the current selection — already
   /// margin-priced server-side (functions/lib/marginPricingService.js), so
@@ -88,11 +121,11 @@ class ProductImportController extends GetxController {
 
   String get currencyCode => product.value?.currency ?? 'USD';
 
-  /// The price that yields [marginPercent] over [costPrice], matching how
-  /// [ProductModel.marginPercent] defines margin (over cost, not over price)
-  /// so the number a seller picks here is the number their listing shows.
+  /// The price that yields [marginPercent] over [landedCost] (CJ cost +
+  /// estimated shipping), not just bare CJ cost — an accurate margin has to
+  /// account for what it actually costs to get the item to a buyer.
   double priceForMargin(double marginPercent) =>
-      costPrice * (1 + marginPercent / 100);
+      landedCost * (1 + marginPercent / 100);
 
   /// Writes the listing. Returns false when it was blocked (no session, or
   /// the plan's listing limit is already reached — which snackbars its own

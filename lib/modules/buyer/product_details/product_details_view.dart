@@ -8,6 +8,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
+import '../../../data/models/product_model.dart';
 import '../../../data/repositories/cart_repository.dart';
 import 'product_details_controller.dart';
 
@@ -28,8 +29,11 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
             backgroundColor: AppColors.mist,
             surfaceTintColor: Colors.transparent,
             flexibleSpace: FlexibleSpaceBar(
-              background: CachedNetworkImage(
-                  imageUrl: product.imageUrl, fit: BoxFit.cover),
+              background: Obx(() => CachedNetworkImage(
+                  imageUrl: controller.previewImage.value.isNotEmpty
+                      ? controller.previewImage.value
+                      : product.imageUrl,
+                  fit: BoxFit.cover)),
             ),
           ),
           SliverToBoxAdapter(
@@ -84,6 +88,17 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
                         : product.description,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
+                  if (product.variants.length > 1) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    Text('Choose an option',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: AppSpacing.sm),
+                    Obx(() => _BuyerVariantPicker(
+                          variants: product.variants,
+                          selected: controller.selectedVariant.value,
+                          onSelect: controller.selectVariant,
+                        )),
+                  ],
                   const SizedBox(height: AppSpacing.lg),
                   Row(
                     children: [
@@ -118,6 +133,35 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
               )
             : const SizedBox.shrink(),
       ),
+    );
+  }
+}
+
+class _BuyerVariantPicker extends StatelessWidget {
+  const _BuyerVariantPicker({
+    required this.variants,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final List<ProductVariant> variants;
+  final ProductVariant? selected;
+  final ValueChanged<ProductVariant> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.sm,
+      children: variants.map((variant) {
+        final isSelected = selected?.vid == variant.vid;
+        return ChoiceChip(
+          label: Text(variant.label),
+          selected: isSelected,
+          selectedColor: AppColors.manifestGold.withValues(alpha: 0.3),
+          onSelected: (_) => onSelect(variant),
+        );
+      }).toList(),
     );
   }
 }

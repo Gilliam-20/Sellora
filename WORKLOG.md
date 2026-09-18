@@ -6,6 +6,85 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-18 — PHASE 4: category browsing, shipping-cost estimate, buyer variant selector
+
+**Status:** implemented and verified this session (`flutter analyze` clean — same 4 pre-existing
+`info`/`error` issues confirmed present before this session's changes too via a `git stash` A/B
+check; `flutter test` same 8/10 pass rate as the pre-existing baseline, confirmed the same way; live-
+verified in a browser). Closes the three items the 2026-09-15 and 2026-09-14 entries left explicitly
+out of scope: category browsing, a shipping-cost estimate UI, and a buyer-facing variant selector.
+All three are additive client-side work — `getCategories`/`calculateFreight` already existed
+correctly in `functions/index.js` and `ApiEndpoints`, just with no client consumer yet.
+
+**Changed:**
+- **New `lib/data/models/cj_category.dart`**: `CjCategory {id, name}` with
+  `topLevelFromRawTree()`, parsing CJ's raw nested category tree (id/name found by key-suffix
+  matching, e.g. `categoryFirstId`/`categoryFirstName`) into level-0 nodes only — mirrors
+  `functions/lib/catalogSync.js`'s `normalizeCategoryNode`, scoped to a filter chip row rather than a
+  3-level drill-down browser.
+- **New `lib/data/models/freight_estimate.dart`**: `FreightEstimate {cost, logisticName, currency}`.
+  Only `logisticPrice`/`logisticName` are contract-confirmed anywhere in this repo (via
+  `functions/lib/orders.js`'s existing consumption of the same CJ call) — no delivery-time field is
+  invented.
+- **`lib/data/services/cj_dropshipping_service.dart`**: added `getCategories()` (GETs
+  `ApiEndpoints.getCategories`, parses via `CjCategory.topLevelFromRawTree`) and `calculateFreight()`
+  (POSTs `ApiEndpoints.calculateFreight`, picks the cheapest option by `logisticPrice` exactly the way
+  `orders.js` already does server-side at checkout).
+- **`ProductRepository`** (+ both implementations, + the test fake in
+  `test/mock_subscription_repository_test.dart`): gained `categories()` and `estimateShipping({vid,
+  quantity, endCountryCode = 'KE'})`. `FirebaseProductRepository` delegates to the new service
+  methods; `MockProductRepository` synthesizes a category list from the distinct `category` names
+  already in `MockSeedData.catalog()` and a deterministic per-vid fake freight estimate (~$2.50–$12,
+  keyed off `vid.hashCode`) — kept genuinely useful rather than empty stubs, per this repo's "every
+  screen fully clickable under `useMockData = true`" rule.
+- **`lib/modules/seller/catalog/`**: the catalog browse screen gained a category filter chip row
+  (`ChoiceChip`s, toggle-off on repeat tap) above the search field, wired to `browseCatalog`'s
+  existing (previously unused) `category` param.
+- **`lib/modules/seller/product_import/`**: the Smart Pricing card gained an "Est. shipping to Kenya"
+  line and a "Landed cost" (CJ cost + shipping) subtotal; the quick-margin presets and the live
+  profit/margin readout now price off landed cost instead of bare CJ cost, matching `TODO.md`'s
+  original "CJ cost + Shipping + margin = recommended price" spec. Fetches on initial variant
+  selection and every later variant switch (`ProductImportController.selectVariant`). Deliberately
+  does **not** touch `ProductModel.costPrice`/`marginPercent` — those stay CJ-cost-only for the
+  dashboard and other screens; the landed-cost basis is local to this screen's own calculation.
+- **`lib/modules/buyer/product_details/`**: added a variant chip picker ("Choose an option",
+  label-only, no price — the buyer always pays `ProductModel.sellPrice` regardless of variant) and
+  image-swap state (`previewImage`, this screen had none before). No changes needed to
+  `addToCart`/`CartRepository`/`CheckoutController` — the vid/label plumbing through to `OrderItem`
+  was already wired from the 2026-09-15 variant-id work; only the picker UI and the `selectVariant()`
+  method were missing.
+
+**Verified live in a browser this session**: `flutter run -d web-server` driven by a headless system
+Chrome via a small Playwright (`playwright-core`, no bundled browser download) script — same
+CanvasKit-has-no-queryable-DOM constraint as the 2026-09-15 session, so coordinate clicks + screenshots
+again, not role/label locators. Signed in as the seller quick-login shortcut, opened the CJ catalog:
+category chips (Electronics/Fashion/Home) rendered and filtering worked both ways (Home → coffee set +
+storage bags; Electronics → earbuds/ring light/laptop stand). Opened the Wireless Earbuds import screen
+(2 variants): Black showed CJ cost $14.20 + shipping $3.18 = landed cost $17.38, profit/margin computed
+correctly off that ($17.61/101% at the pre-filled $34.99); switching to White updated CJ cost to $15.10
+and shipping to a *different* estimate ($11.84, confirming the per-vid mock estimate actually varies),
+landed cost/profit/margin recomputed correctly (26.94 / $8.05 / 30%). Then signed in as a buyer at
+`/s/aminas-picks/login` and opened the same product from the storefront: a Black/White chip row
+appeared, price stayed fixed at $34.99 across both, switching to White swapped the hero image to the
+variant's own photo, and "Add to cart" worked (cart badge went 0→1). Zero console errors across every
+step.
+
+**Deliberately not done (per the approved plan, out of scope):** category browsing stays level-0 chips
+only, not a 3-level drill-down; no buyer-facing shipping estimate (buyer checkout already prices real
+freight server-side via `createOrder`); no backend/`functions/` changes (both endpoints already
+existed); no title/description/SEO/collections work.
+
+**Caveat, unchanged from the 2026-09-14 entry:** CJ field names beyond `logisticPrice`/`logisticName`
+and the id/name key-suffix convention are still unverified against a live CJ account — only backend
+tests and `orders.js`'s existing server-side consumption confirm them.
+
+**Next step:** Phase 4's three explicitly-tracked gaps are now closed. What's left of Phase 4 per
+`SELLORA_IMPLEMENTATION_PLAN.md` is reconciling how a shared CJ catalog maps onto per-seller `listings`
+at scale (still `${sellerId}_${catalogProduct.id}` doc ids) — unchanged from prior entries, not touched
+here. Phase 5 (seller product management) remains the natural next phase.
+
+---
+
 ## 2026-09-15 — PHASE 4: seller product-import screen (variant picker + smart pricing)
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 3 pre-existing

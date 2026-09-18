@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:sellora/data/models/cj_category.dart';
+import 'package:sellora/data/models/freight_estimate.dart';
 import 'package:sellora/data/models/product_model.dart';
 import 'package:sellora/data/models/store_model.dart';
 import 'package:sellora/data/models/user_model.dart';
@@ -91,6 +93,14 @@ class _FakeProductRepository implements ProductRepository {
   @override
   Future<List<ProductModel>> browseCatalog(
           {String? keyword, String? category}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<CjCategory>> categories() => throw UnimplementedError();
+
+  @override
+  Future<FreightEstimate> estimateShipping(
+          {required String vid, int quantity = 1, String endCountryCode = 'KE'}) =>
       throw UnimplementedError();
 
   @override

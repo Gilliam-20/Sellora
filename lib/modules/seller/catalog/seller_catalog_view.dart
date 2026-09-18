@@ -33,6 +33,37 @@ class SellerCatalogView extends GetView<SellerCatalogController> {
                     prefixIcon: Icon(Icons.search)),
               ),
             ),
+            Obx(() {
+              if (controller.categories.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: EdgeInsets.only(
+                    left: context.pageHorizontalPadding,
+                    right: context.pageHorizontalPadding,
+                    bottom: AppSpacing.sm),
+                child: SizedBox(
+                  height: 36,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: controller.categories.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(width: AppSpacing.xs),
+                    itemBuilder: (context, index) {
+                      final category = controller.categories[index];
+                      final isSelected =
+                          controller.selectedCategoryId.value == category.id;
+                      return ChoiceChip(
+                        label: Text(category.name),
+                        selected: isSelected,
+                        selectedColor:
+                            AppColors.manifestGold.withValues(alpha: 0.3),
+                        onSelected: (_) =>
+                            controller.selectCategory(category.id),
+                      );
+                    },
+                  ),
+                ),
+              );
+            }),
             Expanded(
               child: Obx(() {
                 if (controller.isLoading.value) return const SelloraLoader();

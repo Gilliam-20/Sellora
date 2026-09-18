@@ -1,4 +1,6 @@
 import 'package:get/get.dart';
+import '../../models/cj_category.dart';
+import '../../models/freight_estimate.dart';
 import '../../models/product_model.dart';
 import '../../mock/mock_seed_data.dart';
 import '../product_repository.dart';
@@ -36,6 +38,32 @@ class MockProductRepository extends GetxService implements ProductRepository {
           category == null || category == 'All' || p.category == category;
       return matchesKeyword && matchesCategory;
     }).toList();
+  }
+
+  @override
+  Future<List<CjCategory>> categories() async {
+    await Future.delayed(const Duration(milliseconds: 150));
+    // Mock filtering matches `p.category == category` directly (see
+    // browseCatalog below), so the "id" here has to be the same display
+    // name string the seed data actually carries.
+    final names = _catalog.map((p) => p.category).toSet().toList()..sort();
+    return names.map((n) => CjCategory(id: n, name: n)).toList();
+  }
+
+  @override
+  Future<FreightEstimate> estimateShipping({
+    required String vid,
+    int quantity = 1,
+    String endCountryCode = 'KE',
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    // Deterministic per-vid fake (~$2.50-$12.00) so a demo quotes the same
+    // number for the same SKU every time, rather than a random one.
+    final base = 2.5 + (vid.hashCode.abs() % 950) / 100;
+    return FreightEstimate(
+      cost: double.parse((base * quantity).toStringAsFixed(2)),
+      logisticName: 'Standard Line (demo estimate)',
+    );
   }
 
   @override
