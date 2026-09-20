@@ -4,12 +4,14 @@ import '../../../app/routes/app_routes.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/cart_repository.dart';
+import '../../../data/repositories/store_repository.dart';
 import '../../../data/services/storage_service.dart';
 
 class AuthController extends GetxController {
   final AuthRepository _authRepo = Get.find<AuthRepository>();
   final StorageService _storage = Get.find<StorageService>();
   final CartRepository _cartRepo = Get.find<CartRepository>();
+  final StoreRepository _storeRepo = Get.find<StoreRepository>();
 
   final isLoading = false.obs;
   final errorMessage = RxnString();
@@ -23,7 +25,7 @@ class AuthController extends GetxController {
         onTimeout: () => null,
       );
       if (user != null) {
-        _goToHome(user);
+        await _goToHome(user);
         return;
       }
     } catch (_) {
@@ -51,7 +53,7 @@ class AuthController extends GetxController {
         return;
       }
       _storage.lastRole = user.role.name;
-      _goToHome(user);
+      await _goToHome(user);
     } catch (e) {
       errorMessage.value = _friendlyError(e);
     } finally {
@@ -79,7 +81,7 @@ class AuthController extends GetxController {
         return;
       }
       _storage.lastRole = user.role.name;
-      _goToHome(user);
+      await _goToHome(user);
     } catch (e) {
       errorMessage.value = _friendlyError(e);
     } finally {
@@ -99,7 +101,7 @@ class AuthController extends GetxController {
       final user = await _authRepo.signUpBuyer(
           name: name, email: email, password: password, storeId: storeId);
       _storage.lastRole = user.role.name;
-      _goToHome(user);
+      await _goToHome(user);
     } catch (e) {
       errorMessage.value = _friendlyError(e);
     } finally {
@@ -153,11 +155,11 @@ class AuthController extends GetxController {
     Get.offAllNamed(Routes.login);
   }
 
-  void _goToHome(UserModel user) {
+  Future<void> _goToHome(UserModel user) async {
     switch (user.role) {
       case UserRole.buyer:
         _cartRepo.setStore(user.storeId);
-        Get.offAllNamed(Routes.buyerShell);
+        await _goToBuyerStore(user.storeId);
         break;
       case UserRole.seller:
         Get.offAllNamed(user.hasActiveSubscription
@@ -168,6 +170,20 @@ class AuthController extends GetxController {
         Get.offAllNamed(Routes.adminShell);
         break;
     }
+  }
+
+  /// A buyer's home is their own store's `/s/{slug}`. Sign-in/registration
+  /// already happen from that exact route, so the slug is almost always
+  /// already in `Get.parameters` — the store lookup below only runs for the
+  /// cold-start case (`checkSession()` resuming a cached session from the
+  /// splash screen, which carries no `:slug`).
+  Future<void> _goToBuyerStore(String? storeId) async {
+    final routeSlug = Get.parameters['slug'];
+    String? slug = routeSlug != null && routeSlug.isNotEmpty ? routeSlug : null;
+    if (slug == null && storeId != null) {
+      slug = (await _storeRepo.storeById(storeId))?.slug;
+    }
+    Get.offAllNamed(slug != null ? '/s/$slug' : Routes.marketing);
   }
 
   String _friendlyError(Object e) {

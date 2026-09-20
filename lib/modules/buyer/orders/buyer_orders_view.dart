@@ -8,6 +8,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/manifest_stub.dart';
+import '../../../data/repositories/auth_repository.dart';
 import 'buyer_orders_controller.dart';
 
 class BuyerOrdersView extends GetView<BuyerOrdersController> {
@@ -18,6 +19,17 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
     return Scaffold(
       appBar: AppBar(title: const Text('Your orders')),
       body: Obx(() {
+        if (Get.find<AuthRepository>().cachedUser == null) {
+          return EmptyState(
+            icon: Icons.receipt_long_outlined,
+            title: 'Sign in to see your orders',
+            message: 'Create an account or sign in to track your purchases '
+                'from this store.',
+            actionLabel: 'Sign in',
+            onAction: () =>
+                Get.toNamed('/s/${Get.parameters['slug']}/login'),
+          );
+        }
         if (controller.isLoading.value) return const SelloraLoader();
         if (controller.orders.isEmpty) {
           return const EmptyState(

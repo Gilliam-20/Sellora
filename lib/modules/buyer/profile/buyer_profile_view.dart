@@ -4,6 +4,7 @@ import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/store_repository.dart';
 
@@ -29,6 +30,21 @@ class BuyerProfileView extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = Get.find<AuthRepository>().cachedUser;
 
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Profile')),
+        body: EmptyState(
+          icon: Icons.person_outline,
+          title: 'You\'re browsing as a guest',
+          message: 'Sign in or create an account to save your details and '
+              'track orders.',
+          actionLabel: 'Sign in',
+          onAction: () =>
+              Get.toNamed('/s/${Get.parameters['slug']}/login'),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Profile')),
       body: ResponsiveCenter(
@@ -42,8 +58,7 @@ class BuyerProfileView extends StatelessWidget {
               radius: 32,
               backgroundColor: AppColors.buyerAccent.withValues(alpha: 0.2),
               child: Text(
-                (user?.name.isNotEmpty == true ? user!.name[0] : '?')
-                    .toUpperCase(),
+                (user.name.isNotEmpty ? user.name[0] : '?').toUpperCase(),
                 style: const TextStyle(
                     fontSize: 24,
                     color: AppColors.horizonTealDeep,
@@ -51,10 +66,8 @@ class BuyerProfileView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            Text(user?.name ?? '',
-                style: Theme.of(context).textTheme.titleLarge),
-            Text(user?.email ?? '',
-                style: Theme.of(context).textTheme.bodySmall),
+            Text(user.name, style: Theme.of(context).textTheme.titleLarge),
+            Text(user.email, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: AppSpacing.lg),
             const Divider(),
             ListTile(

@@ -6,6 +6,85 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-20 — PHASE 7: buyer shopping flow unified under `/s/:slug`
+
+**Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as every
+recent entry — `responsive.dart:95`, `mock_admin_repository.dart:49`,
+`test/auth_repository_test.dart:63` — none touched by this change). `flutter test` shows the same two
+pre-existing failures as before this change (`test/auth_repository_test.dart` — the same missing
+`sellerTermsVersion` import above — and `test/seller_shell_controller_test.dart`'s `NotificationCenter`
+setup gap, confirmed pre-existing by re-running it against `git stash`); nothing newly broken.
+`flutter build web` succeeds. Not click-through-verified in a browser this session — same disclosed gap
+as most prior entries.
+
+**Why:** `TODO.md`/`SELLORA_IMPLEMENTATION_PLAN.md` listed PHASE 7 ("Replace the shared buyer feed with
+`/s/:slug` storefront pages, store-bound carts, customer profiles beneath that store") as not started,
+but that was stale — `StoreScope`, a guest-browsable `StorefrontView` at `/s/:slug`,
+`CartRepository.storeId`/`setStore`, `OrderModel.storeId`, and store-scoped
+`buyerStoreOrders`/`storeProducts` repository methods already existed (see the 2026-09-11 and
+2026-09-13 entries). What was actually missing, per the 2026-09-13 entry's own "Not done" note, was
+that cart/checkout was never wired into the public `StorefrontView` — a signed-in buyer still shopped
+through a completely separate, flat `/buyer` shell that a guest could never reach, while
+`StorefrontView`'s product cards did nothing on tap. Two parallel, duplicate feed implementations
+existed side by side: `StorefrontView` (guest, `/s/:slug`, `storeProducts()`) and
+`BuyerHomeView`/`BuyerHomeController` (signed-in, flat `/buyer`, `sellerListings()`).
+
+**Changed:**
+- **`Routes.storefront` (`/s/:slug`) is now the buyer shell itself** (`BuyerShellView`, bound with both
+  `StorefrontBinding()` and `BuyerBinding()`) instead of a standalone `StorefrontView` page — one URL
+  serves guests and signed-in buyers alike, so signing in never changes the address.
+  `Routes.buyerShell`/`buyerProductDetails`/`buyerCheckout` (flat `/buyer...`) are gone, replaced by
+  `Routes.storefrontProduct`/`storefrontCheckout` (`/s/:slug/product`, `/s/:slug/checkout`) — still
+  guest-reachable (no `RoleMiddleware`), since a guest can browse a product and hold a cart; checkout
+  gates its own submit step in-widget instead.
+- **Deleted `lib/modules/buyer/home/`** (`BuyerHomeController`/`BuyerHomeView`) outright —
+  `StorefrontView` was already a strict superset (same search/category/grid, plus logo/banner/account
+  icon `BuyerHomeView` never had) once its product tap was wired up. `StorefrontView` is now the
+  shell's "Shop" tab for everyone; its account icon jumps to the Profile tab in-place
+  (`Get.find<BuyerShellController>().changeTab(4)`) when already signed in here, instead of navigating
+  to the now-deleted `Routes.buyerShell`.
+- **`BuyerShellController`** now resolves `StoreScope` from the route's `:slug` itself
+  (`resolveStore()`), mirroring `SellerShellController`'s already-proven pattern exactly — constructor-
+  injected deps for testability, same `resolveStore`/gate naming. This is also what calls
+  `CartRepository.setStore(store.id)`, now regardless of auth state, so a guest can add to cart before
+  ever signing in. **`BuyerShellView`** gates rendering on `scope.isResolving`/`current`/`errorMessage`
+  before showing the tab shell, same shape as `SellerShellView`'s guard.
+- **`StorefrontController.load()`** simplified: it no longer calls `scope.resolveSlug()` itself (the
+  shell now owns that single resolution call) — it just reads the already-resolved
+  `scope.current.value`. Fixes a real, if minor, bug along the way: the old version re-resolved the
+  slug from scratch on every search keystroke and category tap.
+- **Checkout gains a sign-in gate**: `CheckoutView` now renders a "Sign in to complete your order"
+  `EmptyState` instead of the order form when the cached user isn't a signed-in buyer of the cart's
+  store — closes a real, previously-open gap (`buyerCheckout`/`buyerProductDetails` had no
+  `RoleMiddleware` at all, so they were reachable unauthenticated with no guard whatsoever).
+  Deliberately no post-login redirect-back to checkout — the buyer's cart survives the sign-in
+  round-trip untouched (same store), so they just tap Checkout again from the shop tab. Building
+  return-URL plumbing was scoped out.
+- **Bug fixed along the way:** `BuyerOrdersController.loadOrders()` left `isLoading` stuck `true`
+  forever for a guest (the `user == null` guard returned before setting it false) — a guest on the
+  Orders tab saw an infinite spinner. Now clears `orders` and sets `isLoading = false`.
+  `BuyerOrdersView`/`BuyerProfileView` both gained a "sign in to continue" `EmptyState` for a guest,
+  instead of a stuck spinner or blank name/email fields.
+- **`AuthController._goToHome`**'s buyer branch now resolves the buyer's store slug (from
+  `Get.parameters['slug']`, already known during sign-in/registration since those happen from
+  `/s/{slug}/login`/`register`; falls back to a `StoreRepository.storeById` lookup only for
+  `checkSession()`'s cold-start case) and lands on `/s/{slug}` instead of the deleted flat
+  `Routes.buyerShell`.
+- **`RoleMiddleware`**'s wrong-role redirect for a buyer now points at `Routes.marketing` instead of
+  the deleted `Routes.buyerShell` — this branch only fires if a signed-in buyer manually navigates to a
+  seller/admin URL, and `redirect()` is synchronous with no cheap way to recover a slug, so this is
+  strictly better than the dead reference it replaces rather than a full fix.
+
+**Deliberately not done this pass** (per the plan's scope, to avoid touching work blocked elsewhere):
+collections browsing (no model yet — PHASE 5 item), a dedicated `Customer` model or reading
+`stores/{storeId}/customers` (nothing reads that mirror doc today), migrating order writes onto
+`stores/{storeId}/orders` (the adopted Cloud Functions backend has no store concept server-side at all
+— separate PHASE 8 backend work), client-side one-seller-per-cart validation at add-to-cart time (still
+relies on the server-side `createOrder` rejection), a multi-store switcher, an order-detail/tracking
+screen, and search/SEO improvements beyond what already existed.
+
+---
+
 ## 2026-09-20 — PHASE 6: store builder, device photo picker for logo/banner
 
 **Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as the

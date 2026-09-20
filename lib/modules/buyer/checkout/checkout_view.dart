@@ -6,6 +6,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
+import '../../../core/widgets/empty_state.dart';
+import '../../../data/models/user_model.dart';
+import '../../../data/repositories/auth_repository.dart';
 import 'checkout_controller.dart';
 
 class CheckoutView extends StatefulWidget {
@@ -47,6 +50,26 @@ class _CheckoutViewState extends State<CheckoutView> {
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<CheckoutController>();
+    final user = Get.find<AuthRepository>().cachedUser;
+    final slug = Get.parameters['slug'];
+    final signedInHere = user != null &&
+        user.role == UserRole.buyer &&
+        controller.cartRepo.storeId != null &&
+        user.storeId == controller.cartRepo.storeId;
+
+    if (!signedInHere) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Checkout')),
+        body: EmptyState(
+          icon: Icons.lock_outline,
+          title: 'Sign in to complete your order',
+          message: 'Your cart is saved — sign in as a customer of this '
+              'store to finish checking out.',
+          actionLabel: 'Sign in',
+          onAction: () => Get.toNamed('/s/$slug/login'),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),

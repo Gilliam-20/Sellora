@@ -25,7 +25,6 @@ import '../../modules/seller/subscription/seller_subscription_view.dart';
 import '../../modules/storefront/storefront_binding.dart';
 import '../../modules/storefront/storefront_login_view.dart';
 import '../../modules/storefront/storefront_register_view.dart';
-import '../../modules/storefront/storefront_view.dart';
 import 'app_routes.dart';
 import 'role_middleware.dart';
 
@@ -55,8 +54,8 @@ class AppPages {
     GetPage(name: Routes.sellerTerms, page: () => const SellerTermsView()),
     GetPage(
       name: Routes.storefront,
-      page: () => const StorefrontView(),
-      binding: StorefrontBinding(),
+      page: () => const BuyerShellView(),
+      bindings: [StorefrontBinding(), BuyerBinding()],
     ),
     GetPage(
       name: Routes.storefrontLogin,
@@ -76,20 +75,19 @@ class AppPages {
       middlewares: [RoleMiddleware(UserRole.seller)],
     ),
 
-    // ---- Buyer portal ----------------------------------------------------
+    // ---- Buyer portal ------------------------------------------------
+    // Pushed on top of the storefront shell (Routes.storefront above) —
+    // still store-scoped via the shared :slug segment, own back-stack
+    // entries. Guest-reachable for browsing/cart; CheckoutView gates its
+    // own submit step behind sign-in rather than a route middleware, since
+    // a guest should still be able to view a product and their cart.
     GetPage(
-      name: Routes.buyerShell,
-      page: () => const BuyerShellView(),
-      binding: BuyerBinding(),
-      middlewares: [RoleMiddleware(UserRole.buyer)],
-    ),
-    GetPage(
-      name: Routes.buyerProductDetails,
+      name: Routes.storefrontProduct,
       page: () => const ProductDetailsView(),
       binding: ProductDetailsBinding(),
     ),
     GetPage(
-      name: Routes.buyerCheckout,
+      name: Routes.storefrontCheckout,
       page: () => const CheckoutView(),
       binding: CheckoutBinding(),
     ),

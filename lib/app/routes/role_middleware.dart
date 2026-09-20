@@ -28,8 +28,13 @@ class RoleMiddleware extends GetMiddleware {
     }
 
     if (user.role != requiredRole) {
+      // A buyer only ever has a store-scoped home (`/s/{slug}`), and this
+      // synchronous redirect() has no cheap way to look up their slug — this
+      // branch only fires if a signed-in buyer manually navigates to a
+      // seller/admin URL, so send them to marketing rather than stall on an
+      // async store lookup or a dead route name.
       final home = switch (user.role) {
-        UserRole.buyer => Routes.buyerShell,
+        UserRole.buyer => Routes.marketing,
         UserRole.seller => Routes.sellerShell,
         UserRole.admin => Routes.adminShell,
       };

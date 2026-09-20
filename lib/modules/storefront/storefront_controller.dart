@@ -20,25 +20,23 @@ class StorefrontController extends GetxController {
     load();
   }
 
+  /// The store itself is resolved once by BuyerShellController (which gates
+  /// this whole tab tree on that resolution finishing) — this just reads
+  /// the already-resolved StoreScope.current, so filtering never re-triggers
+  /// a redundant slug lookup.
   Future<void> load() async {
-    isLoading.value = true;
-    final slug = Get.parameters['slug'];
-    if (slug == null || slug.isEmpty) {
-      scope.clear();
+    final store = scope.current.value;
+    if (store == null) {
+      items.clear();
       isLoading.value = false;
       return;
     }
-
-    final store = await scope.resolveSlug(slug);
-    if (store != null) {
-      items.value = await _products.storeProducts(
-        store.id,
-        keyword: searchQuery.value,
-        category: selectedCategory.value,
-      );
-    } else {
-      items.clear();
-    }
+    isLoading.value = true;
+    items.value = await _products.storeProducts(
+      store.id,
+      keyword: searchQuery.value,
+      category: selectedCategory.value,
+    );
     isLoading.value = false;
   }
 

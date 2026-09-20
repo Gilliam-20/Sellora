@@ -10,8 +10,11 @@ abstract class Routes {
 
   static const sellerOnboarding = '/seller/onboarding';
 
-  // Public tenant storefront. This remains separate from portal routes so a
-  // later custom-domain resolver only has to populate StoreScope.
+  // Public tenant storefront — also the buyer shell (shop/cart/orders/
+  // profile tabs). One URL serves guests and signed-in buyers alike, so
+  // signing in never changes the address. This remains separate from other
+  // portal routes so a later custom-domain resolver only has to populate
+  // StoreScope.
   static const storefront = '/s/:slug';
 
   // Store-scoped buyer auth — a buyer registers/signs in as a customer of
@@ -19,10 +22,10 @@ abstract class Routes {
   static const storefrontLogin = '/s/:slug/login';
   static const storefrontRegister = '/s/:slug/register';
 
-  // Buyer portal
-  static const buyerShell = '/buyer';
-  static const buyerProductDetails = '/buyer/product';
-  static const buyerCheckout = '/buyer/checkout';
+  // Pushed on top of the storefront shell — still store-scoped, but their
+  // own back-stack entries rather than shell tabs.
+  static const storefrontProduct = '/s/:slug/product';
+  static const storefrontCheckout = '/s/:slug/checkout';
 
   // Seller portal
   static const sellerShell = '/seller';

@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_metrics.dart';
 import '../../core/utils/color_utils.dart';
@@ -13,10 +12,11 @@ import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/product_card.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../buyer/shell/buyer_shell_controller.dart';
 import 'storefront_controller.dart';
 
-/// Guest-accessible storefront for a single tenant. Cart and checkout are
-/// intentionally not attached until their store-bound data model is ready.
+/// The "Shop" tab of the store-scoped buyer shell (BuyerShellView), reached
+/// by guests and signed-in buyers alike at the same `/s/{slug}` URL.
 class StorefrontView extends GetView<StorefrontController> {
   const StorefrontView({super.key});
 
@@ -59,9 +59,13 @@ class StorefrontView extends GetView<StorefrontController> {
                 final signedInHere = user != null &&
                     user.role == UserRole.buyer &&
                     user.storeId == store.id;
-                Get.toNamed(signedInHere
-                    ? Routes.buyerShell
-                    : '/s/${store.slug}/login');
+                if (signedInHere) {
+                  // Already on this store's shell — just switch tabs
+                  // rather than navigating to a new route.
+                  Get.find<BuyerShellController>().changeTab(4);
+                } else {
+                  Get.toNamed('/s/${store.slug}/login');
+                }
               },
             );
           }),
@@ -209,10 +213,17 @@ class StorefrontView extends GetView<StorefrontController> {
                 sliver: SliverGrid(
                   gridDelegate: productGridDelegate(),
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) => ProductCard(
-                      product: controller.items[index],
-                      onTap: () {},
-                    ),
+                    (context, index) {
+                      final product = controller.items[index];
+                      return ProductCard(
+                        product: product,
+                        onTap: () {
+                          final slug = controller.scope.current.value?.slug;
+                          if (slug == null) return;
+                          Get.toNamed('/s/$slug/product', arguments: product);
+                        },
+                      );
+                    },
                     childCount: controller.items.length,
                   ),
                 ),

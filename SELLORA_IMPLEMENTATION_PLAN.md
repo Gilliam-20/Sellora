@@ -191,7 +191,25 @@ modes. See `WORKLOG.md`'s 2026-09-20 entry for the size-limit and rendering deta
 ## PHASE 7 — Customer storefront
 
 Replace the shared buyer feed with `/s/:slug` storefront pages, store-bound carts, customer profiles
-beneath that store. Not started.
+beneath that store.
+
+**2026-09-20 update:** core shopping flow done — see `WORKLOG.md`'s 2026-09-20 entry for the full
+change list. `Routes.storefront` (`/s/:slug`) is now the buyer shell itself (shop/cart/orders/alerts/
+profile tabs), reachable by guests and signed-in buyers at the same URL; the old flat `/buyer` shell
+and its duplicate feed (`BuyerHomeController`/`BuyerHomeView`, which read `sellerListings()` separately
+from `StorefrontController`'s `storeProducts()`) are deleted. Product details and checkout are now
+`/s/:slug/product` and `/s/:slug/checkout` — guest-reachable for browsing/cart, with checkout gating
+its own submit step behind sign-in rather than route middleware. `BuyerShellController` resolves
+`StoreScope` from the route the same way `SellerShellController` does for the seller side.
+
+Still not started: collections (needs PHASE 5's model first — no collection concept exists yet), a
+dedicated `Customer` model or any reads of `stores/{storeId}/customers` (still just a write-once mirror
+of the `users/{uid}` doc, per the 2026-09-08 decision log), an order-detail/tracking screen (order
+*history* exists, a single order's fulfillment detail doesn't), a multi-store switcher, and any
+search/SEO work beyond the existing keyword/category filter. Order writes still land in the flat
+`orders` collection — `stores/{storeId}/orders` is read-ready but nothing writes there, since the
+adopted Cloud Functions backend has no store concept server-side at all (PHASE 8's problem, not
+touched here).
 
 ## PHASE 8 — Payments + orders: slice done, rest not started
 

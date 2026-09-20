@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/widgets/adaptive_shell_scaffold.dart';
+import '../../../core/widgets/app_page.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../../../data/repositories/cart_repository.dart';
+import '../../storefront/storefront_view.dart';
 import '../cart/cart_view.dart';
-import '../home/buyer_home_view.dart';
 import '../orders/buyer_orders_view.dart';
 import '../profile/buyer_profile_view.dart';
 import '../../notifications/notification_center.dart';
@@ -15,7 +17,7 @@ class BuyerShellView extends GetView<BuyerShellController> {
   const BuyerShellView({super.key});
 
   static const _tabs = [
-    BuyerHomeView(),
+    StorefrontView(),
     CartView(),
     BuyerOrdersView(),
     NotificationsView(),
@@ -27,8 +29,31 @@ class BuyerShellView extends GetView<BuyerShellController> {
     final cart = Get.find<CartRepository>();
     final notifications = Get.find<NotificationCenter>();
 
-    return Obx(
-      () => AdaptiveShellScaffold(
+    return Obx(() {
+      final scope = controller.scope;
+      // Product/cart/order screens below all read the store this shell
+      // resolved from the URL — don't render them while that's still in
+      // flight or failed outright (mirrors SellerShellView's own guard).
+      if (scope.current.value == null) {
+        if (scope.isResolving.value) {
+          return const Scaffold(
+              body: AppLoadingState(label: 'Loading store…'));
+        }
+        return Scaffold(
+          body: Center(
+            child: EmptyState(
+              icon: Icons.storefront_outlined,
+              title: 'We couldn\'t load this store',
+              message: scope.errorMessage.value ??
+                  'This storefront could not be found.',
+              actionLabel: 'Try again',
+              onAction: controller.resolveStore,
+            ),
+          ),
+        );
+      }
+
+      return AdaptiveShellScaffold(
         currentIndex: controller.tabIndex.value,
         onDestinationSelected: controller.changeTab,
         tabs: _tabs,
@@ -62,7 +87,7 @@ class BuyerShellView extends GetView<BuyerShellController> {
           const ShellDestination(
               icon: Icon(Icons.person_outline), label: 'Profile'),
         ],
-      ),
-    );
+      );
+    });
   }
 }

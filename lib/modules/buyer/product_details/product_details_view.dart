@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../app/theme/app_typography.dart';
@@ -127,7 +126,8 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
             ? FloatingActionButton.extended(
                 backgroundColor: AppColors.horizonTeal,
                 foregroundColor: AppColors.ink,
-                onPressed: () => Get.toNamed(Routes.buyerCheckout),
+                onPressed: () =>
+                    Get.toNamed('/s/${Get.parameters['slug']}/checkout'),
                 icon: const Icon(Icons.shopping_bag_outlined),
                 label: Text('${cart.itemCount}'),
               )

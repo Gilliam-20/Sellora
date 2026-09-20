@@ -128,7 +128,11 @@ class CheckoutController extends GetxController {
 
   void _onOrderPlaced(String code, String message) {
     cartRepo.clear();
-    Get.offAllNamed(Routes.buyerShell, arguments: {'tab': 2});
+    final slug = Get.parameters['slug'];
+    Get.offAllNamed(
+      slug != null && slug.isNotEmpty ? '/s/$slug' : Routes.marketing,
+      arguments: {'tab': 2},
+    );
     Get.snackbar('Order placed', message);
   }
 }
