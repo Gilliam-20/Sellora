@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/color_utils.dart';
+import '../../../core/utils/image_data_url.dart';
 import '../../../data/repositories/store_repository.dart';
 import '../../storefront/store_scope.dart';
 
@@ -25,6 +27,10 @@ class StoreCustomizeController extends GetxController {
 
   final colorHex = RxnString();
   final isSaving = false.obs;
+  final isPickingLogo = false.obs;
+  final isPickingBanner = false.obs;
+
+  final _picker = ImagePicker();
 
   @override
   void onInit() {
@@ -55,6 +61,33 @@ class StoreCustomizeController extends GetxController {
 
   void setHexFromField(String value) {
     colorHex.value = value.trim().isEmpty ? null : value.trim();
+  }
+
+  Future<void> pickLogo() => _pickImage(logoUrlCtrl, isPickingLogo);
+
+  Future<void> pickBanner() => _pickImage(bannerUrlCtrl, isPickingBanner);
+
+  Future<void> _pickImage(
+      TextEditingController target, RxBool isPicking) async {
+    isPicking.value = true;
+    try {
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 1024,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.lengthInBytes > maxPickedImageBytes) {
+        Get.snackbar('Image too large',
+            'Choose a photo under ${maxPickedImageBytes ~/ 1024}KB, or a smaller/more compressed one.');
+        return;
+      }
+      final mimeType = picked.mimeType ?? mimeTypeForPath(picked.path);
+      target.text = bytesToDataUrl(bytes, mimeType);
+    } finally {
+      isPicking.value = false;
+    }
   }
 
   Future<bool> save() async {

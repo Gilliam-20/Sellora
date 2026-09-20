@@ -6,6 +6,7 @@ import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_metrics.dart';
 import '../../core/utils/color_utils.dart';
+import '../../core/utils/image_data_url.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/widgets/app_page.dart';
 import '../../core/widgets/empty_state.dart';
@@ -28,11 +29,20 @@ class StorefrontView extends GetView<StorefrontController> {
             Obx(() => Text(controller.scope.current.value?.name ?? 'Sellora')),
         leading: Obx(() {
           final logoUrl = controller.scope.current.value?.logoUrl;
-          if (logoUrl == null || logoUrl.isEmpty) return const SizedBox.shrink();
+          if (logoUrl == null || logoUrl.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          ImageProvider? logoImage;
+          if (isDataUrl(logoUrl)) {
+            final logoBytes = decodeDataUrl(logoUrl);
+            if (logoBytes != null) logoImage = MemoryImage(logoBytes);
+          } else {
+            logoImage = CachedNetworkImageProvider(logoUrl);
+          }
           return Padding(
             padding: const EdgeInsets.all(AppSpacing.xs),
             child: CircleAvatar(
-              backgroundImage: CachedNetworkImageProvider(logoUrl),
+              backgroundImage: logoImage,
               backgroundColor: AppColors.mist,
             ),
           );
@@ -46,8 +56,9 @@ class StorefrontView extends GetView<StorefrontController> {
               tooltip: 'Account',
               onPressed: () {
                 final user = Get.find<AuthRepository>().cachedUser;
-                final signedInHere =
-                    user != null && user.role == UserRole.buyer && user.storeId == store.id;
+                final signedInHere = user != null &&
+                    user.role == UserRole.buyer &&
+                    user.storeId == store.id;
                 Get.toNamed(signedInHere
                     ? Routes.buyerShell
                     : '/s/${store.slug}/login');
@@ -73,18 +84,33 @@ class StorefrontView extends GetView<StorefrontController> {
                   if (bannerUrl == null || bannerUrl.isEmpty) {
                     return const SizedBox.shrink();
                   }
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadii.card),
-                    child: CachedNetworkImage(
+                  final fallback =
+                      Container(height: 140, color: AppColors.mist);
+                  Widget banner;
+                  if (isDataUrl(bannerUrl)) {
+                    final bannerBytes = decodeDataUrl(bannerUrl);
+                    banner = bannerBytes == null
+                        ? fallback
+                        : Image.memory(
+                            bannerBytes,
+                            height: 140,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => fallback,
+                          );
+                  } else {
+                    banner = CachedNetworkImage(
                       imageUrl: bannerUrl,
                       height: 140,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      placeholder: (_, __) =>
-                          Container(height: 140, color: AppColors.mist),
-                      errorWidget: (_, __, ___) =>
-                          Container(height: 140, color: AppColors.mist),
-                    ),
+                      placeholder: (_, __) => fallback,
+                      errorWidget: (_, __, ___) => fallback,
+                    );
+                  }
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadii.card),
+                    child: banner,
                   );
                 }),
               ),
@@ -137,8 +163,8 @@ class StorefrontView extends GetView<StorefrontController> {
                           final category = controller.categories[index];
                           final selected =
                               controller.selectedCategory.value == category;
-                          final accent = hexToColor(
-                                  controller.scope.current.value?.primaryColorHex) ??
+                          final accent = hexToColor(controller
+                                  .scope.current.value?.primaryColorHex) ??
                               AppColors.cargoNavy;
                           return ChoiceChip(
                             label: Text(category),

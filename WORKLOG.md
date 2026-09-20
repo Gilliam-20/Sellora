@@ -6,6 +6,104 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-20 — PHASE 6: store builder, device photo picker for logo/banner
+
+**Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as the
+2026-09-19 entry below — `responsive.dart:95`, `mock_admin_repository.dart:49`,
+`test/auth_repository_test.dart:63` — none touched by this change).
+
+**Why:** the branding slice shipped 2026-09-19 only let a seller paste an already-hosted image URL
+into the logo/banner fields, which isn't something a real seller has for their own photos. No seller-
+side image upload exists anywhere else in the app either (`firebase_storage` is deliberately not a
+dependency yet — see pubspec.yaml's "common next additions"), so this needed a way to work without a
+storage backend.
+
+**Changed:**
+- **`pubspec.yaml`**: added `image_picker: ^1.1.2`.
+- **New `lib/core/utils/image_data_url.dart`**: encodes picked image bytes as a `data:<mime>;base64,…`
+  URI (`bytesToDataUrl`/`mimeTypeForPath`) and decodes one back to bytes (`decodeDataUrl`, `null` on
+  malformed input — same "bad input is just unset" convention as `hexToColor`). `maxPickedImageBytes`
+  (350KB) keeps a `StoreModel` update well under Firestore's 1MB document limit, since
+  `FirebaseStoreRepository.updateStore` writes the whole model in one `.update()` call.
+- **`StoreCustomizeController`**: new `pickLogo()`/`pickBanner()`, backed by a shared `_pickImage`
+  helper — `ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80, maxWidth: 1024)`,
+  rejects anything over `maxPickedImageBytes` with a snackbar, otherwise writes the encoded `data:`
+  URI straight into the existing `logoUrlCtrl`/`bannerUrlCtrl` text controllers — `save()` and the URL
+  text fields didn't need to change at all, a data URI is just another string in the same field.
+  `isPickingLogo`/`isPickingBanner` drive per-button loading state.
+- **`StoreCustomizeView`**: an "Upload from device" button under each of the logo/banner fields; the
+  URL text field stays too, for a seller who already has a hosted image. `_ImagePreview` now checks
+  `isDataUrl()` and renders via `Image.memory(decodeDataUrl(...))` instead of `CachedNetworkImage`
+  when the field holds a picked photo rather than a URL.
+- **`StorefrontView`**: the buyer-facing logo avatar and banner image do the same `isDataUrl()` check,
+  so a picked-from-device logo/banner actually renders on the storefront, not just the editor preview.
+
+**Not done:** no real upload — this inlines the photo as a string rather than storing it in
+`firebase_storage`, so a store with both a large logo and banner pushes its `StoreModel` document
+size up (bounded to under ~1MB total by `maxPickedImageBytes`, but still far from ideal versus a real
+CDN-hosted URL). Moving to actual `firebase_storage` upload is still open, same as it was before this
+change — the pubspec.yaml comment on it is unchanged in kind, just narrower in scope. No image
+cropping/aspect-ratio enforcement either — a very wide or very tall photo just gets `BoxFit.cover`-ed
+into the existing circular/rectangular preview slots, which can crop awkwardly.
+
+**Not verified live in a browser this session** — same caveat as 2026-09-19's entry; analyzer-clean
+but no actual click-through of the gallery picker (particularly worth checking on `flutter run -d
+chrome`, where `image_picker` uses the browser's native file input).
+
+---
+
+## 2026-09-19 — PHASE 6: store builder, branding slice (retroactive entry)
+
+**Status:** committed (`cc5ae75`, "store builder") but this WORKLOG/TODO/plan update didn't happen in
+that session — writing it up now before continuing. Re-ran `flutter analyze` this session: 2 pre-
+existing info-level issues (`responsive.dart:95`, `mock_admin_repository.dart:49`) plus one
+pre-existing error (`test/auth_repository_test.dart:63`, missing import for the top-level
+`sellerTermsVersion` const — unrelated to this commit, not touched by it). No new issues from the
+store builder change itself.
+
+**Scope decision:** PHASE 6 per `SELLORA_IMPLEMENTATION_PLAN.md` is theme/section/block/setting
+models plus a renderer/preview/publish flow — a large piece of work. This slice is deliberately just
+the branding fields `StoreModel` already carries (`name`, `tagline`, `logoUrl`, `bannerUrl`,
+`primaryColorHex`) — no new model fields, no sections/blocks, no theme picker beyond a single accent
+color.
+
+**Changed:**
+- **`lib/core/utils/color_utils.dart`** (new): `hexToColor`/`colorToHex`, tolerant of a missing/
+  malformed hex (returns `null` rather than throwing) so an unset store color falls back to the
+  default theme color.
+- **`Validators.hexColor`** (new, `validators.dart`): only enforces `#RRGGBB` formatting when the
+  field is non-empty — the accent color is optional.
+- **New `lib/modules/seller/store_customize/`** (`StoreCustomizeController` + `StoreCustomizeView`):
+  edits a local copy of the current `StoreScope.current` store's branding fields (5 preset accent
+  swatches plus a free-text hex field with inline validation, logo/banner URL fields with a live
+  `CachedNetworkImage` preview), saves via the existing `StoreRepository.updateStore` — no repository
+  or Firestore-rules changes needed. New route `Routes.sellerStoreCustomize`
+  (`/seller/store/customize`), bound in `StoreCustomizeBinding` (added to `seller_binding.dart`),
+  registered in `app_pages.dart` behind the same `RoleMiddleware(UserRole.seller)` every other seller
+  route uses.
+- **`SellerProfileView`**: new "Customize store" list tile above the existing payments tile, opening
+  the new screen.
+- **`StorefrontView`**: now renders the store's `logoUrl` as an `AppBar` leading avatar, its
+  `bannerUrl` as a banner image above the category chip row (both via `CachedNetworkImage`, both
+  `SizedBox.shrink()` when unset), and uses `hexToColor(primaryColorHex) ?? AppColors.cargoNavy` for
+  the selected-category chip color instead of the hardcoded Cargo Navy — the only three places a
+  buyer-facing screen reads store branding today.
+
+**Not started (per `SELLORA_IMPLEMENTATION_PLAN.md` PHASE 6 scope):** theme/section/block/setting
+models, a renderer, preview, or publish flow — this is branding-field editing only, not a page
+builder. `primaryColorHex` also isn't threaded any further than the one storefront chip row above;
+e.g. seller-shell chrome, buttons, and other storefront widgets still hardcode Cargo Navy.
+
+**Not verified live in a browser this session** — picking this up cold from a `/clear`; the change is
+small and symmetric with the existing `ManageVariants`/profile screens pattern, but should get an
+actual click-through next time this area is touched, per this file's own recurring reminder about
+trusting analyzer-clean over browser-verified.
+
+**Next step:** decide whether to keep deepening PHASE 6 (sections/blocks/theme picker) or move to a
+different phase — nothing forces the order.
+
+---
+
 ## 2026-09-18 — PHASE 5: variants management UI
 
 **Status:** implemented and verified this session (`flutter analyze` clean — same 3 pre-existing

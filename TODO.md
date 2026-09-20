@@ -1,6 +1,6 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-18 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-20 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
@@ -10,7 +10,7 @@
 | **3 — Billing** | Security core done — server-side `subscribeSeller`, immutable billing ledger, locked-down subscription fields, configurable plan schema (orderLimit/storeLimit/features), listing usage tracked. Not done: order-limit enforcement/usage (blocked on PHASE 4's order-attribution gap), cancel/resume, invoices UI |
 | **4 — Catalog + CJ import** | Client plumbing (endpoints, response parsing, admin sync) reconciled with the real CJ backend 2026-09-14; `ProductVariant` carries CJ's real per-SKU `vid`/`sku`/price 2026-09-15; a real seller import screen (variant picker + margin-based smart pricing + draft/publish) shipped 2026-09-15, replacing the old flat-price bottom sheet. Category browsing (chip filter), a shipping-cost estimate feeding the import screen's landed-cost pricing, and a buyer-facing variant selector all shipped 2026-09-18. Still open: catalog-to-per-seller-listing mapping at scale (still `${sellerId}_${catalogProduct.id}` doc ids); CJ integration is still unverified against a real account |
 | **5 — Seller product management** | Write-path migration done 2026-09-18 (`listProduct`/`updateListing`/`unlistProduct` now target `stores/{storeId}/products`, flat `listings` is dead code). Variants management UI also done 2026-09-18 (per-variant enable/disable + seller SKU override, from My Listings) — see WORKLOG.md for both. Still not started: collections, real inventory tracking, SEO fields, bulk operations, pagination, server-authorized writes |
-| **6 — Store builder** | Not started |
+| **6 — Store builder** | First slice shipped 2026-09-19: seller-facing "Customize store" screen editing `StoreModel`'s existing branding fields (name/tagline/logo/banner/accent color), storefront renders logo/banner/accent. 2026-09-20: logo/banner can now be picked from the seller's device (`image_picker`) instead of pasted as a URL, inlined as a `data:` URI (no `firebase_storage` yet). Not started: theme/section/block/setting models, renderer, preview flow, publish flow |
 | **7 — Customer storefront** | Not started (`/s/:slug` shared buyer feed still marketplace-era) |
 | **8 — Payments + orders** | `IntasendService` (order-checkout payment) reconciled with the real backend 2026-09-14; the per-SKU CJ variant id gap closed 2026-09-15 — `FirebaseOrderRepository.placeOrder` now sends real `{pid, vid, quantity}` per item. `shippingAddress`/response-shape gap also closed 2026-09-15 — checkout now collects a country and sends `{countryCode, line}`, and `placeOrder` reads the real `{id, totalAmount, currency, items, ...}` response. Still open: `shippingAddress.line` is one free-text string, not CJ's full fulfillment-address shape; no provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
 | **9 — Analytics + marketing** | Not started |

@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/color_utils.dart';
+import '../../../core/utils/image_data_url.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
@@ -47,7 +48,8 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
             TextField(
               controller: controller.taglineCtrl,
               decoration: const InputDecoration(
-                  labelText: 'Tagline', hintText: 'A short line under your name'),
+                  labelText: 'Tagline',
+                  hintText: 'A short line under your name'),
             ),
             const SizedBox(height: AppSpacing.lg),
             Text('Logo', style: Theme.of(context).textTheme.titleSmall),
@@ -55,7 +57,8 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ImagePreview(controller: controller.logoUrlCtrl, isCircle: true),
+                _ImagePreview(
+                    controller: controller.logoUrlCtrl, isCircle: true),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: TextField(
@@ -65,6 +68,20 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
                 ),
               ],
             ),
+            const SizedBox(height: AppSpacing.sm),
+            Obx(() => OutlinedButton.icon(
+                  onPressed: controller.isPickingLogo.value
+                      ? null
+                      : controller.pickLogo,
+                  icon: controller.isPickingLogo.value
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.upload_outlined),
+                  label: const Text('Upload from device'),
+                )),
             const SizedBox(height: AppSpacing.lg),
             Text('Banner', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: AppSpacing.sm),
@@ -73,7 +90,22 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
               decoration: const InputDecoration(labelText: 'Banner URL'),
             ),
             const SizedBox(height: AppSpacing.sm),
-            _ImagePreview(controller: controller.bannerUrlCtrl, isCircle: false),
+            _ImagePreview(
+                controller: controller.bannerUrlCtrl, isCircle: false),
+            const SizedBox(height: AppSpacing.sm),
+            Obx(() => OutlinedButton.icon(
+                  onPressed: controller.isPickingBanner.value
+                      ? null
+                      : controller.pickBanner,
+                  icon: controller.isPickingBanner.value
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.upload_outlined),
+                  label: const Text('Upload from device'),
+                )),
             const SizedBox(height: AppSpacing.lg),
             Text('Accent color', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: AppSpacing.sm),
@@ -98,7 +130,8 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
                         ),
                       ),
                       child: selected
-                          ? const Icon(Icons.check, color: AppColors.cloud, size: 18)
+                          ? const Icon(Icons.check,
+                              color: AppColors.cloud, size: 18)
                           : null,
                     ),
                   );
@@ -131,8 +164,7 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
       bottomNavigationBar: Obx(() => BottomActionBar(
             label: 'Save changes',
             isLoading: controller.isSaving.value,
-            onPressed:
-                controller.isSaving.value ? null : () => _save(context),
+            onPressed: controller.isSaving.value ? null : () => _save(context),
           )),
     );
   }
@@ -158,16 +190,30 @@ class _ImagePreview extends StatelessWidget {
       animation: controller,
       builder: (context, _) {
         final url = controller.text.trim();
-        final child = url.isEmpty
-            ? placeholder
-            : CachedNetworkImage(
-                imageUrl: url,
-                width: size,
-                height: height,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => placeholder,
-                errorWidget: (_, __, ___) => placeholder,
-              );
+        Widget child;
+        if (url.isEmpty) {
+          child = placeholder;
+        } else if (isDataUrl(url)) {
+          final bytes = decodeDataUrl(url);
+          child = bytes == null
+              ? placeholder
+              : Image.memory(
+                  bytes,
+                  width: size,
+                  height: height,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => placeholder,
+                );
+        } else {
+          child = CachedNetworkImage(
+            imageUrl: url,
+            width: size,
+            height: height,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => placeholder,
+            errorWidget: (_, __, ___) => placeholder,
+          );
+        }
         return ClipRRect(
           borderRadius: isCircle
               ? BorderRadius.circular(28)

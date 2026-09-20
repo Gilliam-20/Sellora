@@ -172,7 +172,21 @@ limits/ownership the way `createOrder` does for orders).
 
 ## PHASE 6 — Store builder
 
-Theme/section/block/setting models, renderer/preview/publish flow. Not started.
+Theme/section/block/setting models, renderer/preview/publish flow. Mostly not started.
+
+**2026-09-19 update:** a first, narrow slice shipped — a seller-facing "Customize store" screen
+(`lib/modules/seller/store_customize/`) editing the branding fields `StoreModel` already had (name,
+tagline, logo URL, banner URL, accent color hex), reachable from the seller profile screen. The
+storefront (`StorefrontView`) now renders the logo/banner and uses the accent color for the selected
+category chip. See `WORKLOG.md`'s 2026-09-19 entry. Still not started: theme/section/block/setting
+models, a renderer, a preview flow, a publish flow, and threading `primaryColorHex` anywhere beyond
+that one storefront chip row.
+
+**2026-09-20 update:** logo/banner fields were URL-paste-only, which isn't something a real seller
+can use. `StoreCustomizeController` can now pick a photo from the device (`image_picker`) and inline
+it as a `data:` URI into the same `logoUrl`/`bannerUrl` string fields — no `firebase_storage` upload
+step exists yet, so this is what makes it actually usable today, in both mock and Firestore-backed
+modes. See `WORKLOG.md`'s 2026-09-20 entry for the size-limit and rendering details.
 
 ## PHASE 7 — Customer storefront
 
