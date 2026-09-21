@@ -6,6 +6,71 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-21 — PHASE 9: seller dashboard analytics (first slice)
+
+**Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as every
+recent entry). `flutter test` shows the same two pre-existing failures as before this change
+(`test/auth_repository_test.dart`'s missing `sellerTermsVersion` compile error and
+`test/seller_shell_controller_test.dart`'s `NotificationCenter` setup gap) — nothing newly broken.
+Verified with a widget test against the real mock repositories (seller Home renders every new
+section — metrics, sales chart, status breakdown, top products, store health, onboarding checklist —
+with no exceptions, and switching the date-range chip recomputes cleanly); not click-through-verified
+in a live browser this session.
+
+**Why:** PHASE 9 ("Analytics + marketing") was untouched — the seller Home screen was three static
+stat tiles (`seller_dashboard_controller.dart`, pre-change: revenue/listing-count/pending-count) with
+no date filtering, no chart, and TODO.md §9's guided-setup checklist never built. Discount codes,
+customer analytics, and marketing campaigns are all separate, larger slices of the same phase and
+were deliberately deferred rather than attempted alongside this one (see the scoping conversation this
+session) — discounts need a new model plus a checkout change, customer analytics needs a `CustomerModel`
+that doesn't exist yet, and marketing campaigns have no email/SMS provider wired up to make them real.
+
+**Changed:**
+- **`lib/modules/seller/dashboard/dashboard_models.dart`** (new) — `DateRangeOption` enum (Today/
+  Yesterday/Last 7/30/90 days/This year/Custom) plus `SalesPoint` and `TopProductStat`, the view's
+  chart/top-products aggregates.
+- **`SellerDashboardController`** rewritten: fetches the seller's full order/listing history once,
+  then derives everything else client-side per selected range — gross sales and net revenue (the
+  latter from `OrderModel.sellerRevenue`, the fee snapshot already computed server-side at order
+  creation, not re-derived), order count/AOV, a cancelled count, a per-`OrderStatus` breakdown, top
+  products by revenue, a sales-over-time series (daily buckets, monthly for "This year"), and a
+  percent-change-vs-previous-period delta for sales/orders. `pendingFulfillmentCount` stays
+  unfiltered by date range deliberately — it's an operational queue, not a historical metric.
+  Store-health fields (`SubscriptionUsageModel` usage, matched `SubscriptionPlanModel`, an
+  orders-this-billing-period count) are fetched alongside.
+- **Onboarding checklist scoped to only what's real**: TODO.md §9's suggested checklist includes
+  "Choose theme," "Add domain," "Configure payment," "Configure shipping" — none of those features
+  exist in this codebase yet (no theme system, no domain management, no seller-level payment/shipping
+  settings). Showing checkboxes for them would be exactly the "placeholder buttons that do nothing" /
+  "claim a feature works when it doesn't" TODO.md itself warns against, so the shipped checklist only
+  has the four items backed by real, verifiable state: import a product, publish one, customize the
+  storefront (any of `StoreModel`'s tagline/logo/banner/color set — all null at store creation, see
+  `auth_repository.dart`'s `_createStoreForSeller`), and make a first sale. The card hides entirely
+  once all four are done.
+- **`seller_dashboard_view.dart`** rewritten to match: date-range `ChoiceChip` row (+ a custom
+  `showDateRangePicker` option), a 6-tile metrics grid with previous-period deltas, an `fl_chart`
+  `LineChart` sales-over-time card (single series, brand gold, touch tooltip, an explicit empty state
+  instead of a zeroed chart), an order-status breakdown card, a top-products card, a store-health card
+  (plan name, listing/order usage bars, taps through to `/seller/subscription`), and the checklist —
+  desktop gets the two mid-page cards side by side via `Row`+`Expanded`, not a `Wrap` with
+  `SizedBox(width: double.infinity)` (that combination throws — `Wrap` gives unbounded main-axis
+  constraints, and an infinite-width child conflicts with them; caught before shipping).
+- **`fl_chart: ^0.69.2`** added to `pubspec.yaml` — the package was already named in a "common next
+  additions" comment there for exactly this purpose.
+- **Fixed a real, pre-existing bug** in `MockOrderRepository.updateStatus`: it rebuilt the order via a
+  bare `OrderModel(...)` constructor call that silently dropped `paymentStatus` and the whole fee
+  snapshot (`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/`paymentFee`) back to their zero
+  defaults every time a seller advanced an order's fulfillment status — which would have corrupted the
+  exact fields this new dashboard reads for "paid" filtering and net-revenue totals in demo mode. Now
+  uses `copyWith(status: status)`, which preserves everything else.
+
+**Not done / open:** discount codes, a `CustomerModel` and customer-level analytics, marketing
+campaigns/abandoned-cart/email tooling (all deferred, see "Why" above) — the STATUS table and
+`SELLORA_IMPLEMENTATION_PLAN.md` still list these as not started under PHASE 9. No live-browser
+click-through this session (verified via widget test instead, see Status above) — a later session
+should still eyeball it in Chrome, especially the `fl_chart` sales-chart tooltip and the mobile-width
+stacked layout for the status-breakdown/top-products cards.
+
 ## 2026-09-20 — PHASE 7: buyer shopping flow unified under `/s/:slug`
 
 **Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as every

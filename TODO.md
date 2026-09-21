@@ -1,6 +1,6 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-20 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-21 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
@@ -13,7 +13,7 @@
 | **6 — Store builder** | First slice shipped 2026-09-19: seller-facing "Customize store" screen editing `StoreModel`'s existing branding fields (name/tagline/logo/banner/accent color), storefront renders logo/banner/accent. 2026-09-20: logo/banner can now be picked from the seller's device (`image_picker`) instead of pasted as a URL, inlined as a `data:` URI (no `firebase_storage` yet). Not started: theme/section/block/setting models, renderer, preview flow, publish flow |
 | **7 — Customer storefront** | Core shopping flow shipped 2026-09-20: the buyer shell (shop/cart/orders/alerts/profile) now lives at `/s/:slug` itself, guest-reachable end to end for browsing/cart, gated to a signed-in buyer only at checkout's submit step and for order history/profile. The old flat `/buyer` shell and its duplicate marketplace-era feed (`BuyerHomeController`) are deleted. Still not started: collections (needs PHASE 5's model first), a dedicated `Customer` model, order-detail/tracking, multi-store switcher |
 | **8 — Payments + orders** | `IntasendService` (order-checkout payment) reconciled with the real backend 2026-09-14; the per-SKU CJ variant id gap closed 2026-09-15 — `FirebaseOrderRepository.placeOrder` now sends real `{pid, vid, quantity}` per item. `shippingAddress`/response-shape gap also closed 2026-09-15 — checkout now collects a country and sends `{countryCode, line}`, and `placeOrder` reads the real `{id, totalAmount, currency, items, ...}` response. Still open: `shippingAddress.line` is one free-text string, not CJ's full fulfillment-address shape; no provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
-| **9 — Analytics + marketing** | Not started |
+| **9 — Analytics + marketing** | Dashboard-analytics slice shipped 2026-09-21: date-range filtering, gross sales/net revenue/AOV/order-status breakdown, a sales-over-time chart, top products, a store-health card (plan/listing/order usage), and a guided setup checklist. Not started: discount codes, customer analytics/CustomerModel, marketing campaigns |
 | **10 — Admin** | Not started (existing admin screens are marketplace-era mocks) |
 | **11 — i18n** | Not started |
 | **12 — Security + production** | Pulled forward and done: role self-escalation closed, `listings` ownership-checked, `orders` locked to server-only creation, secrets moved to `defineSecret` |

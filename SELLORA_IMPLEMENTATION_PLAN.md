@@ -274,7 +274,11 @@ is still one free-text field, not the `{fullName, phone, email, line1, line2, ci
 
 ## PHASE 9 — Analytics + marketing
 
-Not started.
+Dashboard-analytics slice shipped 2026-09-21 (see WORKLOG.md) — the seller Home screen now has
+real date-range-filtered metrics, a sales chart, order-status breakdown, top products, a
+store-health/subscription-usage card, and a guided setup checklist. Not started: discount codes,
+a `CustomerModel` and customer analytics, and marketing campaigns/tools (deferred — see WORKLOG.md
+for why).
 
 ## PHASE 10 — Admin
 

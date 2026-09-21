@@ -49,24 +49,11 @@ class MockOrderRepository extends GetxService implements OrderRepository {
   Future<void> updateStatus(String orderId, OrderStatus status) async {
     await Future.delayed(const Duration(milliseconds: 200));
     final index = _orders.indexWhere((o) => o.id == orderId);
-    if (index != -1) {
-      final o = _orders[index];
-      _orders[index] = OrderModel(
-        id: o.id,
-        code: o.code,
-        buyerId: o.buyerId,
-        sellerId: o.sellerId,
-        storeId: o.storeId,
-        items: o.items,
-        status: status,
-        total: o.total,
-        currency: o.currency,
-        shippingAddress: o.shippingAddress,
-        paymentMethod: o.paymentMethod,
-        paymentReference: o.paymentReference,
-        trackingNumber: o.trackingNumber,
-        createdAt: o.createdAt,
-      );
-    }
+    // copyWith (not a fresh OrderModel(...)) so paymentStatus and the fee
+    // snapshot survive a fulfillment-status change — a hand-rebuilt
+    // constructor here previously reset both to their zero defaults, which
+    // silently corrupted a paid order's dashboard/analytics numbers the
+    // moment a seller marked it shipped.
+    if (index != -1) _orders[index] = _orders[index].copyWith(status: status);
   }
 }
