@@ -66,6 +66,35 @@ class MockProductRepository extends GetxService implements ProductRepository {
   }
 
   @override
+  Future<List<FreightOption>> shippingOptions({
+    required List<Map<String, dynamic>> products,
+    String endCountryCode = 'KE',
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    // Deterministic per-cart fake so a demo quotes the same three methods
+    // for the same cart every time, rather than random ones.
+    final key = products.map((p) => '${p['vid']}x${p['quantity']}').join('|');
+    final base = 2.5 + (key.hashCode.abs() % 950) / 100;
+    return [
+      FreightOption(
+        logisticName: 'CJPacket Ordinary (demo estimate)',
+        cost: double.parse(base.toStringAsFixed(2)),
+        estimatedDelivery: '12-20 days',
+      ),
+      FreightOption(
+        logisticName: 'CJPacket Expedited (demo estimate)',
+        cost: double.parse((base * 1.8).toStringAsFixed(2)),
+        estimatedDelivery: '7-12 days',
+      ),
+      FreightOption(
+        logisticName: 'DHL Express (demo estimate)',
+        cost: double.parse((base * 3.2).toStringAsFixed(2)),
+        estimatedDelivery: '3-6 days',
+      ),
+    ];
+  }
+
+  @override
   Future<List<ProductModel>> sellerListings(String sellerId) async {
     await Future.delayed(const Duration(milliseconds: 250));
     if (_listings.where((p) => p.sellerId == sellerId).isEmpty) {

@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
 import '../../../app/routes/app_routes.dart';
@@ -18,7 +19,14 @@ class SellerShellController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    resolveStore();
+    // Deferred a frame: resolveStore() flips StoreScope.isResolving/current
+    // (Rx values the shell's own Obx reads) — calling it synchronously here
+    // runs it while GetView's Get.find<SellerShellController>() is still
+    // instantiating this controller mid-build (re-navigating to `/seller`,
+    // e.g. right after sign-in, can hit this), throwing "setState()/
+    // markNeedsBuild() called during build" — same bug fixed for
+    // BuyerShellController's identical resolveStore() pattern.
+    WidgetsBinding.instance.addPostFrameCallback((_) => resolveStore());
     final user = _authRepository.cachedUser;
     if (user != null) Get.find<NotificationCenter>().start(user.uid);
   }

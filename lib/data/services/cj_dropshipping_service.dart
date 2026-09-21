@@ -66,12 +66,11 @@ class CjDropshippingService extends GetxService {
     return CjCategory.topLevelFromRawTree(res['data'] as List? ?? []);
   }
 
-  /// Cheapest freight option for [products] (`{vid, quantity}` each)
-  /// shipping to [endCountryCode]. Mirrors the cheapest-of-`logisticPrice`
-  /// selection functions/lib/orders.js already does server-side at checkout
-  /// — this client-side call feeds the seller import screen's landed-cost
-  /// pricing card, a separate concern from what checkout actually charges.
-  Future<FreightEstimate> calculateFreight({
+  /// Every CJ freight option for [products] (`{vid, quantity}` each)
+  /// shipping to [endCountryCode] — the same raw list `createOrder` quotes
+  /// from server-side, so a `logisticName` picked from this list is
+  /// guaranteed to still resolve there (barring a quote change in between).
+  Future<List<FreightOption>> getShippingOptions({
     required String endCountryCode,
     required List<Map<String, dynamic>> products,
   }) async {
@@ -82,23 +81,38 @@ class CjDropshippingService extends GetxService {
     final options = (res['data'] as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
+    return options
+        .map((option) {
+          final name = option['logisticName'] as String? ?? '';
+          final price = double.tryParse('${option['logisticPrice']}') ?? -1;
+          return (name, price, option['logisticAging'] as String?);
+        })
+        .where((o) => o.$1.isNotEmpty && o.$2 >= 0)
+        .map((o) => FreightOption(
+              logisticName: o.$1,
+              cost: o.$2,
+              estimatedDelivery: o.$3,
+            ))
+        .toList();
+  }
 
-    Map<String, dynamic>? cheapest;
-    double cheapestPrice = double.infinity;
-    for (final option in options) {
-      final price = double.tryParse('${option['logisticPrice']}') ?? -1;
-      if (price >= 0 && price < cheapestPrice) {
-        cheapestPrice = price;
-        cheapest = option;
-      }
-    }
-    if (cheapest == null || !cheapestPrice.isFinite) {
+  /// Cheapest freight option for [products] (`{vid, quantity}` each)
+  /// shipping to [endCountryCode]. Mirrors the cheapest-of-`logisticPrice`
+  /// selection functions/lib/orders.js falls back to server-side when the
+  /// buyer hasn't picked a method — this client-side call feeds the seller
+  /// import screen's landed-cost pricing card, a separate concern from what
+  /// checkout actually charges.
+  Future<FreightEstimate> calculateFreight({
+    required String endCountryCode,
+    required List<Map<String, dynamic>> products,
+  }) async {
+    final options =
+        await getShippingOptions(endCountryCode: endCountryCode, products: products);
+    if (options.isEmpty) {
       throw StateError('No shipping option is available for this destination');
     }
-    return FreightEstimate(
-      cost: cheapestPrice,
-      logisticName: cheapest['logisticName'] as String? ?? '',
-    );
+    final cheapest = options.reduce((a, b) => a.cost <= b.cost ? a : b);
+    return FreightEstimate(cost: cheapest.cost, logisticName: cheapest.logisticName);
   }
 
   /// Admin-only. Triggers the full CJ catalog/category sync pipeline

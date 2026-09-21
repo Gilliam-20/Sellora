@@ -275,16 +275,18 @@ exports.calculateFreight = onRequest(checkoutOptions(CJ_SECRETS), async (req, re
 
 /**
  * POST /createOrder   (auth required)
- * body: { items: [{ pid, vid, quantity }], shippingAddress: {...} }
+ * body: { items: [{ pid, vid, quantity }], shippingAddress: {...}, logisticName?: string }
  * Prices everything from CJ's live prices + freight, returns totals in both
  * USD (for PayPal) and KES (for M-Pesa/card/Google Pay via IntaSend).
+ * `logisticName` is the buyer's chosen CJ shipping line from `calculateFreight`
+ * (omit it to auto-pick the cheapest) - only the name is trusted, never a price.
  */
 exports.createOrder = onRequest(checkoutOptions(CJ_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
   try {
-    const { items, shippingAddress } = req.body || {};
-    const order = await orders.createOrder({ uid: user.uid, items, shippingAddress });
+    const { items, shippingAddress, logisticName } = req.body || {};
+    const order = await orders.createOrder({ uid: user.uid, items, shippingAddress, logisticName });
     logInfo("order_created", {
       orderId: order.id,
       uid: user.uid,

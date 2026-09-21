@@ -32,7 +32,12 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
                   imageUrl: controller.previewImage.value.isNotEmpty
                       ? controller.previewImage.value
                       : product.imageUrl,
-                  fit: BoxFit.cover)),
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(color: AppColors.mist),
+                  errorWidget: (_, __, ___) => Container(
+                      color: AppColors.mist,
+                      child: const Icon(Icons.inventory_2_outlined,
+                          color: AppColors.slateLight)))),
             ),
           ),
           SliverToBoxAdapter(

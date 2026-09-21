@@ -61,7 +61,15 @@ class MyListingsView extends GetView<MyListingsController> {
                                 imageUrl: product.imageUrl,
                                 width: 56,
                                 height: 56,
-                                fit: BoxFit.cover),
+                                fit: BoxFit.cover,
+                                placeholder: (_, __) => Container(
+                                    width: 56,
+                                    height: 56,
+                                    color: AppColors.mist),
+                                errorWidget: (_, __, ___) => Container(
+                                    width: 56,
+                                    height: 56,
+                                    color: AppColors.mist)),
                           ),
                           const SizedBox(width: AppSpacing.sm),
                           Expanded(

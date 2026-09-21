@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/cart_repository.dart';
@@ -30,7 +31,14 @@ class BuyerShellController extends GetxController {
     final args = Get.arguments as Map?;
     final initialTab = args?['tab'];
     if (initialTab is int) tabIndex.value = initialTab;
-    resolveStore();
+    // Deferred a frame: resolveStore() flips StoreScope.isResolving/current
+    // (Rx values the shell's own Obx reads) — calling it synchronously here
+    // runs it while GetView's Get.find<BuyerShellController>() is still
+    // instantiating this controller mid-build (re-navigating to the same
+    // `/s/:slug` route, e.g. right after sign-in, can hit this), throwing
+    // "setState()/markNeedsBuild() called during build" (same class of bug
+    // as StorefrontLoginView/StorefrontRegisterView's initState fix).
+    WidgetsBinding.instance.addPostFrameCallback((_) => resolveStore());
   }
 
   /// Resolves the store this shell is scoped to from the route's `:slug` —

@@ -55,7 +55,11 @@ class CartView extends GetView<CartController> {
                           imageUrl: item.product.imageUrl,
                           width: 64,
                           height: 64,
-                          fit: BoxFit.cover),
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(
+                              width: 64, height: 64, color: AppColors.mist),
+                          errorWidget: (_, __, ___) => Container(
+                              width: 64, height: 64, color: AppColors.mist)),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(

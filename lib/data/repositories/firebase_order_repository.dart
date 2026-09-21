@@ -37,6 +37,10 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
       'storeId': order.storeId,
       'paymentMethod': order.paymentMethod,
       'currency': order.currency,
+      // The buyer's checkout pick (see CheckoutController.selectShippingOption).
+      // createOrder re-validates it against CJ's own freight quote and only
+      // ever trusts the name, never a price - omit it to auto-pick cheapest.
+      if (order.logisticName != null) 'logisticName': order.logisticName,
     });
 
     // The real response is `{id, totalAmount, currency, items, ...}` — no
@@ -51,6 +55,7 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
       total: (res['totalAmount'] as num).toDouble(),
       currency: res['currency'] as String?,
       paymentStatus: OrderPaymentStatus.pending,
+      logisticName: res['logisticName'] as String?,
     );
   }
 

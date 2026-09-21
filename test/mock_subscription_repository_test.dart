@@ -104,6 +104,12 @@ class _FakeProductRepository implements ProductRepository {
       throw UnimplementedError();
 
   @override
+  Future<List<FreightOption>> shippingOptions(
+          {required List<Map<String, dynamic>> products,
+          String endCountryCode = 'KE'}) =>
+      throw UnimplementedError();
+
+  @override
   Future<List<ProductModel>> storeProducts(String storeId,
           {String? keyword, String? category}) =>
       throw UnimplementedError();

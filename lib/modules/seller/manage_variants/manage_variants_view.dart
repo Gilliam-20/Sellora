@@ -58,8 +58,11 @@ class ManageVariantsView extends GetView<ManageVariantsController> {
         if (controller.variants.isEmpty) return const SizedBox.shrink();
         final saving = controller.isSaving.value;
         return Container(
-          padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm,
-              AppSpacing.md, AppSpacing.md + MediaQuery.of(context).padding.bottom),
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.md + MediaQuery.of(context).padding.bottom),
           decoration: const BoxDecoration(
             color: AppColors.cloud,
             border: Border(top: BorderSide(color: AppColors.hairline)),
@@ -135,7 +138,11 @@ class _VariantEditorCardState extends State<_VariantEditorCard> {
                         imageUrl: variant.image!,
                         width: 48,
                         height: 48,
-                        fit: BoxFit.cover)
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                            width: 48, height: 48, color: AppColors.mist),
+                        errorWidget: (_, __, ___) => Container(
+                            width: 48, height: 48, color: AppColors.mist))
                     : Container(width: 48, height: 48, color: AppColors.mist),
               ),
               const SizedBox(width: AppSpacing.sm),

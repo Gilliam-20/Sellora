@@ -140,8 +140,7 @@ class _CheckoutViewState extends State<CheckoutView> {
                         label: 'Shipping',
                         value: controller.isEstimatingShipping.value
                             ? 'Calculating…'
-                            : currencyService.format(
-                                controller.shippingFee.value,
+                            : currencyService.format(controller.shippingFee,
                                 fromCode: currency),
                       ),
                       const Divider(height: AppSpacing.lg),
@@ -179,6 +178,43 @@ class _CheckoutViewState extends State<CheckoutView> {
                     }
                   },
                 ),
+                const SizedBox(height: AppSpacing.md),
+                Obx(() {
+                  if (controller.isEstimatingShipping.value) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                      child: Text('Finding shipping options…'),
+                    );
+                  }
+                  if (controller.shippingOptions.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  final currencyService = Get.find<CurrencyService>();
+                  final currency = controller.cartRepo.currency;
+                  final selected = controller.selectedShippingOption.value;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Shipment type',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      ...controller.shippingOptions.map(
+                        (option) => RadioListTile<String>(
+                          value: option.logisticName,
+                          groupValue: selected?.logisticName,
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: (_) =>
+                              controller.selectShippingOption(option),
+                          title: Text(option.logisticName),
+                          subtitle: option.estimatedDelivery != null
+                              ? Text(option.estimatedDelivery!)
+                              : null,
+                          secondary: Text(currencyService.format(option.cost,
+                              fromCode: currency)),
+                        ),
+                      ),
+                    ],
+                  );
+                }),
                 const SizedBox(height: AppSpacing.sm),
                 TextFormField(
                   controller: _addressCtrl,

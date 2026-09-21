@@ -132,6 +132,7 @@ class OrderModel {
     this.sellerRevenue = 0,
     this.paymentFee = 0,
     this.shippingFee = 0,
+    this.logisticName,
   });
 
   OrderModel copyWith({
@@ -145,6 +146,7 @@ class OrderModel {
     double? serviceFeeRate,
     double? serviceFeeAmount,
     double? sellerRevenue,
+    String? logisticName,
   }) {
     return OrderModel(
       id: id ?? this.id,
@@ -166,6 +168,8 @@ class OrderModel {
       serviceFeeAmount: serviceFeeAmount ?? this.serviceFeeAmount,
       sellerRevenue: sellerRevenue ?? this.sellerRevenue,
       paymentFee: paymentFee,
+      shippingFee: shippingFee,
+      logisticName: logisticName ?? this.logisticName,
     );
   }
 
@@ -206,6 +210,12 @@ class OrderModel {
   /// priced must not alter historical orders.
   final double shippingFee;
 
+  /// The CJ shipping line this order ships on (e.g. "CJPacket Ordinary") —
+  /// either the buyer's checkout pick or, if none was sent, whatever
+  /// `createOrder` auto-picked as cheapest (see functions/lib/orders.js).
+  /// Also what `fulfillOrder` tells CJ to use when pushing the order.
+  final String? logisticName;
+
   factory OrderModel.fromMap(Map<String, dynamic> map) {
     return OrderModel(
       id: map['id'] as String,
@@ -237,6 +247,7 @@ class OrderModel {
       sellerRevenue: (map['sellerRevenue'] as num?)?.toDouble() ?? 0,
       paymentFee: (map['paymentFee'] as num?)?.toDouble() ?? 0,
       shippingFee: (map['shippingFee'] as num?)?.toDouble() ?? 0,
+      logisticName: map['logisticName'] as String?,
     );
   }
 
@@ -261,5 +272,6 @@ class OrderModel {
         'sellerRevenue': sellerRevenue,
         'paymentFee': paymentFee,
         'shippingFee': shippingFee,
+        'logisticName': logisticName,
       };
 }

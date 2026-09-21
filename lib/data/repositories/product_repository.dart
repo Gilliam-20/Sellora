@@ -19,6 +19,16 @@ abstract class ProductRepository {
     String endCountryCode = 'KE',
   });
 
+  /// Every CJ shipping method available for a whole cart (`{vid, quantity}`
+  /// per line) going to [endCountryCode] — lets the buyer choose a shipment
+  /// type at checkout. The chosen [FreightOption.logisticName] is what
+  /// `createOrder` re-validates and prices server-side, never the client's
+  /// own [FreightOption.cost].
+  Future<List<FreightOption>> shippingOptions({
+    required List<Map<String, dynamic>> products,
+    String endCountryCode = 'KE',
+  });
+
   /// Products a specific seller has listed in their own store.
   Future<List<ProductModel>> sellerListings(String sellerId);
 

@@ -38,6 +38,17 @@ class FirebaseProductRepository extends GetxService
   }
 
   @override
+  Future<List<FreightOption>> shippingOptions({
+    required List<Map<String, dynamic>> products,
+    String endCountryCode = 'KE',
+  }) {
+    return _cj.getShippingOptions(
+      endCountryCode: endCountryCode,
+      products: products,
+    );
+  }
+
+  @override
   Future<List<ProductModel>> sellerListings(String sellerId) async {
     final snap =
         await _fs.productsGroup.where('sellerId', isEqualTo: sellerId).get();

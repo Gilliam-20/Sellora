@@ -30,8 +30,13 @@ const DUPLICATE_ATTEMPT_WINDOW_MS = 2 * 60 * 1000;
  * Builds an order from cart items, pricing everything from CJ's live prices
  * (never trust a client-supplied price). Returns the created order doc.
  * items: [{ pid, vid, quantity }]
+ * logisticName: optional - the buyer's chosen CJ shipping line (as shown by
+ * `calculateFreight`). Only the *name* is trusted from the client; its price
+ * is always re-derived from CJ's own freight quote for this address, never
+ * from anything the client sends. Falls back to the cheapest option when
+ * omitted or when it no longer matches an option CJ actually offers.
  */
-async function createOrder({ uid, items, shippingAddress }) {
+async function createOrder({ uid, items, shippingAddress, logisticName }) {
   validateOrderRequest(items, shippingAddress);
   if (!shippingAddress?.countryCode) {
     throw new Error("shippingAddress.countryCode is required");
@@ -96,9 +101,22 @@ async function createOrder({ uid, items, shippingAddress }) {
     const price = Number(option?.logisticPrice);
     return Number.isFinite(price) && price >= 0 ? price : Infinity;
   };
-  const chosenLogistic = freightOptions.reduce((cheapest, option) =>
-    priceOf(option) < priceOf(cheapest) ? option : cheapest,
-  );
+  let chosenLogistic;
+  if (logisticName) {
+    // The buyer picked a method earlier in the flow (a separate
+    // `calculateFreight` call), but freight quotes can change between then
+    // and now - re-match it against *this* call's options rather than
+    // trusting anything else about the earlier quote.
+    chosenLogistic = freightOptions.find((o) => o?.logisticName === logisticName);
+    if (!chosenLogistic || !Number.isFinite(priceOf(chosenLogistic))) {
+      throw new Error(
+          "The selected shipping method is no longer available for this address");
+    }
+  } else {
+    chosenLogistic = freightOptions.reduce((cheapest, option) =>
+      priceOf(option) < priceOf(cheapest) ? option : cheapest,
+    );
+  }
   const freightUsd = priceOf(chosenLogistic);
   if (!Number.isFinite(freightUsd)) {
     throw new Error("No shipping option is available for this address");

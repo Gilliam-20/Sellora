@@ -103,7 +103,8 @@ class _CatalogTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadii.card),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadii.card),
-        onTap: () => Get.toNamed(Routes.sellerProductImport, arguments: product),
+        onTap: () =>
+            Get.toNamed(Routes.sellerProductImport, arguments: product),
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.sm),
           decoration: BoxDecoration(
@@ -118,7 +119,11 @@ class _CatalogTile extends StatelessWidget {
                     imageUrl: product.imageUrl,
                     width: 64,
                     height: 64,
-                    fit: BoxFit.cover),
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) =>
+                        Container(width: 64, height: 64, color: AppColors.mist),
+                    errorWidget: (_, __, ___) => Container(
+                        width: 64, height: 64, color: AppColors.mist)),
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(

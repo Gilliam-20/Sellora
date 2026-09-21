@@ -37,8 +37,7 @@ class _ProductImportViewState extends State<ProductImportView> {
   Worker? _productWorker;
   Worker? _variantWorker;
 
-  ProductImportController get controller =>
-      Get.find<ProductImportController>();
+  ProductImportController get controller => Get.find<ProductImportController>();
 
   @override
   void initState() {
@@ -71,7 +70,8 @@ class _ProductImportViewState extends State<ProductImportView> {
     _settingPriceProgrammatically = true;
     _priceCtrl.text = price.toStringAsFixed(2);
     _settingPriceProgrammatically = false;
-    _userEditedPrice = true; // an explicit choice — a later variant switch shouldn't override it
+    _userEditedPrice =
+        true; // an explicit choice — a later variant switch shouldn't override it
     setState(() {});
   }
 
@@ -182,8 +182,11 @@ class _ProductImportViewState extends State<ProductImportView> {
       bottomNavigationBar: Obx(() {
         final submitting = controller.isSubmitting.value;
         return Container(
-          padding: EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm,
-              AppSpacing.md, AppSpacing.md + MediaQuery.of(context).padding.bottom),
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.md + MediaQuery.of(context).padding.bottom),
           decoration: const BoxDecoration(
             color: AppColors.cloud,
             border: Border(top: BorderSide(color: AppColors.hairline)),
@@ -200,16 +203,18 @@ class _ProductImportViewState extends State<ProductImportView> {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed:
-                                submitting ? null : () => _submit(publish: false),
+                            onPressed: submitting
+                                ? null
+                                : () => _submit(publish: false),
                             child: const Text('Save as draft'),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: ElevatedButton(
-                            onPressed:
-                                submitting ? null : () => _submit(publish: true),
+                            onPressed: submitting
+                                ? null
+                                : () => _submit(publish: true),
                             child: submitting
                                 ? const SizedBox(
                                     height: 18,
@@ -253,7 +258,8 @@ class _InlineWarning extends StatelessWidget {
               size: 18, color: AppColors.manifestGoldDeep),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-              child: Text(message, style: Theme.of(context).textTheme.bodySmall)),
+              child:
+                  Text(message, style: Theme.of(context).textTheme.bodySmall)),
           TextButton(onPressed: onRetry, child: const Text('Retry')),
         ],
       ),
@@ -276,7 +282,8 @@ class _Gallery extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final main = selected.isNotEmpty ? selected : (urls.isNotEmpty ? urls.first : '');
+    final main =
+        selected.isNotEmpty ? selected : (urls.isNotEmpty ? urls.first : '');
     return Column(
       children: [
         ClipRRect(
@@ -289,7 +296,13 @@ class _Gallery extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   if (main.isNotEmpty)
-                    CachedNetworkImage(imageUrl: main, fit: BoxFit.cover),
+                    CachedNetworkImage(
+                        imageUrl: main,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) =>
+                            Container(color: AppColors.mist),
+                        errorWidget: (_, __, ___) =>
+                            Container(color: AppColors.mist)),
                   if (isLoading)
                     const Positioned(
                         right: 10, top: 10, child: SelloraLoader(size: 20)),
@@ -327,7 +340,12 @@ class _Gallery extends StatelessWidget {
                                 borderRadius:
                                     BorderRadius.circular(AppRadii.stub - 1),
                                 child: CachedNetworkImage(
-                                    imageUrl: url, fit: BoxFit.cover),
+                                    imageUrl: url,
+                                    fit: BoxFit.cover,
+                                    placeholder: (_, __) =>
+                                        Container(color: AppColors.mist),
+                                    errorWidget: (_, __, ___) =>
+                                        Container(color: AppColors.mist)),
                               ),
                             ),
                           ),
@@ -419,7 +437,8 @@ class _PricingCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('CJ cost price', style: Theme.of(context).textTheme.bodyMedium),
+              Text('CJ cost price',
+                  style: Theme.of(context).textTheme.bodyMedium),
               Text(Formatters.currency(costPrice, code: currency),
                   style: Theme.of(context).textTheme.bodyMedium),
             ],
@@ -447,7 +466,8 @@ class _PricingCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Landed cost', style: Theme.of(context).textTheme.titleSmall),
+              Text('Landed cost',
+                  style: Theme.of(context).textTheme.titleSmall),
               Text(Formatters.currency(landedCost, code: currency),
                   style: AppTypography.price(size: 16)),
             ],
@@ -483,7 +503,9 @@ class _PricingCard extends StatelessWidget {
               Text(
                 'Profit ${Formatters.currency(profit, code: currency)} · Margin ${marginPercent.toStringAsFixed(0)}%',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isHealthy ? AppColors.horizonTealDeep : AppColors.danger,
+                    color: isHealthy
+                        ? AppColors.horizonTealDeep
+                        : AppColors.danger,
                     fontWeight: FontWeight.w600),
               ),
             ],
