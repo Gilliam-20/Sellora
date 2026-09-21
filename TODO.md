@@ -1791,17 +1791,51 @@ Implement:
 
 # PHASE 8 — PAYMENTS + ORDERS
 
-Implement:
+Status as of 2026-09-20 (see the STATUS table and WORKLOG.md's 2026-09-11/14/15 entries for detail).
+`useMockData` is still `true`, so none of the "real mode" work below has run against a live provider
+or a real CJ account.
 
-* payment provider abstraction
-* M-Pesa
-* cards
-* payment callbacks
-* order creation
-* order state machine
-* refunds
-* service fee
-* CJ fulfillment
+* **Order creation** — done, server-side. `createOrder` (`functions/lib/orders.js`) re-prices every
+  item from CJ's own live price and writes the order; `firestore.rules` denies client-side order
+  creation outright (`orders` create is `if false`). `FirebaseOrderRepository.placeOrder` sends real
+  `{pid, vid, quantity}` items and a `{countryCode, line}` `shippingAddress`, and reads the real
+  `{id, totalAmount, currency, items, ...}` response (closed 2026-09-15). Still open:
+  `shippingAddress.line` is one free-text string, not the `{fullName, phone, email, line1, line2,
+  city, province, zip}` shape CJ fulfillment actually needs; a mixed-seller cart is rejected outright
+  rather than split — one seller per order is assumed.
+* **M-Pesa** — wired end to end mechanically: `CheckoutController.placeOrder`'s real-mode branch
+  calls `IntasendService.payOrderMpesa` with the server-assigned order id. Unreachable and unverified
+  in practice — that branch never runs while `useMockData` is `true`, and the flow has never hit a
+  live IntaSend sandbox.
+* **Cards** — server endpoint exists (`ApiEndpoints.payOrderCard`) but nothing in the Flutter checkout
+  UI calls it; no card option is offered to the buyer.
+* **Payment callbacks** — `intasendWebhook` verifies a shared "challenge" value (implemented from
+  IntaSend's published docs, not confirmed against a live account — see Known Gaps), looks the order
+  up by `api_ref`, sets `paymentStatus`/`paymentReference`, and triggers CJ fulfillment. This webhook
+  is the only thing that actually confirms a payment anywhere in the system.
+* **Payment provider abstraction** — not done. `CheckoutController` calls `IntasendService` directly;
+  there's no `PaymentProvider` interface, so adding cards/PayPal/another processor still means editing
+  the checkout controller. (The adopted backend already carries a second, unreconciled provider —
+  `paypalApi.js` — that the Flutter client never calls.)
+* **Order state machine** — partial. `OrderStatus` (pending/processing/shipped/delivered/cancelled)
+  and `OrderPaymentStatus` (pending/paid/failed) exist on `OrderModel`, but `OrderPaymentStatus` has
+  no `refunded`/`partially_refunded` case, so `functions/lib/refunds.js`'s own payment-status values
+  (which do track those) can't round-trip into the Flutter model as-is.
+* **Refunds** — real, tested logic exists server-side (`functions/lib/refunds.js`: a pure
+  `decideRefund` plus `refundOrder` — transactional claim-then-call-then-write, IntaSend/PayPal
+  refund calls, partial-refund and stale-claim handling) but it belongs to the adopted single-vendor
+  backend, was never reconciled with Sellora's seller/store/fee model, and has no `ApiEndpoints` entry
+  or UI — no seller or admin can trigger a refund today.
+* **Service fee** — done as a data model. `AppConstants.platformServiceFeeRate = 0.02` (2026-09-11) is
+  snapshotted onto the order at creation (`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/
+  `paymentFee` on `OrderModel`), so a later admin change to the rate never rewrites historical orders.
+  Not yet true end-to-end: the adopted backend's `createOrder` has no seller/fee concept at all, so
+  these fields aren't actually populated by its real response yet — see `ApiEndpoints.createOrder`'s
+  doc comment.
+* **CJ fulfillment** — wired but unverified. `intasendWebhook`, once it confirms payment, calls
+  `placeCjOrder()` in-process per item (no HTTP self-call, no missing-auth-header bug — unlike the old
+  `onOrderCreated` trigger it replaced). CJ's own auth handshake and response shapes are still
+  unconfirmed against a real CJ developer account (see Known Gaps).
 
 ---
 

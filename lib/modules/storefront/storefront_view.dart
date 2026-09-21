@@ -155,34 +155,39 @@ class StorefrontView extends GetView<StorefrontController> {
               sliver: SliverToBoxAdapter(
                 child: SizedBox(
                   height: 36,
-                  child: Obx(() => ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        padding: EdgeInsets.symmetric(
-                          horizontal: sliverPadding.horizontal / 2,
-                        ),
-                        itemCount: controller.categories.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(width: AppSpacing.sm),
-                        itemBuilder: (context, index) {
-                          final category = controller.categories[index];
-                          final selected =
-                              controller.selectedCategory.value == category;
-                          final accent = hexToColor(controller
-                                  .scope.current.value?.primaryColorHex) ??
-                              AppColors.cargoNavy;
-                          return ChoiceChip(
-                            label: Text(category),
-                            selected: selected,
-                            selectedColor: accent,
-                            labelStyle: TextStyle(
-                              color: selected ? AppColors.cloud : AppColors.ink,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            onSelected: (_) =>
-                                controller.selectCategory(category),
-                          );
-                        },
-                      )),
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: sliverPadding.horizontal / 2,
+                    ),
+                    itemCount: controller.categories.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(width: AppSpacing.sm),
+                    itemBuilder: (context, index) {
+                      final category = controller.categories[index];
+                      // Each chip gets its own Obx — ListView's itemBuilder
+                      // runs outside the scope of a single Obx wrapping the
+                      // whole list, so GetX can't track reads made there.
+                      return Obx(() {
+                        final selected =
+                            controller.selectedCategory.value == category;
+                        final accent = hexToColor(controller
+                                .scope.current.value?.primaryColorHex) ??
+                            AppColors.cargoNavy;
+                        return ChoiceChip(
+                          label: Text(category),
+                          selected: selected,
+                          selectedColor: accent,
+                          labelStyle: TextStyle(
+                            color: selected ? AppColors.cloud : AppColors.ink,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          onSelected: (_) =>
+                              controller.selectCategory(category),
+                        );
+                      });
+                    },
+                  ),
                 ),
               ),
             ),
@@ -198,7 +203,13 @@ class StorefrontView extends GetView<StorefrontController> {
                   ),
                 );
               }
-              if (controller.items.isEmpty) {
+              // Snapshot the RxList inside Obx's tracked scope — the sliver's
+              // itemBuilder runs later during layout, outside that scope, so
+              // indexing the RxList directly there would read the observable
+              // where GetX can no longer see it (and corrupt GetX's global
+              // tracking state for every Obx built afterwards).
+              final items = List.of(controller.items);
+              if (items.isEmpty) {
                 return const SliverFillRemaining(
                   child: EmptyState(
                     icon: Icons.inventory_2_outlined,
@@ -214,7 +225,7 @@ class StorefrontView extends GetView<StorefrontController> {
                   gridDelegate: productGridDelegate(),
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final product = controller.items[index];
+                      final product = items[index];
                       return ProductCard(
                         product: product,
                         onTap: () {
@@ -224,7 +235,7 @@ class StorefrontView extends GetView<StorefrontController> {
                         },
                       );
                     },
-                    childCount: controller.items.length,
+                    childCount: items.length,
                   ),
                 ),
               );

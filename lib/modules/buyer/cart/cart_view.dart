@@ -18,7 +18,11 @@ class CartView extends GetView<CartController> {
     return Scaffold(
       appBar: AppBar(title: const Text('Your cart')),
       body: Obx(() {
-        final items = controller.cartRepo.items;
+        // Snapshot the RxList inside Obx's tracked scope — ListView's
+        // itemBuilder runs later during layout, outside that scope, so
+        // indexing the RxList directly there would read the observable
+        // where GetX can no longer see it (see StorefrontView/BuyerOrdersView).
+        final items = List.of(controller.cartRepo.items);
         if (items.isEmpty) {
           return const EmptyState(
             icon: Icons.shopping_bag_outlined,

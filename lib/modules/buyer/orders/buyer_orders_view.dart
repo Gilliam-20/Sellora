@@ -19,6 +19,10 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
     return Scaffold(
       appBar: AppBar(title: const Text('Your orders')),
       body: Obx(() {
+        // Touch an observable unconditionally first — cachedUser below isn't
+        // reactive, so if the guest branch returned without this read, Obx
+        // would never find an observable to subscribe to and would throw.
+        final isLoading = controller.isLoading.value;
         if (Get.find<AuthRepository>().cachedUser == null) {
           return EmptyState(
             icon: Icons.receipt_long_outlined,
@@ -30,8 +34,13 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
                 Get.toNamed('/s/${Get.parameters['slug']}/login'),
           );
         }
-        if (controller.isLoading.value) return const SelloraLoader();
-        if (controller.orders.isEmpty) {
+        if (isLoading) return const SelloraLoader();
+        // Snapshot the RxList once here, inside Obx's tracked scope — the
+        // ListView's itemBuilder runs later during layout, outside that
+        // scope, so indexing controller.orders directly there would read
+        // the observable where GetX can no longer see it.
+        final orders = List.of(controller.orders);
+        if (orders.isEmpty) {
           return const EmptyState(
             icon: Icons.receipt_long_outlined,
             title: 'No orders yet',
@@ -47,11 +56,11 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
               padding: EdgeInsets.symmetric(
                   horizontal: context.pageHorizontalPadding,
                   vertical: AppSpacing.md),
-              itemCount: controller.orders.length,
+              itemCount: orders.length,
               separatorBuilder: (_, __) =>
                   const SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) {
-                final order = controller.orders[index];
+                final order = orders[index];
                 return ManifestStub(
                   code: order.code,
                   title:

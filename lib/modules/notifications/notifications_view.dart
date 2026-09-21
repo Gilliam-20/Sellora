@@ -28,7 +28,12 @@ class NotificationsView extends GetView<NotificationCenter> {
           if (controller.isLoading.value) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (controller.notifications.isEmpty) {
+          // Snapshot the RxList inside Obx's tracked scope — ListView's
+          // itemBuilder runs later during layout, outside that scope, so
+          // indexing the RxList directly there would read the observable
+          // where GetX can no longer see it (see StorefrontView/CartView).
+          final notifications = List.of(controller.notifications);
+          if (notifications.isEmpty) {
             return const EmptyState(
               icon: Icons.notifications_none_outlined,
               title: 'You’re all caught up',
@@ -41,10 +46,10 @@ class NotificationsView extends GetView<NotificationCenter> {
               padding: EdgeInsets.symmetric(
                   horizontal: context.pageHorizontalPadding,
                   vertical: AppSpacing.md),
-              itemCount: controller.notifications.length,
+              itemCount: notifications.length,
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (_, index) {
-                final notification = controller.notifications[index];
+                final notification = notifications[index];
                 return ListTile(
                   onTap: () => controller.markRead(notification),
                   leading: CircleAvatar(
