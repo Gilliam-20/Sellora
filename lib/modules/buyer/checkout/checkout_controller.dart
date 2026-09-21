@@ -7,6 +7,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/cart_repository.dart';
 import '../../../data/repositories/order_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
+import '../../../data/repositories/product_repository.dart';
 import '../../../data/services/intasend_service.dart';
 
 class CheckoutController extends GetxController {
@@ -15,9 +16,51 @@ class CheckoutController extends GetxController {
   final AuthRepository _authRepo = Get.find<AuthRepository>();
   final NotificationRepository _notificationRepo =
       Get.find<NotificationRepository>();
+  final ProductRepository _productRepo = Get.find<ProductRepository>();
 
   final isPlacingOrder = false.obs;
   final errorMessage = RxnString();
+
+  /// Shipping estimate for the whole cart to the currently selected
+  /// destination — the sum of a per-line [ProductRepository.estimateShipping]
+  /// call, same freight source the seller's landed-cost card already uses.
+  /// Display-only: the mock-mode order below charges it as quoted, and the
+  /// real-mode order re-prices freight server-side from `createOrder`
+  /// regardless of what this shows (see functions/lib/orders.js).
+  final shippingFee = 0.0.obs;
+  final isEstimatingShipping = false.obs;
+
+  double get total => cartRepo.subtotal + shippingFee.value;
+
+  /// Re-quotes [shippingFee] for [countryCode]. Called on load and whenever
+  /// the buyer changes the destination country — never blocks or fails
+  /// checkout itself, since it's only a display breakdown.
+  Future<void> refreshShippingEstimate(String countryCode) async {
+    if (cartRepo.items.isEmpty) {
+      shippingFee.value = 0;
+      return;
+    }
+    isEstimatingShipping.value = true;
+    try {
+      final estimates = await Future.wait(cartRepo.items.map((item) {
+        final vid = item.selectedVariant?.vid ??
+            (item.product.variants.isNotEmpty
+                ? item.product.variants.first.vid
+                : item.product.cjProductId);
+        return _productRepo.estimateShipping(
+          vid: vid,
+          quantity: item.quantity,
+          endCountryCode: countryCode,
+        );
+      }));
+      shippingFee.value =
+          estimates.fold(0.0, (sum, estimate) => sum + estimate.cost);
+    } catch (_) {
+      shippingFee.value = 0;
+    } finally {
+      isEstimatingShipping.value = false;
+    }
+  }
 
   Future<void> placeOrder(
       {required String address,
@@ -64,13 +107,14 @@ class CheckoutController extends GetxController {
           storeId: cartRepo.storeId,
           items: items,
           status: OrderStatus.pending,
-          total: cartRepo.subtotal,
-          currency: 'KES',
+          total: total,
+          currency: cartRepo.currency,
           shippingAddress: shippingAddress,
           paymentMethod: 'IntaSend M-Pesa',
           paymentReference: 'MOCK-PAY-${DateTime.now().millisecondsSinceEpoch}',
           paymentStatus: OrderPaymentStatus.paid,
           createdAt: DateTime.now(),
+          shippingFee: shippingFee.value,
         );
         await _orderRepo.placeOrder(order);
         await _notificationRepo.notifyOrderPlaced(order);
@@ -102,11 +146,12 @@ class CheckoutController extends GetxController {
         storeId: cartRepo.storeId,
         items: items,
         status: OrderStatus.pending,
-        total: cartRepo.subtotal,
-        currency: 'KES',
+        total: total,
+        currency: cartRepo.currency,
         shippingAddress: shippingAddress,
         paymentMethod: 'IntaSend M-Pesa',
         createdAt: DateTime.now(),
+        shippingFee: shippingFee.value,
       );
       final order = await _orderRepo.placeOrder(draft);
       await _notificationRepo.notifyOrderPlaced(order);

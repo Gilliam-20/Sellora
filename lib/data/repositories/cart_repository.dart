@@ -26,10 +26,15 @@ class CartRepository extends GetxService {
   double get subtotal => items.fold(0, (sum, item) => sum + item.lineTotal);
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
 
+  /// The currency the subtotal is priced in. Checkout already rejects a
+  /// mixed-seller cart outright (see CLAUDE.md's known gaps), so every
+  /// item shares one currency — falls back to USD only while the cart is
+  /// empty.
+  String get currency => items.isEmpty ? 'USD' : items.first.product.currency;
+
   void add(ProductModel product, {ProductVariant? variant, int quantity = 1}) {
     final existingIndex = items.indexWhere((i) =>
-        i.product.id == product.id &&
-        i.selectedVariant?.vid == variant?.vid);
+        i.product.id == product.id && i.selectedVariant?.vid == variant?.vid);
     if (existingIndex != -1) {
       items[existingIndex].quantity += quantity;
       items.refresh();

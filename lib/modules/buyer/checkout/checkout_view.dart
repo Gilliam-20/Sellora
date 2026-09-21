@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/services/currency_service.dart';
 import 'checkout_controller.dart';
 
 class CheckoutView extends StatefulWidget {
@@ -39,6 +39,19 @@ class _CheckoutViewState extends State<CheckoutView> {
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   String _countryCode = _countries.first.$1;
+
+  @override
+  void initState() {
+    super.initState();
+    // Quote shipping for the default country as soon as the screen opens,
+    // rather than leaving the breakdown at $0 until the buyer touches the
+    // country dropdown.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Get.find<CheckoutController>().refreshShippingEstimate(_countryCode);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -99,7 +112,9 @@ class _CheckoutViewState extends State<CheckoutView> {
                                         '${item.quantity}x ${item.product.title}',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis)),
-                                Text(Formatters.currency(item.lineTotal)),
+                                Text(Get.find<CurrencyService>().format(
+                                    item.lineTotal,
+                                    fromCode: item.product.currency)),
                               ],
                             ),
                           ),
@@ -108,17 +123,42 @@ class _CheckoutViewState extends State<CheckoutView> {
                   ),
                 ),
                 const Divider(height: AppSpacing.lg),
-                Obx(
-                  () => Row(
+                Obx(() {
+                  final currencyService = Get.find<CurrencyService>();
+                  final currency = controller.cartRepo.currency;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Total',
-                          style: Theme.of(context).textTheme.titleMedium),
-                      const Spacer(),
-                      Text(Formatters.currency(controller.cartRepo.subtotal),
-                          style: Theme.of(context).textTheme.titleLarge),
+                      _CostRow(
+                        label: 'Subtotal',
+                        value: currencyService.format(
+                            controller.cartRepo.subtotal,
+                            fromCode: currency),
+                      ),
+                      const SizedBox(height: 6),
+                      _CostRow(
+                        label: 'Shipping',
+                        value: controller.isEstimatingShipping.value
+                            ? 'Calculating…'
+                            : currencyService.format(
+                                controller.shippingFee.value,
+                                fromCode: currency),
+                      ),
+                      const Divider(height: AppSpacing.lg),
+                      Row(
+                        children: [
+                          Text('Total',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const Spacer(),
+                          Text(
+                              currencyService.format(controller.total,
+                                  fromCode: currency),
+                              style: Theme.of(context).textTheme.titleLarge),
+                        ],
+                      ),
                     ],
-                  ),
-                ),
+                  );
+                }),
                 const SizedBox(height: AppSpacing.lg),
                 Text('Shipping address',
                     style: Theme.of(context).textTheme.titleMedium),
@@ -133,7 +173,10 @@ class _CheckoutViewState extends State<CheckoutView> {
                           ))
                       .toList(),
                   onChanged: (v) {
-                    if (v != null) setState(() => _countryCode = v);
+                    if (v != null) {
+                      setState(() => _countryCode = v);
+                      controller.refreshShippingEstimate(v);
+                    }
                   },
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -169,7 +212,8 @@ class _CheckoutViewState extends State<CheckoutView> {
         () => BottomActionBar(
           label: 'Pay & place order',
           isLoading: controller.isPlacingOrder.value,
-          trailingText: Formatters.currency(controller.cartRepo.subtotal),
+          trailingText: Get.find<CurrencyService>()
+              .format(controller.total, fromCode: controller.cartRepo.currency),
           onPressed: () {
             if (_formKey.currentState!.validate()) {
               controller.placeOrder(
@@ -180,6 +224,25 @@ class _CheckoutViewState extends State<CheckoutView> {
           },
         ),
       ),
+    );
+  }
+}
+
+/// One line of the checkout cost breakdown (Subtotal / Shipping / Total).
+class _CostRow extends StatelessWidget {
+  const _CostRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const Spacer(),
+        Text(value, style: Theme.of(context).textTheme.bodyMedium),
+      ],
     );
   }
 }

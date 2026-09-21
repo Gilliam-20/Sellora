@@ -1,10 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_metrics.dart';
 import '../../app/theme/app_typography.dart';
 import '../../data/models/product_model.dart';
-import '../utils/formatters.dart';
+import '../../data/services/currency_service.dart';
 
 /// The storefront product card — the single most-seen component in the
 /// buyer experience, so it carries the most visual weight: soft rounded
@@ -81,23 +82,37 @@ class ProductCard extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Text(Formatters.currency(product.sellPrice),
-                          style: AppTypography.price(size: 16)),
-                      if (product.compareAtPrice != null) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          Formatters.currency(product.compareAtPrice!),
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                  decoration: TextDecoration.lineThrough),
+                  Obx(() {
+                    final currency = Get.find<CurrencyService>();
+                    return Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                              currency.format(product.sellPrice,
+                                  fromCode: product.currency),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.price(size: 16)),
                         ),
+                        if (product.compareAtPrice != null) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              currency.format(product.compareAtPrice!,
+                                  fromCode: product.currency),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                      decoration: TextDecoration.lineThrough),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
+                    );
+                  }),
                   if (product.soldCount > 0) ...[
                     const SizedBox(height: 2),
                     Text('${product.soldCount} sold',

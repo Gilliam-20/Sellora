@@ -4,11 +4,11 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../app/theme/app_typography.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/repositories/cart_repository.dart';
+import '../../../data/services/currency_service.dart';
 import 'product_details_controller.dart';
 
 class ProductDetailsView extends GetView<ProductDetailsController> {
@@ -46,30 +46,44 @@ class ProductDetailsView extends GetView<ProductDetailsController> {
                   Text(product.title,
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: AppSpacing.sm),
-                  Row(
-                    children: [
-                      Text(Formatters.currency(product.sellPrice),
-                          style: AppTypography.price(size: 22)),
-                      if (product.compareAtPrice != null) ...[
-                        const SizedBox(width: 8),
-                        Text(
-                          Formatters.currency(product.compareAtPrice!),
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                  decoration: TextDecoration.lineThrough),
+                  Obx(() {
+                    final currency = Get.find<CurrencyService>();
+                    return Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                              currency.format(product.sellPrice,
+                                  fromCode: product.currency),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.price(size: 22)),
                         ),
+                        if (product.compareAtPrice != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              currency.format(product.compareAtPrice!,
+                                  fromCode: product.currency),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                      decoration: TextDecoration.lineThrough),
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        if (product.rating > 0) ...[
+                          const Icon(Icons.star,
+                              size: 16, color: AppColors.manifestGoldDeep),
+                          const SizedBox(width: 2),
+                          Text(product.rating.toStringAsFixed(1)),
+                        ],
                       ],
-                      const Spacer(),
-                      if (product.rating > 0) ...[
-                        const Icon(Icons.star,
-                            size: 16, color: AppColors.manifestGoldDeep),
-                        const SizedBox(width: 2),
-                        Text(product.rating.toStringAsFixed(1)),
-                      ],
-                    ],
-                  ),
+                    );
+                  }),
                   if (product.soldCount > 0) ...[
                     const SizedBox(height: 4),
                     Text('${product.soldCount} sold',

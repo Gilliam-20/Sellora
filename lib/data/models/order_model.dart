@@ -131,6 +131,7 @@ class OrderModel {
     this.serviceFeeAmount = 0,
     this.sellerRevenue = 0,
     this.paymentFee = 0,
+    this.shippingFee = 0,
   });
 
   OrderModel copyWith({
@@ -200,6 +201,11 @@ class OrderModel {
   final double sellerRevenue;
   final double paymentFee;
 
+  /// Shipping portion of [total], snapshotted at order-creation time the
+  /// same way the fee fields above are — a later change to how shipping is
+  /// priced must not alter historical orders.
+  final double shippingFee;
+
   factory OrderModel.fromMap(Map<String, dynamic> map) {
     return OrderModel(
       id: map['id'] as String,
@@ -230,6 +236,7 @@ class OrderModel {
       serviceFeeAmount: (map['serviceFeeAmount'] as num?)?.toDouble() ?? 0,
       sellerRevenue: (map['sellerRevenue'] as num?)?.toDouble() ?? 0,
       paymentFee: (map['paymentFee'] as num?)?.toDouble() ?? 0,
+      shippingFee: (map['shippingFee'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -253,5 +260,6 @@ class OrderModel {
         'serviceFeeAmount': serviceFeeAmount,
         'sellerRevenue': sellerRevenue,
         'paymentFee': paymentFee,
+        'shippingFee': shippingFee,
       };
 }

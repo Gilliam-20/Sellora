@@ -19,6 +19,13 @@ class AppConstants {
   /// seller/store concept and computes no platform fee at all — this rate
   /// isn't actually applied anywhere server-side right now.
   static const double platformServiceFeeRate = 0.02;
+
+  /// Static USD→KES rate used only for the buyer-facing currency-display
+  /// toggle (see CurrencyService) — Sellora has no live FX-rate source yet
+  /// (SELLORA_ARCHITECTURE.md's multi-currency section flags a real
+  /// conversion service as not-yet-built), so this is a fixed approximation
+  /// that needs updating by hand if it drifts far from the market rate.
+  static const double usdToKesRate = 129.0;
 }
 
 /// Backend endpoints. In production these point at Firebase Cloud

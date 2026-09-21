@@ -4,10 +4,10 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../app/theme/app_typography.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../data/services/currency_service.dart';
 import 'cart_controller.dart';
 
 class CartView extends GetView<CartController> {
@@ -67,8 +67,11 @@ class CartView extends GetView<CartController> {
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyMedium),
                           const SizedBox(height: 4),
-                          Text(Formatters.currency(item.product.sellPrice),
-                              style: AppTypography.price(size: 14)),
+                          Obx(() => Text(
+                              Get.find<CurrencyService>().format(
+                                  item.product.sellPrice,
+                                  fromCode: item.product.currency),
+                              style: AppTypography.price(size: 14))),
                         ],
                       ),
                     ),
@@ -118,7 +121,9 @@ class CartView extends GetView<CartController> {
         if (controller.cartRepo.items.isEmpty) return const SizedBox.shrink();
         return BottomActionBar(
           label: 'Checkout',
-          trailingText: Formatters.currency(controller.cartRepo.subtotal),
+          trailingText: Get.find<CurrencyService>().format(
+              controller.cartRepo.subtotal,
+              fromCode: controller.cartRepo.currency),
           onPressed: () => Get.toNamed('/s/${Get.parameters['slug']}/checkout'),
         );
       }),

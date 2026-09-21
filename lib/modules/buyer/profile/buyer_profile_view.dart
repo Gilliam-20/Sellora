@@ -7,6 +7,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/store_repository.dart';
+import '../../../data/services/currency_service.dart';
 
 class BuyerProfileView extends StatelessWidget {
   const BuyerProfileView({super.key});
@@ -22,8 +23,7 @@ class BuyerProfileView extends StatelessWidget {
         ? await Get.find<StoreRepository>().storeById(storeId)
         : null;
     await authRepo.signOut();
-    Get.offAllNamed(
-        store != null ? '/s/${store.slug}' : Routes.marketing);
+    Get.offAllNamed(store != null ? '/s/${store.slug}' : Routes.marketing);
   }
 
   @override
@@ -39,8 +39,7 @@ class BuyerProfileView extends StatelessWidget {
           message: 'Sign in or create an account to save your details and '
               'track orders.',
           actionLabel: 'Sign in',
-          onAction: () =>
-              Get.toNamed('/s/${Get.parameters['slug']}/login'),
+          onAction: () => Get.toNamed('/s/${Get.parameters['slug']}/login'),
         ),
       );
     }
@@ -69,6 +68,31 @@ class BuyerProfileView extends StatelessWidget {
             Text(user.name, style: Theme.of(context).textTheme.titleLarge),
             Text(user.email, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: AppSpacing.lg),
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Row(
+                children: [
+                  const Icon(Icons.attach_money),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                      child: Text('Currency',
+                          style: Theme.of(context).textTheme.bodyMedium)),
+                  Obx(() {
+                    final currency = Get.find<CurrencyService>();
+                    return SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'USD', label: Text('USD')),
+                        ButtonSegment(value: 'KES', label: Text('KSh')),
+                      ],
+                      selected: {currency.code.value},
+                      onSelectionChanged: (selection) =>
+                          currency.setCode(selection.first),
+                    );
+                  }),
+                ],
+              ),
+            ),
             const Divider(),
             ListTile(
               contentPadding: EdgeInsets.zero,

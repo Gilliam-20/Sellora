@@ -9,6 +9,7 @@ import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/manifest_stub.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../data/services/currency_service.dart';
 import 'buyer_orders_controller.dart';
 
 class BuyerOrdersView extends GetView<BuyerOrdersController> {
@@ -30,8 +31,7 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
             message: 'Create an account or sign in to track your purchases '
                 'from this store.',
             actionLabel: 'Sign in',
-            onAction: () =>
-                Get.toNamed('/s/${Get.parameters['slug']}/login'),
+            onAction: () => Get.toNamed('/s/${Get.parameters['slug']}/login'),
           );
         }
         if (isLoading) return const SelloraLoader();
@@ -61,17 +61,21 @@ class BuyerOrdersView extends GetView<BuyerOrdersController> {
                   const SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) {
                 final order = orders[index];
-                return ManifestStub(
-                  code: order.code,
-                  title:
-                      '${order.items.length} item${order.items.length == 1 ? '' : 's'} · ${Formatters.currency(order.total, code: order.currency)}',
-                  subtitle: Formatters.date(order.createdAt),
-                  accentColor: AppColors.statusColor(order.status.name),
-                  trailing: StatusBadge(
-                    label: order.status.label,
-                    color: AppColors.statusColor(order.status.name),
-                  ),
-                );
+                return Obx(() {
+                  final total = Get.find<CurrencyService>()
+                      .format(order.total, fromCode: order.currency);
+                  return ManifestStub(
+                    code: order.code,
+                    title:
+                        '${order.items.length} item${order.items.length == 1 ? '' : 's'} · $total',
+                    subtitle: Formatters.date(order.createdAt),
+                    accentColor: AppColors.statusColor(order.status.name),
+                    trailing: StatusBadge(
+                      label: order.status.label,
+                      color: AppColors.statusColor(order.status.name),
+                    ),
+                  );
+                });
               },
             ),
           ),

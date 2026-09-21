@@ -24,6 +24,7 @@ import '../../data/repositories/store_repository.dart';
 import '../../data/repositories/subscription_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cj_dropshipping_service.dart';
+import '../../data/services/currency_service.dart';
 import '../../data/services/firestore_service.dart';
 import '../../data/services/intasend_service.dart';
 import '../../data/services/storage_service.dart';
@@ -42,6 +43,9 @@ class InitialBinding extends Bindings {
   void dependencies() {
     // ---- App-wide services --------------------------------------------
     Get.put(StorageService(), permanent: true);
+    // Reads StorageService.currencyCode in its constructor, so it must be
+    // registered after it — same ordering reason as StoreScope below.
+    Get.put(CurrencyService(), permanent: true);
     Get.put(DioClient(), permanent: true);
     Get.put(CartRepository(), permanent: true);
 
