@@ -6,6 +6,70 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-22 — PHASE 10: admin platform-financial overview + Stores tab (first slice)
+
+**Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as every
+recent entry — `responsive.dart`/`mock_admin_repository.dart` curly-brace lint info, and
+`test/auth_repository_test.dart`'s missing-`sellerTermsVersion` compile error). `flutter test` shows
+the same two pre-existing failures as before this change (that compile error, and
+`test/seller_shell_controller_test.dart`'s `NotificationCenter` setup gap) plus the new
+`admin_dashboard_controller_test.dart` passing — nothing newly broken. Verified with that new unit
+test against the real mock repositories; not click-through-verified in a live browser this session.
+
+**Why:** TODO.md's STATUS table called PHASE 10 "Not started (existing admin screens are
+marketplace-era mocks)". That was stale — auditing `lib/modules/admin/` first (before writing
+anything, per TODO.md §2/§49's audit-first rule) showed the Overview/Sellers/Sync/Orders/Plans tabs
+already call `AdminRepository`/`OrderRepository`/`SubscriptionRepository`/`StoreRepository`, which are
+bound to `Firebase*`/`Mock*` implementations exactly like every other module — there was no
+marketplace-era mock UI left to replace. What TODO.md §34/§35 actually calls for and was genuinely
+missing: a platform financial model that keeps seller GMV separate from Sellora's own revenue ("Do NOT
+confuse seller GMV with Sellora revenue"), and any admin visibility into `stores` at all — the
+multi-tenant migration (stores/{storeId}/products, .../orders) landed weeks ago but no admin screen
+ever read `StoreRepository.allStores()`, despite that method's own doc comment already flagging it for
+"admin cross-store oversight later" (`store_repository.dart:5`). PHASE 10 is a 15+ subsystem spec
+(users, stores, subscriptions, plans, catalog, orders, fees, payments, refunds, categories, themes,
+coupons, reports, support, feature flags, settings); rather than attempt all of it, this session
+scoped to the two gaps closest to the seams the app already has real data for, following the same
+single-slice-per-session discipline as PHASE 9.
+
+**Changed:**
+- **`AdminDashboardController`** (`lib/modules/admin/dashboard/admin_dashboard_controller.dart`)
+  rewritten: now also injects `StoreRepository` and `SubscriptionRepository`. Adds `serviceFeeRevenue`
+  (sum of `OrderModel.serviceFeeAmount` on paid orders — real against mock data; still 0 against the
+  live backend because `functions/lib/orders.js`'s `createOrder` has no seller/fee concept and never
+  populates the field, a pre-existing, already-documented gap, not a new bug), `subscriptionMrr` (every
+  seller with `hasActiveSubscription == true`, priced at their matched `SubscriptionPlanModel.priceKes`
+  — KES-only, deliberately: there's no currency-conversion service yet, PHASE 11 is still not started),
+  `subscriptionArr` (`mrr * 12`), `totalPlatformRevenue` (`serviceFeeRevenue + subscriptionMrr`,
+  excluding seller GMV on purpose), plus seller-breakdown counts (active/pending/suspended/new-in-30d)
+  and a store count. `totalGmv` narrowed to only sum paid orders (was every order regardless of
+  payment status).
+- **`admin_dashboard_view.dart`** rewritten to match: a "Platform revenue" stat grid (GMV / service-fee
+  revenue / subscription MRR / total platform revenue) above the existing "Sellers & stores" grid and
+  recent-orders list.
+- **New `lib/modules/admin/stores/`** (`admin_stores_controller.dart` + `admin_stores_view.dart`) — a
+  read-only, searchable (name/slug/owner) list of every store on the platform via
+  `StoreRepository.allStores()`, cross-referenced against `AdminRepository.fetchSellers()` for the
+  owner's name/email/status. Tapping a store opens a detail bottom sheet (slug, owner, currency,
+  created date). No store-level suspend/activate action — `StoreModel` has no status field, and adding
+  one unenforced anywhere would be exactly the "placeholder button that does nothing" TODO.md §54 warns
+  against; suspending the owning seller (already wired in the Sellers tab) is the real lever today.
+- **`admin_shell_view.dart`/`admin_binding.dart`**: added the Stores tab (6 tabs now). Sellers' icon
+  changed from `Icons.storefront_outlined` to `Icons.people_alt_outlined` since Stores now legitimately
+  owns the storefront icon.
+- **New `test/admin_dashboard_controller_test.dart`**: seeds one paid and one pending-payment mock
+  order and asserts GMV/service-fee revenue only count the paid one, MRR matches the mock admin
+  repository's one active `growth`-plan seller, and seller/store counts are correct.
+- **TODO.md / SELLORA_IMPLEMENTATION_PLAN.md**: PHASE 10 status rewritten to correct the stale
+  "not started" framing and record what shipped vs. what's still open.
+
+**Still open (not attempted this session):** store suspension (needs a `StoreModel` status field plus
+rules enforcement), refunds UI (server logic exists per PHASE 8's `functions/lib/refunds.js` but has no
+`ApiEndpoints` entry or admin screen), coupons, categories, themes, feature flags, platform settings,
+reports/support, and churn (needs a historical subscription-state snapshot this session didn't build).
+
+---
+
 ## 2026-09-21 — PHASE 9: seller dashboard analytics (first slice)
 
 **Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as every

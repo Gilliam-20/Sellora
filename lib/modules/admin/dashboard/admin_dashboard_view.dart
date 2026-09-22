@@ -26,36 +26,60 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
                   horizontal: context.pageHorizontalPadding,
                   vertical: AppSpacing.md),
               children: [
-                GridView.extent(
-                  // A fixed 2-column count stayed 2-up all the way to a
-                  // desktop window; an extent-based grid grows toward 4
-                  // stat tiles per row as the viewport widens instead.
-                  maxCrossAxisExtent: 260,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: AppSpacing.sm,
-                  mainAxisSpacing: AppSpacing.sm,
-                  childAspectRatio: 1.5,
-                  children: [
-                    ManifestStatCard(
-                        label: 'Total GMV',
-                        value: Formatters.currency(controller.totalGmv,
-                            code: 'KES'),
-                        accentColor: AppColors.manifestGold),
-                    ManifestStatCard(
-                        label: 'Active sellers',
-                        value: '${controller.activeSellerCount}',
-                        accentColor: AppColors.horizonTeal),
-                    ManifestStatCard(
-                        label: 'Pending approval',
-                        value: '${controller.pendingSellerCount}',
-                        accentColor: AppColors.adminAccent),
-                    ManifestStatCard(
-                        label: 'Total orders',
-                        value: '${controller.orders.length}',
-                        accentColor: AppColors.info),
-                  ],
-                ),
+                const SectionHeader(title: 'Platform revenue'),
+                const SizedBox(height: AppSpacing.sm),
+                _statGrid([
+                  ManifestStatCard(
+                      label: 'Seller GMV',
+                      value:
+                          Formatters.currency(controller.totalGmv, code: 'KES'),
+                      accentColor: AppColors.cargoNavy),
+                  ManifestStatCard(
+                      label: 'Service fee revenue',
+                      value: Formatters.currency(controller.serviceFeeRevenue,
+                          code: 'KES'),
+                      accentColor: AppColors.manifestGold),
+                  ManifestStatCard(
+                      label: 'Subscription MRR',
+                      value: Formatters.currency(controller.subscriptionMrr,
+                          code: 'KES'),
+                      accentColor: AppColors.horizonTeal),
+                  ManifestStatCard(
+                      label: 'Total platform revenue',
+                      value: Formatters.currency(
+                          controller.totalPlatformRevenue,
+                          code: 'KES'),
+                      accentColor: AppColors.adminAccent),
+                ]),
+                const SizedBox(height: AppSpacing.lg),
+                const SectionHeader(title: 'Sellers & stores'),
+                const SizedBox(height: AppSpacing.sm),
+                _statGrid([
+                  ManifestStatCard(
+                      label: 'Active sellers',
+                      value: '${controller.activeSellerCount}',
+                      accentColor: AppColors.horizonTeal),
+                  ManifestStatCard(
+                      label: 'Pending approval',
+                      value: '${controller.pendingSellerCount}',
+                      accentColor: AppColors.manifestGold),
+                  ManifestStatCard(
+                      label: 'Suspended',
+                      value: '${controller.suspendedSellerCount}',
+                      accentColor: AppColors.danger),
+                  ManifestStatCard(
+                      label: 'New sellers (30d)',
+                      value: '${controller.newSellerCount30d}',
+                      accentColor: AppColors.info),
+                  ManifestStatCard(
+                      label: 'Stores',
+                      value: '${controller.stores.length}',
+                      accentColor: AppColors.cargoNavy),
+                  ManifestStatCard(
+                      label: 'Total orders',
+                      value: '${controller.orders.length}',
+                      accentColor: AppColors.adminAccent),
+                ]),
                 const SizedBox(height: AppSpacing.lg),
                 Text('Recent orders across all sellers',
                     style: Theme.of(context).textTheme.titleMedium),
@@ -89,4 +113,17 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
       }),
     );
   }
+
+  Widget _statGrid(List<Widget> cards) => GridView.extent(
+        // A fixed 2-column count stayed 2-up all the way to a desktop
+        // window; an extent-based grid grows toward 4 stat tiles per row
+        // as the viewport widens instead.
+        maxCrossAxisExtent: 260,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisSpacing: AppSpacing.sm,
+        mainAxisSpacing: AppSpacing.sm,
+        childAspectRatio: 1.5,
+        children: cards,
+      );
 }

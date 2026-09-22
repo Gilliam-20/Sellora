@@ -282,7 +282,17 @@ for why).
 
 ## PHASE 10 — Admin
 
-Not started (existing admin mock screens are marketplace-era, not this platform's admin panel).
+First slice shipped 2026-09-22 (see WORKLOG.md). Correction to this doc's own earlier framing: the
+existing admin shell (Overview/Sellers/Sync/Orders/Plans) was never marketplace-era mock UI — every
+tab already read `AdminRepository`/`OrderRepository`/`SubscriptionRepository` against whichever
+backend is active (real or mock), same as the rest of the app. What Overview was actually missing was
+TODO.md §35's platform financial model (seller GMV kept separate from Sellora's own service-fee and
+subscription revenue) — it only had a single undifferentiated "Total GMV" tile. That's fixed now, plus
+a new Stores tab surfacing `StoreRepository.allStores()` (already implemented, never wired to any
+screen). Not started: store suspension (no status field exists on `StoreModel` yet — piggybacking on
+the owning seller's `SellerStatus` was a deliberate call this session, not an oversight), refunds UI,
+coupons, categories, themes, feature flags, platform settings, reports/support, and churn (no
+historical snapshot to compute it from yet).
 
 ## PHASE 11 — Internationalization
 

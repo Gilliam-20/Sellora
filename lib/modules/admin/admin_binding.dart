@@ -5,6 +5,7 @@ import 'orders/admin_orders_controller.dart';
 import 'plans/admin_plans_controller.dart';
 import 'sellers/admin_sellers_controller.dart';
 import 'shell/admin_shell_controller.dart';
+import 'stores/admin_stores_controller.dart';
 
 class AdminBinding extends Bindings {
   @override
@@ -12,6 +13,7 @@ class AdminBinding extends Bindings {
     Get.lazyPut<AdminShellController>(() => AdminShellController());
     Get.lazyPut<AdminDashboardController>(() => AdminDashboardController());
     Get.lazyPut<AdminSellersController>(() => AdminSellersController());
+    Get.lazyPut<AdminStoresController>(() => AdminStoresController());
     Get.lazyPut<AdminCatalogSyncController>(() => AdminCatalogSyncController());
     Get.lazyPut<AdminOrdersController>(() => AdminOrdersController());
     Get.lazyPut<AdminPlansController>(() => AdminPlansController());
