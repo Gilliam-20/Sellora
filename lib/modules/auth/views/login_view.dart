@@ -59,8 +59,7 @@ class _LoginViewState extends State<LoginView> {
                     child: Center(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.xl,
-                            vertical: AppSpacing.xl),
+                            horizontal: AppSpacing.xl, vertical: AppSpacing.xl),
                         child: ResponsiveCenter(maxWidth: 420, child: form),
                       ),
                     ),
@@ -277,7 +276,8 @@ class _TrustBadge extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(label,
-              style: const TextStyle(color: AppColors.slateLight, fontSize: 14)),
+              style:
+                  const TextStyle(color: AppColors.slateLight, fontSize: 14)),
         ),
       ],
     );
