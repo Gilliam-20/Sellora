@@ -6,6 +6,28 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-25 — Sellora visual identity assets
+
+**Status:** implemented this session. Focused `flutter analyze` of the updated splash view completed
+without reported issues. No behavioral, routing, backend, or theme-token changes were made.
+
+**Changed:**
+- Added `assets/images/sellora-splash-logo.png`, the supplied Sellora wordmark/tagline artwork, and
+  changed the in-app `SplashView` to a white background using that asset instead of the previous
+  navy, text-rendered wordmark/tagline.
+- Added `assets/images/sellora-app-logo.png`, the supplied cart/S app mark. It appears above the
+  wordmark in `SplashView` and was rendered into each Android launcher-icon density at
+  `android/app/src/main/res/mipmap-*/ic_launcher.png` (mdpi through xxxhdpi). The Android manifest
+  already points at `@mipmap/ic_launcher`, so no manifest change was needed.
+- Replaced `web/favicon.png` with the supplied favicon artwork, rendered as a 32×32 PNG. The existing
+  `web/index.html` favicon reference remains unchanged and now serves the new icon.
+
+**Still open:** iOS is not present in this repository, so no iOS app-icon asset was added. The web
+PWA manifest icons were intentionally left unchanged; the request was specifically for the browser
+favicon.
+
+---
+
 ## 2026-09-22 — PHASE 10: admin platform-financial overview + Stores tab (first slice)
 
 **Status:** implemented this session. `flutter analyze` clean (same 3 pre-existing issues as every

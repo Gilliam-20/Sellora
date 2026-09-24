@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../../app/theme/app_colors.dart';
 import '../../../core/widgets/common.dart';
 import '../controllers/auth_controller.dart';
 
@@ -14,27 +12,21 @@ class SplashView extends GetView<AuthController> {
         .addPostFrameCallback((_) => controller.checkSession());
 
     return Scaffold(
-      backgroundColor: AppColors.cargoNavy,
+      backgroundColor: Colors.white,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Sellora',
-              style: GoogleFonts.fraunces(
-                color: AppColors.cloud,
-                fontSize: 40,
-                fontWeight: FontWeight.w600,
-              ),
+            Image.asset(
+              'assets/images/sellora-app-logo.png',
+              width: 108,
+              fit: BoxFit.contain,
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Sourced globally. Sold locally.',
-              style: GoogleFonts.inter(
-                color: AppColors.slateLight,
-                fontSize: 14,
-                letterSpacing: 0.2,
-              ),
+            const SizedBox(height: 8),
+            Image.asset(
+              'assets/images/sellora-splash-logo.png',
+              width: 340,
+              fit: BoxFit.contain,
             ),
             const SizedBox(height: 28),
             const SelloraLoader(size: 28),
