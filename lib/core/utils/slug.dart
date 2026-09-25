@@ -4,7 +4,7 @@
 /// `/s/{slug}` handle from its display name at signup.
 ///
 /// Capped at [maxSlugLength] so a de-duplicating `-N` suffix still fits
-/// under firestore.rules' 80-character `isValidSlug` limit.
+/// under the `stores.slug` check constraint's 80-character limit.
 const maxSlugLength = 60;
 
 String slugify(String input) {

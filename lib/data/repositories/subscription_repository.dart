@@ -6,10 +6,10 @@ abstract class SubscriptionRepository {
   Future<List<SubscriptionPlanModel>> fetchPlans();
 
   /// Starts a subscription purchase server-side: creates a pending
-  /// billing_history ledger entry (plan price snapshotted, real Firestore
+  /// billing_history ledger entry (plan price snapshotted, real server
   /// id) but does NOT activate anything. The caller uses the returned
   /// entry's id as the payment's reference — mirrors
-  /// `FirebaseOrderRepository.placeOrder`'s create-then-pay pattern. Only a
+  /// `SupabaseOrderRepository.placeOrder`'s create-then-pay pattern. Only a
   /// confirmed payment (the IntaSend webhook, or mock mode's synchronous
   /// activation) actually activates the subscription.
   Future<BillingHistoryEntryModel> subscribeSeller({

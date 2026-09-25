@@ -3,15 +3,15 @@ import '../models/cj_category.dart';
 import '../models/freight_estimate.dart';
 import '../models/product_model.dart';
 import '../services/cj_dropshipping_service.dart';
-import '../services/firestore_service.dart';
+import '../services/supabase_service.dart';
 import 'product_repository.dart';
 
 /// Production implementation: catalog browsing goes through
-/// [CjDropshippingService] (Cloud Functions -> CJ Dropshipping API);
-/// listings and storefront reads/writes go through Firestore.
-class FirebaseProductRepository extends GetxService
+/// [CjDropshippingService] (backend -> CJ Dropshipping API); listings and
+/// storefront reads/writes go through the `products` table.
+class SupabaseProductRepository extends GetxService
     implements ProductRepository {
-  final FirestoreService _fs = Get.find<FirestoreService>();
+  final SupabaseService _db = Get.find<SupabaseService>();
   final CjDropshippingService _cj = Get.find<CjDropshippingService>();
 
   @override
@@ -50,9 +50,8 @@ class FirebaseProductRepository extends GetxService
 
   @override
   Future<List<ProductModel>> sellerListings(String sellerId) async {
-    final snap =
-        await _fs.productsGroup.where('sellerId', isEqualTo: sellerId).get();
-    return snap.docs.map((d) => ProductModel.fromMap(d.data())).toList();
+    final rows = await _db.products.select().eq('seller_id', sellerId);
+    return _models(rows);
   }
 
   @override
@@ -61,46 +60,38 @@ class FirebaseProductRepository extends GetxService
     String? keyword,
     String? category,
   }) async {
-    final snap = await _fs.storeProducts(storeId).get();
-    return snap.docs
-        .map((d) => ProductModel.fromMap(d.data()))
-        .where((product) {
-      final matchesKeyword = keyword == null ||
-          keyword.isEmpty ||
-          product.title.toLowerCase().contains(keyword.toLowerCase());
-      final matchesCategory =
-          category == null || category == 'All' || product.category == category;
-      return product.isListed && matchesKeyword && matchesCategory;
-    }).toList();
+    var query =
+        _db.products.select().eq('store_id', storeId).eq('is_listed', true);
+    if (category != null && category != 'All') {
+      query = query.eq('category', category);
+    }
+    if (keyword != null && keyword.isNotEmpty) {
+      query = query.ilike('title', '%${_escapeLike(keyword)}%');
+    }
+    return _models(await query);
   }
 
   @override
   Future<List<ProductModel>> storefrontFeed(
       {String? keyword, String? category}) async {
-    var query = _fs.productsGroup.where('isListed', isEqualTo: true);
+    var query = _db.products.select().eq('is_listed', true);
     if (category != null && category != 'All') {
-      query = query.where('category', isEqualTo: category);
+      query = query.eq('category', category);
     }
-    final snap = await query.get();
-    var results = snap.docs.map((d) => ProductModel.fromMap(d.data())).toList();
     if (keyword != null && keyword.isNotEmpty) {
-      results = results
-          .where((p) => p.title.toLowerCase().contains(keyword.toLowerCase()))
-          .toList();
+      query = query.ilike('title', '%${_escapeLike(keyword)}%');
     }
-    return results;
+    return _models(await query);
   }
 
   @override
   Future<ProductModel> productDetail(String productId) async {
-    // A listed product's own id, not the Firestore document id under
-    // stores/{storeId}/products (see [listProduct]'s doc-id comment) — so
-    // this has to search by field, not `.doc(productId).get()`.
-    final snap = await _fs.productsGroup
-        .where('id', isEqualTo: productId)
-        .limit(1)
-        .get();
-    if (snap.docs.isNotEmpty) return ProductModel.fromMap(snap.docs.first.data());
+    // A listed product's id is the CJ product id, unique only within its
+    // store — so this takes the first store's listing, then falls back to
+    // CJ's own detail for an unlisted catalog product.
+    final row =
+        await _db.products.select().eq('id', productId).limit(1).maybeSingle();
+    if (row != null) return ProductModel.fromMap(fromRow(row));
     return _cj.productDetail(productId);
   }
 
@@ -116,22 +107,36 @@ class FirebaseProductRepository extends GetxService
         storeId: storeId,
         isListed: isListed,
         sellPrice: sellPrice);
-    // Store-scoped now, so the old `${sellerId}_${catalogProduct.id}`
-    // cross-seller collision-avoidance key is no longer needed.
-    await _fs.storeProducts(storeId).doc(catalogProduct.id).set(listed.toMap());
+    // Keyed (store_id, id), so re-listing the same catalog product in the
+    // same store overwrites it, as the Firestore doc id did.
+    await _db.products.upsert(toRow(listed.toMap()), onConflict: 'store_id,id');
   }
 
   @override
   Future<void> updateListing(ProductModel product) async {
     final storeId = product.storeId;
     if (storeId == null) {
-      throw StateError('Cannot update a listing with no storeId: ${product.id}');
+      throw StateError(
+          'Cannot update a listing with no storeId: ${product.id}');
     }
-    await _fs.storeProducts(storeId).doc(product.id).update(product.toMap());
+    await _db.products
+        .update(toRow(product.toMap(), omit: const {'id', 'storeId'}))
+        .eq('store_id', storeId)
+        .eq('id', product.id);
   }
 
   @override
   Future<void> unlistProduct(String storeId, String productId) async {
-    await _fs.storeProducts(storeId).doc(productId).update({'isListed': false});
+    await _db.products
+        .update({'is_listed': false})
+        .eq('store_id', storeId)
+        .eq('id', productId);
   }
+
+  List<ProductModel> _models(List<Map<String, dynamic>> rows) =>
+      rows.map((r) => ProductModel.fromMap(fromRow(r))).toList();
+
+  /// `%` and `_` in a buyer's search are literal text, not wildcards.
+  static String _escapeLike(String input) =>
+      input.replaceAllMapped(RegExp(r'[\\%_]'), (m) => '\\${m[0]}');
 }

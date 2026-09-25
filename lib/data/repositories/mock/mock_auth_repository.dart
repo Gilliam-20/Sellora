@@ -4,10 +4,10 @@ import '../../models/user_model.dart';
 import '../auth_repository.dart';
 import '../store_repository.dart';
 
-/// In-memory stand-in for [FirebaseAuthRepository] used when
+/// In-memory stand-in for [SupabaseAuthRepository] used when
 /// [AppConstants.useMockData] is true. Accepts any email/password and
 /// keeps a single fake user in memory for the session — good enough to
-/// demo every screen in the app without a Firebase project.
+/// demo every screen in the app without a backend.
 class MockAuthRepository extends GetxService implements AuthRepository {
   MockAuthRepository({StoreRepository? storeRepository})
       : _storeRepository = storeRepository ?? Get.find<StoreRepository>();
@@ -25,7 +25,7 @@ class MockAuthRepository extends GetxService implements AuthRepository {
   // `.first` would hang for its full timeout instead of resolving
   // immediately to "no session" — a several-second stall on every
   // launch of the very demo mode the README promises is instant.
-  // Yielding the current value first mirrors how FirebaseAuthRepository
+  // Yielding the current value first mirrors how SupabaseAuthRepository
   // behaves against a real authStateChanges stream.
   Stream<UserModel?> get userChanges async* {
     yield _current;
@@ -125,7 +125,8 @@ class MockAuthRepository extends GetxService implements AuthRepository {
       currencyCode: 'KES',
       createdAt: DateTime.now(),
     );
-    // Mirrors FirebaseAuthRepository's store-creation-on-signup. The seeded
+    // Mirrors the real sign-up's store creation (the handle_new_user
+    // trigger in supabase/migrations). The seeded
     // quick-login accounts already have stores from MockSeedData and never
     // go through this path.
     await createStoreForSeller(_storeRepository,

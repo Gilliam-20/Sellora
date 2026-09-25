@@ -6,6 +6,82 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-26 — Firebase → Supabase, phase 1: Auth + database
+
+**Status:** implemented this session, **not yet applied to the Supabase project**. `flutter analyze`:
+0 errors/warnings (the 2 pre-existing infos). `flutter test`: 50/51. The one failure is the same
+pre-existing `seller_shell_controller_test.dart` `NotificationCenter` failure. There are 5 new
+row-mapping tests. `cd supabase && npm test`: 51/51 schema/RLS checks plus 7/7 grant-admin tests.
+`functions/` `npm test`: 250/250.
+
+**Why:** user request: "switch firebase to supabase". Agreed scope: phase 1 is Auth + database. Phase
+2 ports `functions/` to Supabase Edge Functions (Deno), with `pg_cron` replacing the four scheduled
+functions. Hosting stays undecided. Supabase has no static hosting, so `firebase.json` keeps its
+`hosting` block until then.
+
+**Decisions:**
+- **Models are untouched.** Columns are snake_case. `toRow`/`fromRow` in
+  `lib/data/services/supabase_service.dart` translate top-level keys, and jsonb columns keep
+  camelCase inside. They also translate timestamps. `DateTime.toIso8601String()` on a local
+  DateTime has no offset, so Postgres would read it as UTC and shift it by the device's offset (3h
+  in Kenya). Offset-less strings are sent as UTC, and `+00:00` values come back as local ISO strings.
+- **The profile is created by a trigger, not the client.** `signUp()` passes the profile fields as
+  user metadata. `handle_new_user()` then creates the profile, plus a seller's store (same slugify
+  and `-N` rule as Dart) or a buyer's `store_customers` row, in the same transaction as
+  `auth.users`. It accepts only what a buyer or seller sign-up can legitimately produce. This
+  retires the old create-rule field policing and `_deleteAuthUserOnFailure`, and it works whether
+  or not "Confirm email" is on.
+- **Admin:** `app_metadata.role = 'admin'` replaces the `admin` custom claim. Only the service role
+  can set it. `is_admin()` checks it, and the `profiles.role` column stays routing-only. The
+  `grant-admin.js` port lives in `supabase/scripts/`. It has no npm dependencies (it calls the REST
+  APIs with fetch) and needs `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+- **One `orders` table** replaces the flat `orders` collection plus `stores/*/orders`. RLS gives
+  the cross-tenant guarantee the subcollections were for. `store_slugs` became a unique constraint.
+- **Clients may write only a few order/notification columns.** A column-level `grant update` allows
+  `orders(status, updated_at)` and `notifications(read_at)` only. Guard triggers make profile
+  role/subscription/approval/terms/store and store id/slug/owner immutable to clients.
+  `profiles_guard_update`/`stores_guard_update` replace `touchesAny()`.
+
+**Changed:**
+- `pubspec.yaml`: `firebase_core`/`firebase_auth`/`cloud_firestore` → `supabase_flutter`.
+  `lib/firebase_options.dart`, `android/app/google-services.json`, and the Android
+  `com.google.gms.google-services` plugin are gone.
+- New: `supabase/migrations/20260926000000_initial_schema.sql`, `lib/core/config/supabase_config.dart`
+  (URL and publishable key; `--dart-define` overrides), and `SupabaseService`, which replaces
+  `FirestoreService`. `AuthService` now wraps Supabase Auth.
+- `Firebase*Repository` → `Supabase*Repository` (all seven). `SupabaseAuthRepository` maps Supabase
+  error codes onto the existing `AuthFailure` codes, so `AuthController` only gained
+  `email-not-confirmed`. `userChanges` ignores token-refresh/user-updated events. `updateUser` sends
+  only self-editable columns. Before, `UserModel.copyWith` dropped `storeId`, so it would have
+  nulled a buyer's store.
+- `DioClient` sends the Supabase access token.
+- Removed `firestore.rules`, `firestore.indexes.json`, and the `firestore`/`flutter` blocks in
+  `firebase.json`. Their rules are carried over in the migration, and each policy's comment names
+  the rule it replaces.
+- New `supabase/tests/rls.test.mjs` runs the migration in PGlite (Postgres in WASM) and checks the
+  trigger and every policy as anon/buyer/seller/admin. It found one real constraint: a notification
+  insert must not `.select()` the new rows. The sender can't read the counterparty's alert, so
+  RETURNING fails RLS. The repository has a comment on this.
+
+**Still open / blocked:**
+1. **Apply the migration** to the Supabase project (SQL editor, or `npx supabase link` + `db push`).
+   Fill in `SupabaseConfig`, then re-run `grant-admin.js` for the admin. The Firebase `sellora-20`
+   accounts are not migrated. Everything was pre-launch, so this assumes no real users exist.
+2. **Password reset has no landing screen.** Firebase served its own reset page. Supabase redirects
+   back to the app's Site URL with a recovery session, and the app has to show a set-new-password
+   form (on `AuthChangeEvent.passwordRecovery`) and call `updateUser(password:)`. Until that's built,
+   reset emails, and the admin's first-login link, lead nowhere useful. Set Site URL/redirect URLs in
+   the Supabase dashboard at the same time.
+3. **"Confirm email":** Firebase allowed immediate sign-in, and that matches Supabase with
+   confirmation **off**. If it's on, sign-up shows "check your inbox" instead of entering
+   onboarding. That works, but it's a UX change.
+4. **Phase 2:** the deployed Cloud Functions still verify Firebase ID tokens and read/write
+   Firestore. They reject Supabase tokens, which is harmless only while `useMockData` is true. The
+   server-only tables (CJ catalog → `catalog_products`, `rate_limits`, refund/fulfilment columns on
+   `orders`) arrive with that port.
+
+---
+
 ## 2026-09-25 — PHASE 2: onboarding store-setup step, no-store recovery, email verification
 
 **Status:** implemented this session. `flutter analyze`: 0 errors/warnings (3 pre-existing

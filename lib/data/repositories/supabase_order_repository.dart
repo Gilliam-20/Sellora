@@ -2,24 +2,24 @@ import 'package:get/get.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../models/order_model.dart';
-import '../services/firestore_service.dart';
+import '../services/supabase_service.dart';
 import 'order_repository.dart';
 
-class FirebaseOrderRepository extends GetxService implements OrderRepository {
-  final FirestoreService _fs = Get.find<FirestoreService>();
+class SupabaseOrderRepository extends GetxService implements OrderRepository {
+  final SupabaseService _db = Get.find<SupabaseService>();
   final DioClient _dio = Get.find<DioClient>();
 
   @override
   Future<OrderModel> placeOrder(OrderModel order) async {
-    // The order doc is never written directly from the client — the
-    // Cloud Function re-prices every item from CJ's own live price and the
-    // store's own listed price itself, so a tampered `order.total`/fee field
-    // here is simply ignored. See functions/lib/orders.js's createOrder and
-    // firestore.rules (`orders` create is `if false`).
+    // The order row is never written directly from the client — the
+    // backend re-prices every item from CJ's own live price and the store's
+    // own listed price itself, so a tampered `order.total`/fee field here is
+    // simply ignored. See functions/lib/orders.js's createOrder, and the
+    // `orders` table having no insert policy (supabase/migrations).
     //
     // `pid`/`vid` per item is correct — [OrderItem.cjProductId] and
     // [OrderItem.variantId] carry CJ's own ids all the way from the
-    // catalog/variant model. `shippingAddress` now sends the
+    // catalog/variant model. `shippingAddress` sends the
     // `{countryCode, line}` shape `createOrder` requires (see
     // [ShippingAddress]). `storeId` is required — the server re-derives
     // `sellerId`/the fee split from it. `paymentMethod` is sent for this
@@ -64,53 +64,61 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
 
   @override
   Future<List<OrderModel>> buyerOrders(String buyerId) async {
-    final snap = await _fs.orders
-        .where('buyerId', isEqualTo: buyerId)
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+    final rows = await _db.orders
+        .select()
+        .eq('buyer_id', buyerId)
+        .order('created_at', ascending: false);
+    return _models(rows);
   }
 
   @override
   Future<List<OrderModel>> buyerStoreOrders(
       String buyerId, String storeId) async {
-    final snap = await _fs.orders
-        .where('buyerId', isEqualTo: buyerId)
-        .where('storeId', isEqualTo: storeId)
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+    final rows = await _db.orders
+        .select()
+        .eq('buyer_id', buyerId)
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false);
+    return _models(rows);
   }
 
   @override
   Future<List<OrderModel>> storeOrders(String storeId) async {
-    final snap = await _fs
-        .storeOrders(storeId)
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+    final rows = await _db.orders
+        .select()
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false);
+    return _models(rows);
   }
 
   @override
   Future<List<OrderModel>> sellerOrders(String sellerId) async {
-    final snap = await _fs.orders
-        .where('sellerId', isEqualTo: sellerId)
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+    final rows = await _db.orders
+        .select()
+        .eq('seller_id', sellerId)
+        .order('created_at', ascending: false);
+    return _models(rows);
   }
 
   @override
   Future<List<OrderModel>> allOrders() async {
-    final snap = await _fs.orders
-        .orderBy('createdAt', descending: true)
-        .limit(200)
-        .get();
-    return snap.docs.map((d) => OrderModel.fromMap(d.data())).toList();
+    final rows = await _db.orders
+        .select()
+        .order('created_at', ascending: false)
+        .limit(200);
+    return _models(rows);
   }
 
+  /// `status`/`updated_at` are the only order columns a client may update
+  /// (column-level grant in supabase/migrations).
   @override
   Future<void> updateStatus(String orderId, OrderStatus status) async {
-    await _fs.orders.doc(orderId).update({'status': status.name});
+    await _db.orders.update({
+      'status': status.name,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', orderId);
   }
+
+  List<OrderModel> _models(List<Map<String, dynamic>> rows) =>
+      rows.map((r) => OrderModel.fromMap(fromRow(r))).toList();
 }

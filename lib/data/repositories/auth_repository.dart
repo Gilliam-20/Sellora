@@ -1,19 +1,24 @@
-import 'package:cloud_firestore/cloud_firestore.dart' show FirebaseException;
-import 'package:firebase_auth/firebase_auth.dart'
-    show FirebaseAuthException, User;
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show
+        AuthChangeEvent,
+        AuthException,
+        AuthRetryableFetchException,
+        PostgrestException,
+        User;
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
-import '../services/firestore_service.dart';
-import 'store_repository.dart';
+import '../services/supabase_service.dart';
 
 /// Provider-neutral auth failure, so controllers map error codes without
-/// importing firebase_auth. [code] is a Firebase Auth/Firestore error code
-/// (`invalid-credential`, `permission-denied`, ...) or one of Sellora's own:
-/// `profile-missing` (an Auth account with no `users` doc) and
-/// `admin-claim-missing` (a `role: admin` doc without the server-granted
-/// `admin` custom claim — see functions/scripts/grant-admin.js).
+/// importing supabase_flutter. [code] uses the names AuthController maps
+/// (they began as Firebase Auth's: `invalid-credential`,
+/// `permission-denied`, ...; SupabaseAuthRepository translates onto them),
+/// or one of Sellora's own: `profile-missing` (an Auth account with no
+/// `profiles` row), `admin-claim-missing` (a `role: admin` profile without
+/// the server-granted `app_metadata.role` — see
+/// supabase/scripts/grant-admin.js) and `email-not-confirmed`.
 class AuthFailure implements Exception {
   const AuthFailure(this.code);
   final String code;
@@ -22,8 +27,8 @@ class AuthFailure implements Exception {
   String toString() => 'AuthFailure($code)';
 }
 
-/// Firebase Auth treats emails case-insensitively but a stored `email`
-/// field doesn't, so every email is stored and sent in one canonical form.
+/// Supabase Auth treats emails case-insensitively but a stored `email`
+/// column doesn't, so every email is stored and sent in one canonical form.
 String normalizeEmail(String email) => email.trim().toLowerCase();
 
 abstract class AuthRepository {
@@ -32,8 +37,8 @@ abstract class AuthRepository {
 
   /// [storeId] is only meaningful for a store-scoped buyer sign-in (see
   /// AuthController.signInToStore) — MockAuthRepository uses it to attach a
-  /// store to a freshly-minted mock buyer; FirebaseAuthRepository ignores it,
-  /// since a real buyer's Firestore doc already carries their true storeId.
+  /// store to a freshly-minted mock buyer; SupabaseAuthRepository ignores
+  /// it, since a real buyer's profile already carries their true storeId.
   Future<UserModel> signIn(
       {required String email, required String password, String? storeId});
 
@@ -66,30 +71,31 @@ abstract class AuthRepository {
   Future<void> signOut();
   Future<void> updateUser(UserModel user);
 
-  /// Re-reads the signed-in user's Firestore doc, bypassing [cachedUser],
-  /// and updates the cache. Needed because subscription activation is now
-  /// written by the IntaSend webhook, which the client has no realtime
-  /// channel to — see `RoleMiddleware` and the seller onboarding/
-  /// subscription controllers' "refresh status" actions.
+  /// Re-reads the signed-in user's profile, bypassing [cachedUser], and
+  /// updates the cache. Needed because subscription activation is written
+  /// by the IntaSend webhook, which the client has no realtime channel to —
+  /// see `RoleMiddleware` and the seller onboarding/subscription
+  /// controllers' "refresh status" actions.
   Future<UserModel?> refreshCurrentUser();
 }
 
-/// Firebase-backed implementation. Composes [AuthService] (identity)
-/// with [FirestoreService] (the `users` document holding role, store
-/// name, subscription state, etc).
+/// Supabase-backed implementation. Composes [AuthService] (identity)
+/// with the `profiles` table (role, store name, subscription state, etc).
+///
+/// Sign-up hands the profile fields to Supabase Auth as user metadata; the
+/// `handle_new_user` trigger (supabase/migrations) creates the profile —
+/// and a seller's store, or a buyer's store membership — in the same
+/// transaction as the account. A failed profile write rolls the account
+/// back with it, so there's no half-created account to clean up.
 ///
 /// There is no admin sign-up path: the admin is one dedicated email,
-/// provisioned server-side by functions/scripts/grant-admin.js, which sets
-/// the `admin` custom claim and the `role: admin` profile together.
-/// firestore.rules refuses a self-created `role: admin` doc, and
-/// [_loadProfile] refuses an admin doc that lacks the claim.
-class FirebaseAuthRepository extends GetxService implements AuthRepository {
-  FirebaseAuthRepository({StoreRepository? storeRepository})
-      : _storeRepository = storeRepository ?? Get.find<StoreRepository>();
-
+/// provisioned server-side by supabase/scripts/grant-admin.js, which sets
+/// `app_metadata.role = 'admin'` (service-role only) and the `role: admin`
+/// profile together. The trigger refuses a self-assigned admin role, and
+/// [_loadProfile] refuses an admin profile whose session lacks the grant.
+class SupabaseAuthRepository extends GetxService implements AuthRepository {
   final AuthService _auth = Get.find<AuthService>();
-  final FirestoreService _fs = Get.find<FirestoreService>();
-  final StoreRepository _storeRepository;
+  final SupabaseService _db = Get.find<SupabaseService>();
 
   UserModel? _cached;
 
@@ -98,18 +104,27 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
 
   @override
   Stream<UserModel?> get userChanges async* {
-    await for (final fbUser in _auth.authStateChanges) {
-      if (fbUser == null) {
+    await for (final state in _auth.authStateChanges) {
+      // Token refreshes and profile edits also arrive here; only a change
+      // of *who* is signed in reloads the profile, which is what the
+      // controllers were built against.
+      if (state.event != AuthChangeEvent.initialSession &&
+          state.event != AuthChangeEvent.signedIn &&
+          state.event != AuthChangeEvent.signedOut) {
+        continue;
+      }
+      final user = state.session?.user;
+      if (user == null) {
         _cached = null;
         yield null;
         continue;
       }
       try {
-        _cached = await _loadProfile(fbUser);
+        _cached = await _loadProfile(user);
       } catch (e) {
         // A resumed session that no longer resolves to a usable profile
-        // (e.g. an admin whose claim was revoked) is treated as signed out.
-        debugPrint('FirebaseAuthRepository.userChanges: $e');
+        // (e.g. an admin whose grant was revoked) is treated as signed out.
+        debugPrint('SupabaseAuthRepository.userChanges: $e');
         await _auth.signOut();
         _cached = null;
       }
@@ -121,13 +136,13 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
   Future<UserModel> signIn(
       {required String email, required String password, String? storeId}) {
     return _guard(() async {
-      final cred =
+      final res =
           await _auth.signIn(email: normalizeEmail(email), password: password);
       final UserModel? user;
       try {
-        // Force a token refresh so a claim granted or revoked since this
-        // device last signed in takes effect now, not up to an hour later.
-        user = await _loadProfile(cred.user!, forceTokenRefresh: true);
+        // Refresh so an admin grant or revocation made since this device
+        // last signed in takes effect now, not at the next token refresh.
+        user = await _loadProfile(res.user!, forceTokenRefresh: true);
       } catch (_) {
         await _auth.signOut();
         rethrow;
@@ -148,29 +163,10 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
     required String password,
     required String storeId,
   }) {
-    return _guard(() async {
-      final canonicalEmail = normalizeEmail(email);
-      final cred =
-          await _auth.signUp(email: canonicalEmail, password: password);
-      final user = await _deleteAuthUserOnFailure(cred.user!, () async {
-        final user = UserModel(
-          uid: cred.user!.uid,
-          name: name.trim(),
-          email: canonicalEmail,
-          role: UserRole.buyer,
-          storeId: storeId,
-          createdAt: DateTime.now(),
-        );
-        // Global identity doc (role bootstrap, same as every other role) plus
-        // a mirror under the store's own tenant tree, so Firestore rules can
-        // authorize store-scoped reads without ever touching `users`.
-        await _fs.users.doc(user.uid).set(user.toMap());
-        await _fs.storeCustomers(storeId).doc(user.uid).set(user.toMap());
-        return user;
-      });
-      await _sendVerification(cred.user!);
-      _cached = user;
-      return user;
+    return _signUp(email, password, {
+      'role': UserRole.buyer.name,
+      'name': name.trim(),
+      'store_id': storeId,
     });
   }
 
@@ -186,52 +182,51 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
     if (!hasAcceptedTerms) {
       throw ArgumentError('Seller terms must be accepted before registration.');
     }
+    return _signUp(email, password, {
+      'role': UserRole.seller.name,
+      'name': name.trim(),
+      'phone': phone.trim(),
+      'store_name': storeName.trim(),
+      'seller_terms_version': sellerTermsVersion,
+    });
+  }
+
+  Future<UserModel> _signUp(
+      String email, String password, Map<String, dynamic> metadata) {
     return _guard(() async {
-      final canonicalEmail = normalizeEmail(email);
-      final cred =
-          await _auth.signUp(email: canonicalEmail, password: password);
-      final user = await _deleteAuthUserOnFailure(cred.user!, () async {
-        final user = UserModel(
-          uid: cred.user!.uid,
-          name: name.trim(),
-          email: canonicalEmail,
-          phone: phone.trim(),
-          role: UserRole.seller,
-          storeName: storeName.trim(),
-          sellerStatus: SellerStatus.pendingApproval,
-          sellerTermsAcceptedAt: DateTime.now(),
-          sellerTermsVersion: sellerTermsVersion,
-          createdAt: DateTime.now(),
-        );
-        await _fs.users.doc(user.uid).set(user.toMap());
-        await createStoreForSeller(_storeRepository,
-            sellerId: user.uid, storeName: user.storeName!);
-        return user;
-      });
-      await _sendVerification(cred.user!);
+      final res = await _auth.signUp(
+          email: normalizeEmail(email), password: password, metadata: metadata);
+      // With "Confirm email" enabled on the Supabase project there's no
+      // session until the link is clicked, so the profile can't be read
+      // yet. The account and profile do exist; the user signs in once
+      // they've confirmed.
+      if (res.session == null) throw const AuthFailure('email-not-confirmed');
+      final user = await _loadProfile(res.user!);
+      if (user == null) throw const AuthFailure('profile-missing');
       _cached = user;
       return user;
     });
   }
 
-  /// Reads the `users` doc and reconciles it with the ID token's claims.
-  /// Admin access is decided by the `admin` custom claim, which only the
-  /// Admin SDK can set — never by the Firestore `role` field alone, which
-  /// firestore.rules' isAdmin() doesn't trust either. Returns null only
-  /// when the profile doc doesn't exist (yet: a sign-up in progress fires
-  /// authStateChanges before its doc is written).
-  Future<UserModel?> _loadProfile(User fbUser,
+  /// Reads the `profiles` row and reconciles it with the session's
+  /// `app_metadata`. Admin access is decided by `app_metadata.role`, which
+  /// only the service role can set — never by the profile's `role` column
+  /// alone, which RLS's is_admin() doesn't trust either. Returns null when
+  /// the account has no profile (one created outside the app's sign-up).
+  Future<UserModel?> _loadProfile(User user,
       {bool forceTokenRefresh = false}) async {
-    final doc = await _fs.users.doc(fbUser.uid).get();
-    if (!doc.exists) return null;
-    final user = UserModel.fromMap(doc.data()!);
-    if (user.role == UserRole.admin) {
-      final token = await fbUser.getIdTokenResult(forceTokenRefresh);
-      if (token.claims?['admin'] != true) {
+    final row = await _db.profiles.select().eq('uid', user.id).maybeSingle();
+    if (row == null) return null;
+    final profile = UserModel.fromMap(fromRow(row));
+    if (profile.role == UserRole.admin) {
+      final current = forceTokenRefresh
+          ? (await _auth.refreshSession()).user ?? user
+          : user;
+      if (current.appMetadata['role'] != 'admin') {
         throw const AuthFailure('admin-claim-missing');
       }
     }
-    return user;
+    return profile;
   }
 
   /// Translates provider exceptions into [AuthFailure] so the controller
@@ -239,56 +234,63 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
   Future<T> _guard<T>(Future<T> Function() body) async {
     try {
       return await body();
-    } on FirebaseAuthException catch (e) {
-      throw AuthFailure(e.code);
-    } on FirebaseException catch (e) {
-      throw AuthFailure(e.code);
+    } on AuthRetryableFetchException {
+      throw const AuthFailure('network-request-failed');
+    } on AuthException catch (e) {
+      throw AuthFailure(_authCode(e));
+    } on PostgrestException catch (e) {
+      // 42501 is insufficient_privilege: an RLS or guard-trigger refusal.
+      throw AuthFailure(
+          e.code == '42501' ? 'permission-denied' : e.code ?? 'unknown');
     }
   }
 
-  /// Best effort — a failed verification email must never fail sign-up.
-  Future<void> _sendVerification(User fbUser) async {
-    try {
-      await fbUser.sendEmailVerification();
-    } catch (e) {
-      debugPrint('FirebaseAuthRepository: verification email failed: $e');
-    }
-  }
-
-  /// The Auth account is created before its Firestore profile, so a failed
-  /// profile write would otherwise strand an email that can neither sign in
-  /// (no profile) nor re-register (email-already-in-use).
-  Future<UserModel> _deleteAuthUserOnFailure(
-      User fbUser, Future<UserModel> Function() writeProfile) async {
-    try {
-      return await writeProfile();
-    } catch (_) {
-      try {
-        await fbUser.delete();
-      } catch (_) {
-        await _auth.signOut();
-      }
-      rethrow;
+  static String _authCode(AuthException e) {
+    switch (e.code) {
+      case 'invalid_credentials':
+        return 'invalid-credential';
+      case 'user_not_found':
+        return 'user-not-found';
+      case 'email_exists':
+      case 'user_already_exists':
+        return 'email-already-in-use';
+      case 'weak_password':
+        return 'weak-password';
+      case 'email_address_invalid':
+        return 'invalid-email';
+      case 'user_banned':
+        return 'user-disabled';
+      case 'over_request_rate_limit':
+      case 'over_email_send_rate_limit':
+        return 'too-many-requests';
+      case 'email_provider_disabled':
+      case 'signup_disabled':
+        return 'operation-not-allowed';
+      case 'email_not_confirmed':
+        return 'email-not-confirmed';
+      default:
+        return e.code ?? 'unknown';
     }
   }
 
   @override
   Future<bool> checkEmailVerified() async {
-    final fbUser = _auth.currentUser;
-    if (fbUser == null) return false;
+    final signedIn = _auth.currentUser;
+    if (signedIn == null) return false;
+    var user = signedIn;
     try {
-      await fbUser.reload();
+      user = (await _auth.reloadUser()).user ?? user;
     } catch (e) {
       // Offline: fall back to the last known state rather than failing.
-      debugPrint('FirebaseAuthRepository.checkEmailVerified: $e');
+      debugPrint('SupabaseAuthRepository.checkEmailVerified: $e');
     }
-    return _auth.currentUser?.emailVerified ?? false;
+    return user.emailConfirmedAt != null;
   }
 
   @override
   Future<void> resendVerificationEmail() => _guard(() async {
-        final fbUser = _auth.currentUser;
-        if (fbUser != null) await fbUser.sendEmailVerification();
+        final email = _auth.currentUser?.email;
+        if (email != null) await _auth.resendVerification(email);
       });
 
   @override
@@ -301,17 +303,33 @@ class FirebaseAuthRepository extends GetxService implements AuthRepository {
     await _auth.signOut();
   }
 
+  /// Sends only the self-editable columns. The rest are server-owned (the
+  /// profiles_guard_update trigger refuses changes to them), and
+  /// [UserModel.copyWith] doesn't carry `storeId`, so sending the whole
+  /// map would try to null a buyer's store.
   @override
   Future<void> updateUser(UserModel user) async {
-    await _fs.users.doc(user.uid).update(user.toMap());
+    final map = user.toMap();
+    await _guard(() => _db.profiles
+        .update(toRow({
+          for (final key in const [
+            'name',
+            'phone',
+            'photoUrl',
+            'storeName',
+            'currencyCode',
+          ])
+            key: map[key],
+        }))
+        .eq('uid', user.uid));
     _cached = user;
   }
 
   @override
   Future<UserModel?> refreshCurrentUser() async {
-    final fbUser = _auth.currentUser;
-    if (_cached == null || fbUser == null) return null;
-    _cached = await _guard(() => _loadProfile(fbUser, forceTokenRefresh: true));
+    final user = _auth.currentUser;
+    if (_cached == null || user == null) return null;
+    _cached = await _guard(() => _loadProfile(user, forceTokenRefresh: true));
     return _cached;
   }
 }

@@ -4,21 +4,19 @@ import '../../core/network/dio_client.dart';
 import '../models/billing_history_entry_model.dart';
 import '../models/subscription_plan_model.dart';
 import '../models/subscription_usage_model.dart';
-import '../services/firestore_service.dart';
+import '../services/supabase_service.dart';
 import 'product_repository.dart';
 import 'subscription_repository.dart';
 
-class FirebaseSubscriptionRepository extends GetxService
+class SupabaseSubscriptionRepository extends GetxService
     implements SubscriptionRepository {
-  final FirestoreService _fs = Get.find<FirestoreService>();
+  final SupabaseService _db = Get.find<SupabaseService>();
   final DioClient _dio = Get.find<DioClient>();
 
   @override
   Future<List<SubscriptionPlanModel>> fetchPlans() async {
-    final snap = await _fs.plans.get();
-    return snap.docs
-        .map((d) => SubscriptionPlanModel.fromMap(d.data()))
-        .toList();
+    final rows = await _db.plans.select();
+    return rows.map((r) => SubscriptionPlanModel.fromMap(fromRow(r))).toList();
   }
 
   @override
@@ -35,13 +33,16 @@ class FirebaseSubscriptionRepository extends GetxService
 
   @override
   Future<void> updatePlan(SubscriptionPlanModel plan) async {
-    await _fs.plans.doc(plan.id).set(plan.toMap());
+    await _db.plans.upsert(toRow(plan.toMap()));
   }
 
   @override
   Future<SubscriptionUsageModel> fetchUsage(String sellerId) async {
-    final userDoc = await _fs.users.doc(sellerId).get();
-    final planId = userDoc.data()?['subscriptionPlanId'] as String?;
+    final profile = await _db.profiles
+        .select('subscription_plan_id')
+        .eq('uid', sellerId)
+        .maybeSingle();
+    final planId = profile?['subscription_plan_id'] as String?;
     final plans = await fetchPlans();
     SubscriptionPlanModel? plan;
     for (final p in plans) {
@@ -50,7 +51,8 @@ class FirebaseSubscriptionRepository extends GetxService
         break;
       }
     }
-    final listings = await Get.find<ProductRepository>().sellerListings(sellerId);
+    final listings =
+        await Get.find<ProductRepository>().sellerListings(sellerId);
     return SubscriptionUsageModel(
       listingCount: listings.length,
       listingLimit: plan?.listingLimit ?? -1,

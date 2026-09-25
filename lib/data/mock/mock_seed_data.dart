@@ -3,8 +3,8 @@ import '../models/store_model.dart';
 import '../models/subscription_plan_model.dart';
 
 /// Sample catalog + plans used when [AppConstants.useMockData] is true.
-/// Swap this out for real CJ Dropshipping / Firestore data by flipping
-/// that flag and wiring FirebaseProductRepository / CjDropshippingService.
+/// Swap this out for real CJ Dropshipping / Supabase data by flipping
+/// that flag and wiring SupabaseProductRepository / CjDropshippingService.
 class MockSeedData {
   MockSeedData._();
 

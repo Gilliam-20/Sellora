@@ -1,6 +1,6 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-25 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-26 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
@@ -18,8 +18,49 @@
 | **11 — i18n** | First slice shipped 2026-09-25: `lib/core/i18n/` adds a KES/USD/GBP/EUR currency registry, an integer-minor-unit `Money` type, a country/shipping-zone/payment-method registry mirroring `functions/lib/regions.js` (sync-tested), and `flutter_localizations` wiring. `CurrencyService` converts all four currencies from the server's cached `config/fx` rates; sellers pick shipping zones in Customize store; checkout offers only in-zone countries, converts CJ freight into the cart currency, and offers card (IntaSend hosted page) alongside Kenya-only M-Pesa. Not done: server-side zone enforcement, non-KES settlement, minor-unit persisted models, ARB string extraction/second language |
 | **12 — Security + production** | 2026-09-11 pull-forward (role self-escalation via *update*, `listings` ownership, server-only flat `orders`, `defineSecret`) plus a full audit pass 2026-09-25 that found and closed: admin self-escalation via user-doc *create*, client-creatable store orders, sellers able to set `paymentStatus`/totals on orders, store slug hijacking (now reserved in `store_slugs`), no per-user rate limits (now Firestore-backed, 429), raw upstream error messages returned to clients, unvalidated freight/phone/redirect inputs (open redirect), and revoked tokens still accepted. Admin custom claim now honoured by rules. 15 new rules tests, 17 new function tests. Still open: admins still authorized via the `role` field fallback, App Check not enforced, no Crashlytics/monitoring, backups, runbooks, `functions/node_modules` tracked in git |
 
-`useMockData` is still `true` — nothing points at real Firebase/CJ/IntaSend yet. CJ and IntaSend
-secrets are being wired up via `firebase functions:secrets:set` next.
+| **Firebase → Supabase** | Phase 1 (Auth + database) done in code 2026-09-26: `supabase_flutter`, `supabase/migrations` (schema and RLS replacing `firestore.rules`), `Supabase*Repository`, `supabase/scripts/grant-admin.js`, and 51 RLS checks passing in PGlite. **Not yet applied to the real project.** Phase 2 (Cloud Functions → Edge Functions) not started. See the checklist below and WORKLOG.md 2026-09-26 |
+
+`useMockData` is still `true` — nothing points at real Supabase/CJ/IntaSend yet. CJ and IntaSend
+secrets move to Supabase Edge Function secrets with phase 2 of the Supabase migration.
+
+### Supabase migration — to do
+
+**Owner (needs your Supabase dashboard / machine):**
+- [x] Put the project URL and **publishable** key (Settings → API) in
+      `lib/core/config/supabase_config.dart`, or pass `--dart-define=SUPABASE_URL=...
+      --dart-define=SUPABASE_PUBLISHABLE_KEY=...`. Never the service-role / secret key.
+- [ ] Apply the schema: paste `supabase/migrations/20260926000000_initial_schema.sql` into the SQL
+      editor, **or** `cd supabase && npx supabase link --project-ref <ref> && npx supabase db push`.
+- [x] Authentication → Providers: make sure **Email** is enabled (confirmed 2026-09-26).
+- [ ] Authentication → Sign In / Providers → Email: decide on **"Confirm email"**. **Off** matches the
+      old Firebase behaviour, where users signed in right after sign-up. **On** means sign-up shows
+      "check your inbox" first.
+- [ ] Authentication → URL Configuration: set the **Site URL** (the web app's URL) and add redirect
+      URLs, which password-reset and confirmation links need.
+- [ ] Re-create the admin:
+      `cd supabase && SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/grant-admin.js <admin email>`
+      (run on a trusted machine; the service-role key bypasses RLS).
+- [ ] Smoke-test in the running app: seller sign-up (store gets created) → onboarding, buyer sign-up
+      at `/s/<slug>`, sign-out/sign-in, admin sign-in.
+- [ ] Seed `subscription_plans`; the table starts empty, so onboarding's plan step will have
+      nothing to show.
+- [ ] Once happy: retire the old `sellora-20` Firebase Auth/Firestore data. Firebase stays only for
+      Cloud Functions + Hosting until phase 2.
+
+**Code (can be done here):**
+- [ ] **Password-reset landing screen.** Supabase redirects back to the app with a recovery session
+      rather than hosting a reset page. The app needs a set-new-password form on
+      `AuthChangeEvent.passwordRecovery` that calls `updateUser(UserAttributes(password: ...))`. This
+      blocks password reset and the admin's first-login link.
+- [ ] **Phase 2: port `functions/` to Supabase Edge Functions** (Deno/TS). That covers `verifyAuth` →
+      Supabase JWT, Firestore Admin SDK → supabase-js with the service role, `onSchedule` jobs →
+      `pg_cron`, and `defineSecret` → `supabase secrets set`. Add the server-only tables with it:
+      `catalog_products`/categories, `rate_limits`, and the refund/fulfilment columns on `orders`.
+      Until then every `ApiEndpoints` call is rejected (harmless while `useMockData` is true).
+- [ ] Decide hosting for `build/web` (Supabase has none): keep Firebase Hosting, or move to
+      Vercel/Netlify/Cloudflare Pages. Then update the Site URL above.
+- [ ] Seller photo uploads → Supabase Storage (replacing the inline `data:` URIs in
+      `image_data_url.dart`).
 
 ---
 

@@ -1,0 +1,14 @@
+{
+  "name": "sellora-supabase",
+  "private": true,
+  "description": "Schema tests and admin scripts for Sellora's Supabase project.",
+  "scripts": {
+    "test": "node tests/rls.test.mjs && node --test scripts/"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

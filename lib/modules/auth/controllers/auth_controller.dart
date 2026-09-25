@@ -16,7 +16,7 @@ class AuthController extends GetxController {
   final isLoading = false.obs;
   final errorMessage = RxnString();
 
-  /// Called once from the splash screen. Waits briefly for Firebase to
+  /// Called once from the splash screen. Waits briefly for Supabase to
   /// report whether a session already exists, then routes accordingly.
   Future<void> checkSession() async {
     try {
@@ -209,9 +209,8 @@ class AuthController extends GetxController {
     }
     final code = e is AuthFailure ? e.code : null;
     switch (code) {
-      // `invalid-credential` is what Firebase returns for both a wrong
-      // password and an unknown email once email-enumeration protection
-      // is on (the default for new projects) — keep all three identical so
+      // `invalid-credential` is what the auth provider reports for both a
+      // wrong password and an unknown email — keep all three identical so
       // the message never reveals whether an email is registered.
       case 'invalid-credential':
       case 'user-not-found':
@@ -233,6 +232,9 @@ class AuthController extends GetxController {
         return 'Choose a stronger password (at least 8 characters, with letters and numbers).';
       case 'operation-not-allowed':
         return 'Email sign-in isn\'t available right now. Please try again later.';
+      // Only when "Confirm email" is enabled on the Supabase project.
+      case 'email-not-confirmed':
+        return 'Check your inbox for a confirmation link, then sign in.';
       case 'profile-missing':
         return 'This account didn\'t finish setting up. Please register again or contact support.';
       case 'admin-claim-missing':

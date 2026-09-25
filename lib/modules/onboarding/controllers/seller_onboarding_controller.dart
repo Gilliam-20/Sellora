@@ -240,7 +240,7 @@ class SellerOnboardingController extends GetxController {
     }
   }
 
-  /// Re-reads the signed-in user's Firestore doc (bypassing the in-memory
+  /// Re-reads the signed-in user's profile (bypassing the in-memory
   /// cache) and moves on if the webhook has activated the subscription by
   /// now. There's no realtime channel to that confirmation, so this is a
   /// manual "I've paid" recovery action, not polling.

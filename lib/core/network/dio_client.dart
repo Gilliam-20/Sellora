@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:get/get.dart';
 import 'api_exception.dart';
 
@@ -7,9 +7,13 @@ import 'api_exception.dart';
 /// injected wherever a service needs to reach the Cloud Functions
 /// backend (CJ Dropshipping proxy, IntaSend proxy).
 ///
-/// Every request automatically attaches the signed-in user's Firebase
-/// ID token, so Cloud Functions can verify the caller before touching
-/// CJ Dropshipping or IntaSend on their behalf.
+/// Every request automatically attaches the signed-in user's Supabase
+/// access token (a JWT), so the backend can verify the caller before
+/// touching CJ Dropshipping or IntaSend on their behalf. NOTE: until
+/// Phase 2 ports functions/ to Edge Functions, the deployed Cloud
+/// Functions still verify *Firebase* ID tokens and will reject these —
+/// harmless while AppConstants.useMockData is true, since nothing calls
+/// them. See WORKLOG.md, 2026-09-26.
 class DioClient extends GetxService {
   late final Dio dio;
 
@@ -25,9 +29,11 @@ class DioClient extends GetxService {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final user = FirebaseAuth.instance.currentUser;
-          if (user != null) {
-            final token = await user.getIdToken();
+          // supabase_flutter refreshes the session itself, so the current
+          // access token is already fresh.
+          final token =
+              Supabase.instance.client.auth.currentSession?.accessToken;
+          if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
           handler.next(options);

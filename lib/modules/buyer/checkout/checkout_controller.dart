@@ -192,7 +192,7 @@ class CheckoutController extends GetxController {
       // Real mode: create the order server-side — re-priced from
       // listings, ignoring whatever total this draft carries — *before*
       // contacting IntaSend, so the server-assigned order id can be the
-      // payment's orderId. See FirebaseOrderRepository.placeOrder and
+      // payment's orderId. See SupabaseOrderRepository.placeOrder and
       // functions/index.js's intasendWebhook, which is what actually
       // confirms payment and starts CJ fulfillment; this controller does
       // neither itself anymore.

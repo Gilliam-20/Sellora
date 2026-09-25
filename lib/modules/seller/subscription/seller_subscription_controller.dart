@@ -72,7 +72,7 @@ class SellerSubscriptionController extends GetxController {
     }
   }
 
-  /// Re-reads the signed-in user's Firestore doc (bypassing the in-memory
+  /// Re-reads the signed-in user's profile (bypassing the in-memory
   /// cache) in case the webhook has activated a plan switch since this
   /// screen was opened, then reloads usage against whatever plan is
   /// current now.

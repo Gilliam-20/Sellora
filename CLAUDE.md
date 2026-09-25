@@ -40,11 +40,25 @@ As of 2026-09-12 `functions/` is plain JavaScript (no TypeScript, no `tsconfig.j
 `WORKLOG.md`'s 2026-09-12 entry for why. `npm run build` stays as a no-op purely because
 `firebase.json`'s `predeploy` hook still calls it.
 
-### Firebase
+### Supabase (Auth + Postgres, since 2026-09-26)
 
 ```bash
-flutterfire configure                                    # generates lib/firebase_options.dart
-firebase deploy --only firestore:rules,firestore:indexes
+cd supabase
+npm install
+npm test          # migrations + RLS checks in PGlite (no Docker), then grant-admin tests
+npx supabase link --project-ref <ref>   # once
+npx supabase db push                    # apply supabase/migrations to the linked project
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/grant-admin.js admin@example.com
+```
+
+The app reads its project URL and publishable key from `lib/core/config/supabase_config.dart`
+(`--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...` overrides). Any schema
+or policy change goes in a **new** migration file, with a matching check in
+`supabase/tests/rls.test.mjs`.
+
+### Firebase (what remains: Cloud Functions + hosting, until phase 2)
+
+```bash
 firebase deploy --only hosting
 ```
 
@@ -58,24 +72,31 @@ notifications, subscriptions, admin and FX rates. When `true` those run on in-me
 Dropshipping key or IntaSend account required.
 
 **`AuthRepository` and `StoreRepository` are the one exception** (as of 2026-09-25, see `WORKLOG.md`):
-`InitialBinding` always binds `FirebaseAuthRepository`/`FirebaseStoreRepository`, regardless of
-`useMockData`, and `lib/main.dart` always calls `Firebase.initializeApp()`. `MockAuthRepository`/
+`InitialBinding` always binds `SupabaseAuthRepository`/`SupabaseStoreRepository`, regardless of
+`useMockData`, and `lib/main.dart` always calls `Supabase.initialize()`. `MockAuthRepository`/
 `MockStoreRepository` still exist and are exercised by `test/auth_repository_test.dart` and
 `test/admin_dashboard_controller_test.dart`, but nothing in the running app binds them anymore. This
-means running the app at all — even with `useMockData = true` — now requires a reachable Firebase
-project (`sellora-20`, per `lib/firebase_options.dart`/`android/app/google-services.json`) with
-Email/Password auth enabled and `firestore.rules` deployed; sign-in/sign-up will fail without it.
+means running the app at all — even with `useMockData = true` — requires a reachable Supabase project
+(`SupabaseConfig`) with `supabase/migrations` applied; sign-in/sign-up will fail without it.
 One direct consequence: the two demo storefronts `MockProductRepository`/`MockSeedData` seed
-(`aminas-picks`, `jengo-electronics`) are no longer reachable by browsing, since `StoreRepository` now
-reads real (likely empty) Firestore rather than that seed data — only a real signed-up seller's own
-store resolves.
+(`aminas-picks`, `jengo-electronics`) are no longer reachable by browsing, since `StoreRepository`
+reads the real (likely empty) `stores` table rather than that seed data — only a real signed-up
+seller's own store resolves.
 
-Everything else in `firestore.rules`, `functions/` (plain JS — see the Cloud Functions section above),
-and the remaining `Firebase*Repository` classes should still be treated as scaffolded-but-unexercised:
+**Firebase → Supabase is half done** (see `WORKLOG.md`, 2026-09-26). Phase 1 moved Auth and the
+database: `supabase/migrations/` holds the schema, and its RLS policies/guard triggers replace
+`firestore.rules`. Sign-up creates the profile (and a seller's store) in the `handle_new_user`
+trigger, not from the client. Phase 2 has not started: `functions/` is still Firebase Cloud Functions,
+still verifies Firebase ID tokens, and still reads/writes Firestore. The app now sends Supabase tokens,
+so every `ApiEndpoints` call fails until the port to Edge Functions lands. That's harmless only while
+`useMockData` is true.
+
+Everything else in `functions/` (plain JS — see the Cloud Functions section above) and the non-identity
+`Supabase*Repository` classes should still be treated as scaffolded-but-unexercised:
 **the app has never run its catalog/order/payment flows against a real backend**, only identity.
 
 The consequence for any change: **every repository is an abstract interface with two implementations**
-— a `Firebase*` one in `lib/data/repositories/` and a mock in `lib/data/repositories/mock/`. Adding a
+— a `Supabase*` one in `lib/data/repositories/` and a mock in `lib/data/repositories/mock/`. Adding a
 repository method means implementing it in both, or demo mode breaks. `CartRepository` is the single
 deliberate exception (in-memory either way, so one implementation).
 
@@ -88,16 +109,19 @@ Dependency lifetime is split across exactly two places:
 - Each route's own `Bindings` class `Get.lazyPut`s its controllers, so a controller is constructed
   when its page is pushed and disposed when popped.
 
-Models in `lib/data/models/` are plain Dart with `fromMap`/`toMap` — no Firestore types and no
-Flutter imports leak into them. `FirestoreService` exists so repositories never hold raw collection
-path strings.
+Models in `lib/data/models/` are plain Dart with camelCase `fromMap`/`toMap` — no backend types and
+no Flutter imports leak into them. `SupabaseService` (`lib/data/services/supabase_service.dart`)
+exists so repositories never hold raw table names. Its `toRow`/`fromRow` translate model maps to
+snake_case columns and fix up timestamp offsets. Always go through them rather than passing
+`toMap()` to the client directly.
 
 ### Secrets live in Cloud Functions, never in the app
 
 The Flutter app never calls CJ Dropshipping or IntaSend directly. It calls Sellora's own Cloud
 Functions (`ApiEndpoints` in `app_constants.dart`), which hold the real keys server-side.
-`DioClient` (`lib/core/network/dio_client.dart`) attaches the Firebase ID token to every request;
-`requireAuth` in `functions/src/auth.ts` verifies it and is the only thing between the open internet
+`DioClient` (`lib/core/network/dio_client.dart`) attaches the Supabase access token (JWT) to every
+request. The backend's auth check verifies it (today `verifyAuth` in `functions/index.js`, which
+still expects a Firebase ID token until phase 2) and is the only thing between the open internet
 and the CJ/IntaSend secret keys. Any new proxy function must call it first.
 
 `functions/src/` currently authenticates with **one platform-level credential per provider**
@@ -145,22 +169,21 @@ open:
 - The IntaSend webhook "challenge" scheme in `functions/src/intasend.ts` is implemented from their
   published docs, not verified against a real account — reconfirm the exact payload shape before going
   live.
-- Admin is claim-only as of 2026-09-25: one dedicated email, provisioned solely by
-  `functions/scripts/grant-admin.js` (no in-app admin sign-up). The `seller`/`buyer` distinction
-  in `firestore.rules` still reads `role` off the `users/{uid}` doc. Self-escalation is blocked there,
-  but it's still a Firestore field, not a claim.
+- Admin is `app_metadata.role` only: one dedicated email, provisioned solely by
+  `supabase/scripts/grant-admin.js` (no in-app admin sign-up). The `seller`/`buyer` distinction
+  in RLS still reads `profiles.role`. Self-escalation is blocked by the sign-up trigger and
+  `profiles_guard_update`, but it's still a table column, not a JWT claim.
 - The current checkout assumes one seller per cart — `createOrder` now rejects a mixed-seller cart
   outright rather than silently misattributing it, but doesn't split it either.
 - CJ Dropshipping's auth handshake and response shapes vary by account type; `functions/src/cj.ts`
   sketches the flow but field names need confirming against a real CJ developer account.
-- `FirebaseSubscriptionRepository.subscribeSeller` still writes `billing_history` directly from the
-  client — `firestore.rules` already blocks that write against real Firestore (`allow write: if
-  false`), so subscription billing needs the same server-side move `createOrder` just got for orders.
+- `billing_history`/`subscriptions` have no client write policy. Only the backend writes them, and
+  `SupabaseSubscriptionRepository.subscribeSeller` goes through `ApiEndpoints.subscribeSeller`.
 - `AppConstants.useMockData` is still `true` for catalog/orders/subscriptions/admin. Flipping it needs
   a real CJ Dropshipping account, a confirmed IntaSend production setup, and
   `firebase functions:secrets:set` run with real values — none of that is done here. Identity
   (`AuthRepository`/`StoreRepository`) is no longer gated by this flag at all — see the Architecture
   section above.
-- The real Firebase Auth/Firestore path (now always live, see above) has not been confirmed against
-  the actual `sellora-20` project — whether Email/Password sign-in is enabled there, and whether the
-  deployed `firestore.rules` matches what's in this repo, are both unverified.
+- The Supabase migration has been tested only in PGlite (`supabase/tests`), not yet applied to the real
+  project. Password reset has no set-new-password screen yet: Supabase redirects back to the app
+  rather than hosting one. See `WORKLOG.md`, 2026-09-26, "Still open".

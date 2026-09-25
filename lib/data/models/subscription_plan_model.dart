@@ -1,5 +1,5 @@
 /// A subscription tier a seller pays monthly for. Kept data-driven
-/// (fetched from Firestore, editable by admins in the Plans module)
+/// (fetched from Supabase, editable by admins in the Plans module)
 /// rather than hardcoded, so pricing can change without an app release.
 class SubscriptionPlanModel {
   SubscriptionPlanModel({

@@ -1,5 +1,5 @@
 /// A seller's storefront/tenant. Buyers register as a customer of one
-/// `StoreModel` (see `stores/{id}/customers/{uid}` in Firestore) rather
+/// `StoreModel` (see the `store_customers` table) rather
 /// than as a global Sellora account — `sellerId` ties the store back to
 /// the [UserModel] (role == seller) that owns and manages it.
 class StoreModel {

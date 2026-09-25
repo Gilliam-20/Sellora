@@ -17,10 +17,10 @@ dependencies:
   # directly to CJ Dropshipping or IntaSend (see /functions).
   dio: ^5.4.1
 
-  # Firebase
-  firebase_core: ^2.27.0
-  firebase_auth: ^4.17.4
-  cloud_firestore: ^4.15.5
+  # Backend — Supabase Auth + Postgres (schema and RLS in
+  # supabase/migrations). Replaced firebase_auth/cloud_firestore on
+  # 2026-09-26; see WORKLOG.md.
+  supabase_flutter: ^2.15.4
 
   # Local session / persistence
   get_storage: ^2.1.1
@@ -55,7 +55,7 @@ dev_dependencies:
   flutter_lints: ^3.0.2
 
 # Common next additions, not included to keep this scaffold lean:
-#   firebase_storage   — real hosted uploads for seller photos (product
+#   Supabase Storage   — real hosted uploads for seller photos (product
 #                        images, store logo/banner); today those are inlined
 #                        as data: URIs instead, see image_data_url.dart
 #   connectivity_plus  — offline-state handling

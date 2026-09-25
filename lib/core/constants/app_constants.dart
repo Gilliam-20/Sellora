@@ -59,7 +59,7 @@ class ApiEndpoints {
   /// `createOrder` (items keyed by CJ's own `pid`/`vid`, no seller/store/fee
   /// concept at all). The `vid` gap is closed — `ProductVariant` carries
   /// CJ's real per-SKU `vid`/`sku`/price (2026-09-15). The `shippingAddress`/
-  /// response-shape gap is closed too (2026-09-15) — `FirebaseOrderRepository
+  /// response-shape gap is closed too (2026-09-15) — `SupabaseOrderRepository
   /// .placeOrder` sends `{pid, vid, quantity}` per item and a real
   /// `{countryCode, line}` shippingAddress ([ShippingAddress]), and reads the
   /// actual `{id, totalAmount, currency, items, ...}` response shape. Still
@@ -72,7 +72,7 @@ class ApiEndpoints {
   /// Order-checkout payment (not billing) — functions/index.js's
   /// `payOrderMpesa`/`payOrderCard`/`confirmIntasendPayment`. Each acts on
   /// an already-created order (by id), not a client-supplied amount — see
-  /// IntasendService. NOTE: `FirebaseOrderRepository.placeOrder`'s own
+  /// IntasendService. NOTE: `SupabaseOrderRepository.placeOrder`'s own
   /// request/response shape is still unreconciled with `createOrder`
   /// (flagged above) — these three endpoints are correctly named/shaped now,
   /// but a real order id to call them with still doesn't exist end-to-end.

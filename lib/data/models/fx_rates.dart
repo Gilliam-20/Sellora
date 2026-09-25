@@ -45,9 +45,8 @@ class FxRates {
     return toRate / fromRate;
   }
 
-  /// [map] is the `config/fx` document with `fetchedAt` already converted
-  /// to a [DateTime] (or ISO string) by the repository — this model stays
-  /// free of Firestore types.
+  /// [map] is the `fx_rates` row with `fetchedAt` as a [DateTime] or ISO
+  /// string — this model stays free of backend types.
   factory FxRates.fromMap(Map<String, dynamic> map) {
     final raw = Map<String, dynamic>.from(map['rates'] as Map? ?? const {});
     final fetchedAt = map['fetchedAt'];
