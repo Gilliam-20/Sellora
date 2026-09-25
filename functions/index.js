@@ -13,7 +13,17 @@ const reviews = require("./lib/reviews");
 const catalogSync = require("./lib/catalogSync");
 const { refreshFxRates } = require("./lib/fx");
 const { ALERTS, logAlert, logError, logInfo, logWarning } = require("./lib/logging");
-const { clampPage, clampPageSize, sanitizeKeyword, sanitizeId } = require("./lib/params");
+const {
+  clampPage,
+  clampPageSize,
+  sanitizeKeyword,
+  sanitizeId,
+  validateFreightRequest,
+  isValidMpesaPhone,
+  isAllowedRedirectUrl,
+} = require("./lib/params");
+const { publicError } = require("./lib/errors");
+const { checkRateLimit } = require("./lib/rateLimit");
 
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
 
@@ -99,7 +109,10 @@ async function verifyAuth(req) {
   const match = header.match(/^Bearer (.+)$/);
   if (!match) return null;
   try {
-    return await admin.auth().verifyIdToken(match[1]);
+    // checkRevoked: without it, a token stays valid for up to an hour after
+    // the account is disabled or its sessions revoked - long enough for a
+    // suspended account to keep placing orders and starting payments.
+    return await admin.auth().verifyIdToken(match[1], true);
   } catch {
     return null;
   }
@@ -108,13 +121,61 @@ async function verifyAuth(req) {
 /**
  * Fails a request, recording which endpoint failed and for whose order - the
  * context that makes a payment failure debuggable from the logs alone.
+ *
+ * Only an `HttpError`'s message reaches the caller (see lib/errors.js);
+ * anything else - a CJ or IntaSend error body, a Firestore path - is logged
+ * in full here and answered with a generic 500.
  * @param {object} res Express response.
  * @param {Error} err The failure.
  * @param {object=} context `{ endpoint, uid, orderId }`.
  */
 function sendError(res, err, context = {}) {
-  logError("request_failed", context, err);
-  res.status(500).json({ success: false, message: err.message || "Internal error" });
+  const { status, message } = publicError(err);
+  if (status >= 500) {
+    logError("request_failed", context, err);
+  } else {
+    logWarning("request_rejected", { ...context, status, reason: message });
+  }
+  res.status(status).json({ success: false, message });
+}
+
+/**
+ * Counts this call against the caller's per-user budget (lib/rateLimit.js),
+ * writing a 429 with Retry-After and returning false once it's spent.
+ * @param {object} res Express response.
+ * @param {string} policy Key of rateLimit.POLICIES.
+ * @param {string} uid Caller's Firebase Auth uid.
+ * @return {Promise<boolean>} Whether the handler may continue.
+ */
+async function withinRateLimit(res, policy, uid) {
+  const { allowed, retryAfterMs } = await checkRateLimit(policy, uid);
+  if (allowed) return true;
+  logWarning("rate_limited", { policy, uid });
+  res.set("Retry-After", String(Math.max(1, Math.ceil(retryAfterMs / 1000))));
+  res.status(429).json({
+    success: false,
+    message: "Too many requests. Please wait a moment and try again.",
+  });
+  return false;
+}
+
+/**
+ * A payment provider's post-checkout redirect must point back at our own
+ * app (see params.isAllowedRedirectUrl). Omitted is fine - the mobile app
+ * sends none.
+ * @param {object} res Express response, used to write 400 on failure.
+ * @param {object} urls Named URLs from the request body.
+ * @return {boolean} Whether the handler may continue.
+ */
+function redirectsAllowed(res, urls) {
+  for (const [name, value] of Object.entries(urls)) {
+    if (value === undefined || value === null || value === "") continue;
+    if (!isAllowedRedirectUrl(value)) {
+      res.status(400).json({ success: false, message: `${name} is not an allowed URL` });
+      return false;
+    }
+  }
+  return true;
 }
 
 // Lightweight backend reachability probe used by the Flutter network manager.
@@ -144,8 +205,10 @@ async function requireAuth(req, res) {
  * @return {Promise<object|null>} The order, or null if a response was sent.
  */
 async function loadOwnedOrder(res, orderId, uid) {
-  if (!orderId) {
-    res.status(400).json({ success: false, message: "orderId is required" });
+  // sanitizeId also refuses anything containing "/", which would otherwise
+  // address a different document path than orders/{orderId}.
+  if (!sanitizeId(orderId)) {
+    res.status(400).json({ success: false, message: "A valid orderId is required" });
     return null;
   }
   const order = await orders.getOrder(orderId);
@@ -254,15 +317,13 @@ exports.calculateFreight = onRequest(checkoutOptions(CJ_SECRETS), async (req, re
   }
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "calculateFreight", user.uid)) return;
   try {
-    const { endCountryCode, startCountryCode, products } = req.body || {};
-    if (!endCountryCode || !Array.isArray(products) || products.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "endCountryCode and a non-empty products[] array are required",
-      });
+    const request = validateFreightRequest(req.body);
+    if (request.error) {
+      return res.status(400).json({ success: false, message: request.error });
     }
-    const data = await cjApi.calculateFreight({ startCountryCode, endCountryCode, products });
+    const data = await cjApi.calculateFreight(request.value);
     res.status(200).json({ success: true, data });
   } catch (err) {
     sendError(res, err, { endpoint: "calculateFreight", uid: user.uid });
@@ -284,6 +345,7 @@ exports.calculateFreight = onRequest(checkoutOptions(CJ_SECRETS), async (req, re
 exports.createOrder = onRequest(checkoutOptions(CJ_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "createOrder", user.uid)) return;
   try {
     const { items, shippingAddress, logisticName } = req.body || {};
     const order = await orders.createOrder({ uid: user.uid, items, shippingAddress, logisticName });
@@ -313,6 +375,7 @@ exports.createOrder = onRequest(checkoutOptions(CJ_SECRETS), async (req, res) =>
 exports.getOrderTracking = onRequest(checkoutOptions(CJ_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "orderTracking", user.uid)) return;
   try {
     const { orderId, force } = req.body || {};
     const order = await loadOwnedOrder(res, orderId, user.uid);
@@ -383,8 +446,8 @@ exports.refundOrder = onRequest(checkoutOptions(REFUND_SECRETS), async (req, res
   }
   try {
     const { orderId, amount, reason, comment } = req.body || {};
-    if (!orderId) {
-      return res.status(400).json({ success: false, message: "orderId is required" });
+    if (!sanitizeId(orderId)) {
+      return res.status(400).json({ success: false, message: "A valid orderId is required" });
     }
     const result = await refunds.refundOrder({
       orderId,
@@ -429,6 +492,7 @@ exports.refundOrder = onRequest(checkoutOptions(REFUND_SECRETS), async (req, res
 exports.submitProductReview = onRequest({ cors: true }, async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "review", user.uid)) return;
   try {
     const { productId, rating, comment } = req.body || {};
     const result = await reviews.submitReview({
@@ -452,6 +516,7 @@ exports.submitProductReview = onRequest({ cors: true }, async (req, res) => {
 exports.deleteProductReview = onRequest({ cors: true }, async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "review", user.uid)) return;
   try {
     const { productId } = req.body || {};
     await reviews.deleteReview({ uid: user.uid, productId });
@@ -474,8 +539,15 @@ exports.deleteProductReview = onRequest({ cors: true }, async (req, res) => {
 exports.payOrderMpesa = onRequest(checkoutOptions(INTASEND_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "mpesaPush", user.uid)) return;
   try {
     const { orderId, phoneNumber } = req.body || {};
+    if (!isValidMpesaPhone(phoneNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: "phoneNumber must be a Kenyan M-Pesa number in the form 2547XXXXXXXX",
+      });
+    }
     const order = await loadPayableOrder(res, orderId, user.uid, "MPESA");
     if (!order) return;
     // M-Pesa has hard per-transaction limits. Checking here turns what would
@@ -515,11 +587,13 @@ exports.payOrderMpesa = onRequest(checkoutOptions(INTASEND_SECRETS), async (req,
 exports.payOrderCard = onRequest(checkoutOptions(INTASEND_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "hostedCheckout", user.uid)) return;
   try {
     const { orderId, method, redirectUrl } = req.body || {};
     if (!["CARD-PAYMENT", "GOOGLE-PAY"].includes(method)) {
       return res.status(400).json({ success: false, message: "method must be CARD-PAYMENT or GOOGLE-PAY" });
     }
+    if (!redirectsAllowed(res, { redirectUrl })) return;
     const paymentMethod = method === "CARD-PAYMENT" ? "CARD" : "GOOGLE_PAY";
     const order = await loadPayableOrder(res, orderId, user.uid, paymentMethod);
     if (!order) return;
@@ -556,6 +630,7 @@ exports.payOrderCard = onRequest(checkoutOptions(INTASEND_SECRETS), async (req, 
 exports.confirmIntasendPayment = onRequest(checkoutOptions(INTASEND_FULFILL_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "confirmPayment", user.uid)) return;
   try {
     const { orderId } = req.body || {};
     const order = await loadOwnedOrder(res, orderId, user.uid);
@@ -732,8 +807,9 @@ exports.intasendWebhook = onRequest(checkoutOptions(INTASEND_FULFILL_SECRETS), a
       orderId: req.body?.api_ref || req.body?.invoice?.api_ref,
     }, err);
     // Still ack with 200 so IntaSend doesn't hammer retries for a bug on our
-    // side while we investigate; the order can be reconciled manually.
-    res.status(200).json({ success: false, message: err.message });
+    // side while we investigate; the order can be reconciled manually. This
+    // URL is public, so the body carries the generic message, not err's.
+    res.status(200).json({ success: false, message: publicError(err).message });
   }
 });
 
@@ -763,6 +839,7 @@ exports.intasendWebhook = onRequest(checkoutOptions(INTASEND_FULFILL_SECRETS), a
 exports.subscribeSeller = onRequest(checkoutOptions([]), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "subscribe", user.uid)) return;
   try {
     const { planId } = req.body || {};
     if (!planId || typeof planId !== "string") {
@@ -785,8 +862,8 @@ exports.subscribeSeller = onRequest(checkoutOptions([]), async (req, res) => {
  * @return {Promise<object|null>}
  */
 async function loadPayableBillingEntry(res, entryId, uid) {
-  if (!entryId) {
-    res.status(400).json({ success: false, message: "billingEntryId is required" });
+  if (!sanitizeId(entryId)) {
+    res.status(400).json({ success: false, message: "A valid billingEntryId is required" });
     return null;
   }
   const entry = await subscriptions.getBillingEntry(entryId);
@@ -809,8 +886,15 @@ async function loadPayableBillingEntry(res, entryId, uid) {
 exports.payBillingMpesa = onRequest(checkoutOptions(INTASEND_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "mpesaPush", user.uid)) return;
   try {
     const { billingEntryId, phoneNumber } = req.body || {};
+    if (!isValidMpesaPhone(phoneNumber)) {
+      return res.status(400).json({
+        success: false,
+        message: "phoneNumber must be a Kenyan M-Pesa number in the form 2547XXXXXXXX",
+      });
+    }
     const entry = await loadPayableBillingEntry(res, billingEntryId, user.uid);
     if (!entry) return;
     const amountError = intasend.mpesaAmountError(entry.amountKes);
@@ -847,11 +931,13 @@ exports.payBillingMpesa = onRequest(checkoutOptions(INTASEND_SECRETS), async (re
 exports.payBillingCard = onRequest(checkoutOptions(INTASEND_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "hostedCheckout", user.uid)) return;
   try {
     const { billingEntryId, method, redirectUrl } = req.body || {};
     if (!["CARD-PAYMENT", "GOOGLE-PAY"].includes(method)) {
       return res.status(400).json({ success: false, message: "method must be CARD-PAYMENT or GOOGLE-PAY" });
     }
+    if (!redirectsAllowed(res, { redirectUrl })) return;
     const entry = await loadPayableBillingEntry(res, billingEntryId, user.uid);
     if (!entry) return;
     const paymentMethod = method === "CARD-PAYMENT" ? "CARD" : "GOOGLE_PAY";
@@ -889,10 +975,11 @@ exports.payBillingCard = onRequest(checkoutOptions(INTASEND_SECRETS), async (req
 exports.confirmBillingPayment = onRequest(checkoutOptions(INTASEND_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "confirmPayment", user.uid)) return;
   try {
     const { billingEntryId } = req.body || {};
-    if (!billingEntryId) {
-      return res.status(400).json({ success: false, message: "billingEntryId is required" });
+    if (!sanitizeId(billingEntryId)) {
+      return res.status(400).json({ success: false, message: "A valid billingEntryId is required" });
     }
     const entry = await subscriptions.getBillingEntry(billingEntryId);
     if (!entry || entry.sellerId !== user.uid) {
@@ -959,8 +1046,10 @@ exports.confirmBillingPayment = onRequest(checkoutOptions(INTASEND_SECRETS), asy
 exports.createPaypalOrder = onRequest(checkoutOptions(PAYPAL_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "hostedCheckout", user.uid)) return;
   try {
     const { orderId, returnUrl, cancelUrl } = req.body || {};
+    if (!redirectsAllowed(res, { returnUrl, cancelUrl })) return;
     const order = await loadPayableOrder(res, orderId, user.uid, "PAYPAL");
     if (!order) return;
     // PayPal doesn't settle KES at all - a KES order reaching here would fail
@@ -1002,6 +1091,7 @@ exports.createPaypalOrder = onRequest(checkoutOptions(PAYPAL_SECRETS), async (re
 exports.capturePaypalOrder = onRequest(checkoutOptions(PAYPAL_FULFILL_SECRETS), async (req, res) => {
   const user = await requireAuth(req, res);
   if (!user) return;
+  if (!await withinRateLimit(res, "confirmPayment", user.uid)) return;
   try {
     const { orderId } = req.body || {};
     const order = await loadOwnedOrder(res, orderId, user.uid);
@@ -1108,7 +1198,7 @@ exports.paypalWebhook = onRequest(checkoutOptions(PAYPAL_WEBHOOK_SECRETS), async
       endpoint: "paypalWebhook",
       eventType: req.body?.event_type,
     }, err);
-    res.status(200).json({ success: false, message: err.message });
+    res.status(200).json({ success: false, message: publicError(err).message });
   }
 });
 

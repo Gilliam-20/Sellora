@@ -315,9 +315,15 @@ touching real money or tenant data, not because PHASE 12 is next in sequence:
 - Secrets: `functions.config()` → `defineSecret`/`runWith({ secrets })` for CJ and IntaSend credentials
   (real values still need `firebase functions:secrets:set` before deploy — not set here).
 
-Still open: Firebase custom claims (role still lives on a Firestore doc, just no longer
-self-writable); rate limiting; Crashlytics/monitoring; backups; deployment runbooks; the emulator rule
-suite for the two new rules above (add cases per `WORKLOG.md`'s verification section).
+2026-09-25 audit pass (see `WORKLOG.md`'s PHASE 12 entry for the full findings table): closed admin
+self-escalation via user-doc *create*, client-creatable store orders, seller/admin writes to order
+payment fields, store-slug hijacking (`store_slugs` reservations), missing per-user rate limits,
+upstream error messages leaking to clients, unvalidated freight/phone/redirect inputs, and revoked
+tokens being accepted. Rules now honour the `admin` custom claim. Emulator suite: 33 cases.
+
+Still open: drop the `role() == 'admin'` fallback once admins carry the claim; App Check enforcement
+(client doesn't send tokens yet); Crashlytics/monitoring; Firestore backups + a TTL policy on
+`rate_limits.expireAt`; deployment runbooks; untrack `functions/node_modules`.
 
 ## Decisions still required
 

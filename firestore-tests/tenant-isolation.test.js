@@ -81,10 +81,16 @@ test('products: the storefront stays publicly readable for guests', async () => 
 });
 
 test('orders: a store owner cannot read another store\'s orders', async () => {
+  // Seeded server-side: since PHASE 12 no client may create a store order
+  // (see production-hardening.test.js), only Cloud Functions.
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context
+      .firestore()
+      .doc(`stores/${STORE_A}/orders/o1`)
+      .set({ buyerId: BUYER_X, total: 1000 });
+  });
   const asBuyerX = testEnv.authenticatedContext(BUYER_X).firestore();
-  await assertSucceeds(
-    asBuyerX.doc(`stores/${STORE_A}/orders/o1`).set({ buyerId: BUYER_X, total: 1000 }),
-  );
+  await assertSucceeds(asBuyerX.doc(`stores/${STORE_A}/orders/o1`).get());
 
   const asSellerA = testEnv.authenticatedContext(SELLER_A).firestore();
   const asSellerB = testEnv.authenticatedContext(SELLER_B).firestore();

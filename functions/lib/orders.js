@@ -1,5 +1,6 @@
 const { db, admin } = require("./firebaseAdmin");
 const cjApi = require("./cjApi");
+const { badRequest, notFound, unprocessable } = require("./errors");
 const { getUsdToKesRate, getRate } = require("./fx");
 const { getPricing, retailProductPrice, retailShippingPrice } = require("./pricing");
 const { resolveRegion } = require("./regions");
@@ -39,7 +40,7 @@ const DUPLICATE_ATTEMPT_WINDOW_MS = 2 * 60 * 1000;
 async function createOrder({ uid, items, shippingAddress, logisticName }) {
   validateOrderRequest(items, shippingAddress);
   if (!shippingAddress?.countryCode) {
-    throw new Error("shippingAddress.countryCode is required");
+    throw badRequest("shippingAddress.countryCode is required");
   }
 
   // Currency/region are derived from the shipping address server-side -
@@ -51,7 +52,7 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
       items.map(async (item) => {
         const variant = await cjApi.getVariant(item.vid);
         if (variant.pid !== item.pid) {
-          throw new Error("The selected product variant does not match its product");
+          throw badRequest("The selected product variant does not match its product");
         }
         // getVariant passes CJ's price through unparsed, so it can be null.
         // The pricing engine sanitizes a null cost to 0 and would happily
@@ -59,7 +60,7 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
         // still pay CJ wholesale. Refuse the checkout instead.
         const supplierUnitPriceUsd = Number(variant.supplierPriceUsd);
         if (!Number.isFinite(supplierUnitPriceUsd) || supplierUnitPriceUsd <= 0) {
-          throw new Error(
+          throw unprocessable(
               `No usable supplier price for variant ${item.vid}; ` +
               "this product is temporarily unavailable to buy");
         }
@@ -92,7 +93,7 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
     products: items.map((i) => ({ vid: i.vid, quantity: i.quantity })),
   });
   if (!Array.isArray(freightOptions) || freightOptions.length === 0) {
-    throw new Error("No shipping option is available for this address");
+    throw unprocessable("No shipping option is available for this address");
   }
   // An option with no usable price is not a free option - treat it as
   // ineligible so it can't win the "cheapest" comparison and make us quote
@@ -109,7 +110,7 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
     // trusting anything else about the earlier quote.
     chosenLogistic = freightOptions.find((o) => o?.logisticName === logisticName);
     if (!chosenLogistic || !Number.isFinite(priceOf(chosenLogistic))) {
-      throw new Error(
+      throw unprocessable(
           "The selected shipping method is no longer available for this address");
     }
   } else {
@@ -119,7 +120,7 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
   }
   const freightUsd = priceOf(chosenLogistic);
   if (!Number.isFinite(freightUsd)) {
-    throw new Error("No shipping option is available for this address");
+    throw unprocessable("No shipping option is available for this address");
   }
 
   const retailFreightUsd = retailShippingPrice(freightUsd, pricing, { regionKey });
@@ -229,27 +230,27 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
 
 function validateOrderRequest(items, shippingAddress) {
   if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
-    throw new Error("items[] must contain between 1 and 50 items");
+    throw badRequest("items[] must contain between 1 and 50 items");
   }
   if (!shippingAddress || typeof shippingAddress.countryCode !== "string" || shippingAddress.countryCode.length !== 2) {
-    throw new Error("A valid two-letter shippingAddress.countryCode is required");
+    throw badRequest("A valid two-letter shippingAddress.countryCode is required");
   }
   const variants = new Set();
   for (const item of items) {
     if (!item || typeof item.pid !== "string" || !item.pid || typeof item.vid !== "string" || !item.vid) {
-      throw new Error("Each item requires pid and vid");
+      throw badRequest("Each item requires pid and vid");
     }
     if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20) {
-      throw new Error("Each item quantity must be an integer between 1 and 20");
+      throw badRequest("Each item quantity must be an integer between 1 and 20");
     }
-    if (variants.has(item.vid)) throw new Error("Duplicate variants must be combined before checkout");
+    if (variants.has(item.vid)) throw badRequest("Duplicate variants must be combined before checkout");
     variants.add(item.vid);
   }
 }
 
 async function getOrder(orderId) {
   const snap = await ORDERS.doc(orderId).get();
-  if (!snap.exists) throw new Error("Order not found");
+  if (!snap.exists) throw notFound("Order not found");
   return { id: snap.id, ...snap.data() };
 }
 

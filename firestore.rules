@@ -15,12 +15,65 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
+    // The `admin` custom claim is what refundOrder/runCatalogSync in
+    // functions/index.js check; the `role` field is what the app's own admin
+    // screens were built on. Accepting both keeps the two consistent while
+    // admins are migrated onto the claim — the claim is checked first
+    // because it costs no document read. Once every admin carries the claim,
+    // drop the role() fallback and this ruleset stops trusting a Firestore
+    // field for admin access altogether.
+    function isAdmin() {
+      return isSignedIn() &&
+        (request.auth.token.get('admin', false) == true || role() == 'admin');
+    }
+
     function storeSellerId(storeId) {
       return get(/databases/$(database)/documents/stores/$(storeId)).data.sellerId;
     }
 
     function touchesAny(fields) {
       return request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function touchesOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // Lowercase alphanumeric runs joined by single hyphens — exactly what
+    // lib/core/utils/slug.dart's slugify() emits, capped at 80 characters.
+    function isValidSlug(slug) {
+      return slug is string && slug.size() <= 80 &&
+        slug.matches('^[a-z0-9]+(-[a-z0-9]+)*$');
+    }
+
+    // Fields only Cloud Functions may write on an order: who it belongs to,
+    // what it costs, and whether/how it was paid and fulfilled. A seller who
+    // could set paymentStatus: 'paid' plus cjOrderStatus: 'FAILED' would get
+    // retryFailedFulfillments to push an unpaid order to CJ on Sellora's
+    // wallet. Admins can't write these from the client either — refunds and
+    // payment corrections go through refundOrder, which records an audit
+    // trail.
+    function serverOwnedOrderFields() {
+      return ['uid', 'userId', 'buyerId', 'sellerId', 'storeId',
+        'paymentStatus', 'paymentMethod', 'paymentProvider', 'paymentRef',
+        'paymentAttemptAt', 'paidAt', 'totalAmount', 'totalKes', 'totalUsd',
+        'total', 'subtotal', 'currency', 'fxRate', 'serviceFeeAmount',
+        'items', 'fulfillmentItems', 'refundedAmount', 'refunds',
+        'cjOrderId', 'cjOrderNumber', 'cjOrderStatus', 'fulfillmentAttempts'];
+    }
+
+    // The fulfilment states OrderStatus (lib/data/models/order_model.dart)
+    // defines — the only values the seller screens ever write.
+    function isOrderStatus(value) {
+      return value in ['pending', 'processing', 'shipped', 'delivered', 'cancelled'];
+    }
+
+    // A seller advancing fulfilment may change `status` (and a timestamp)
+    // and nothing else; an admin may also edit non-financial fields.
+    function isAllowedOrderUpdate(isSeller) {
+      return (isSeller && touchesOnly(['status', 'updatedAt']) &&
+                isOrderStatus(request.resource.data.status)) ||
+             (isAdmin() && !touchesAny(serverOwnedOrderFields()));
     }
 
     // ---- users ------------------------------------------------------
@@ -35,15 +88,26 @@ service cloud.firestore {
     // intasendWebhook Cloud Function may activate a subscription; see
     // `subscriptions/{sellerId}` below.
     match /users/{uid} {
-      allow read: if isOwner(uid) || role() == 'admin';
+      allow read: if isOwner(uid) || isAdmin();
       // Seller signups must capture a versioned terms acceptance. The
       // acceptance fields are immutable afterwards, preserving the original
       // agreement record even when a profile is edited later.
+      //
+      // The create path is where the update rule's role lock could be walked
+      // around: before PHASE 12 a brand-new account could simply create its
+      // own doc with role: 'admin' (or an already-active subscription), since
+      // only update checked the role. Self-signup may only produce what
+      // signUpBuyer/signUpSeller in auth_repository.dart actually write — a
+      // buyer, or a seller pending approval with no subscription.
       allow create: if isOwner(uid) &&
+        request.resource.data.role in ['buyer', 'seller'] &&
+        request.resource.data.get('subscriptionPlanId', null) == null &&
+        request.resource.data.get('subscriptionActiveUntil', null) == null &&
+        request.resource.data.get('sellerStatus', null) in [null, 'pendingApproval'] &&
         (request.resource.data.role != 'seller' ||
          (request.resource.data.sellerTermsAcceptedAt is string &&
           request.resource.data.sellerTermsVersion == '2026-09-17'));
-      allow update: if role() == 'admin' ||
+      allow update: if isAdmin() ||
         (isOwner(uid) && request.resource.data.role == resource.data.role &&
          !touchesAny(['subscriptionPlanId', 'subscriptionActiveUntil', 'sellerStatus',
            'sellerTermsAcceptedAt', 'sellerTermsVersion']));
@@ -74,10 +138,23 @@ service cloud.firestore {
     // Publicly readable, same as `listings` below — a prospective buyer
     // has to be able to browse stores before they have an account. Only
     // the owning seller (or admin) can create/update their own store.
+    //
+    // `slug` is what `/s/:slug` resolves (StoreScope), so it's a public
+    // address: a store may only be created with a slug it has reserved in
+    // `store_slugs` in the same batch (see below), and neither the slug nor
+    // the owner can change afterwards — otherwise one seller could point
+    // their store at another's slug and serve a look-alike storefront at
+    // that seller's URL.
     match /stores/{storeId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
-      allow update: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');
+      allow create: if isSignedIn() && role() == 'seller' &&
+        request.resource.data.sellerId == request.auth.uid &&
+        request.resource.data.id == storeId &&
+        isValidSlug(request.resource.data.slug) &&
+        getAfter(/databases/$(database)/documents/store_slugs/$(request.resource.data.slug)).data.storeId == storeId;
+      allow update: if isSignedIn() &&
+        (resource.data.sellerId == request.auth.uid || isAdmin()) &&
+        !touchesAny(['id', 'slug', 'sellerId', 'createdAt']);
       allow delete: if false;
 
       // ---- per-store customers (buyer-as-tenant profile) ---------------
@@ -87,9 +164,9 @@ service cloud.firestore {
       // platform-wide `users` collection (see WORKLOG.md — this is what
       // decision #2 in the multi-tenant design doc is for).
       match /customers/{uid} {
-        allow read: if isOwner(uid) || (isSignedIn() && storeSellerId(storeId) == request.auth.uid) || role() == 'admin';
+        allow read: if isOwner(uid) || (isSignedIn() && storeSellerId(storeId) == request.auth.uid) || isAdmin();
         allow create: if isOwner(uid);
-        allow update: if isOwner(uid) || role() == 'admin';
+        allow update: if isOwner(uid) || isAdmin();
         allow delete: if false;
       }
 
@@ -107,14 +184,34 @@ service cloud.firestore {
       // ---- per-store orders (tenant-scoped) ------------------------------
       // Mirrors the flat `orders` collection's ownership checks, scoped to
       // this store so a seller can never read/update another store's
-      // orders even if they guess an order id.
+      // orders even if they guess an order id. Like the flat collection,
+      // creation is server-only: a client-created order would carry a
+      // self-reported total. No client code writes here (checkout goes
+      // through createOrder), so closing it breaks nothing.
       match /orders/{orderId} {
-        allow create: if isSignedIn() && request.resource.data.buyerId == request.auth.uid;
+        allow create: if false;
         allow read: if isSignedIn() &&
-          (resource.data.buyerId == request.auth.uid || storeSellerId(storeId) == request.auth.uid || role() == 'admin');
-        allow update: if isSignedIn() && (storeSellerId(storeId) == request.auth.uid || role() == 'admin');
+          (resource.data.buyerId == request.auth.uid || storeSellerId(storeId) == request.auth.uid || isAdmin());
+        allow update: if isSignedIn() &&
+          isAllowedOrderUpdate(storeSellerId(storeId) == request.auth.uid);
         allow delete: if false;
       }
+    }
+
+    // ---- store slug reservations ---------------------------------------
+    // One doc per slug (id == slug), written in the same batch as its store
+    // (FirebaseStoreRepository.createStore). A create fails if the id is
+    // already taken, which is the uniqueness guarantee a `where('slug')`
+    // pre-check can't give: two sellers racing for one slug, or one
+    // skipping the check, can no longer end up with duplicate slugs. Never
+    // updated or deleted, so a slug can't be released and re-grabbed.
+    match /store_slugs/{slug} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidSlug(slug) &&
+        request.resource.data.keys().hasOnly(['storeId']) &&
+        getAfter(/databases/$(database)/documents/stores/$(request.resource.data.storeId)).data.sellerId == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/stores/$(request.resource.data.storeId)).data.slug == slug;
+      allow update, delete: if false;
     }
 
     // ---- shared CJ catalog -------------------------------------------
@@ -144,26 +241,33 @@ service cloud.firestore {
 
     // ---- orders ---------------------------------------------------------
     // Orders are created only by the createOrder Cloud Function (Admin SDK
-    // bypasses these rules), which re-prices from listings server-side —
-    // a client-created order would carry a self-reported total/fee. See
-    // functions/src/orders.ts.
+    // bypasses these rules), which re-prices from CJ server-side — a
+    // client-created order would carry a self-reported total/fee. See
+    // functions/lib/orders.js.
+    //
+    // createOrder stores the buyer as `userId` (plus legacy `uid`), not
+    // `buyerId`; either proves ownership for a read.
     match /orders/{orderId} {
       allow create: if false;
       allow read: if isSignedIn() &&
-        (resource.data.buyerId == request.auth.uid || resource.data.sellerId == request.auth.uid || role() == 'admin');
-      allow update: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');
+        (resource.data.get('buyerId', null) == request.auth.uid ||
+         resource.data.get('userId', null) == request.auth.uid ||
+         resource.data.get('sellerId', null) == request.auth.uid ||
+         isAdmin());
+      allow update: if isSignedIn() &&
+        isAllowedOrderUpdate(resource.data.get('sellerId', null) == request.auth.uid);
       allow delete: if false;
     }
 
     // ---- subscription plans ---------------------------------------------
     match /subscription_plans/{planId} {
       allow read: if true;
-      allow write: if isSignedIn() && role() == 'admin';
+      allow write: if isAdmin();
     }
 
     // ---- billing history ------------------------------------------------
     match /billing_history/{entryId} {
-      allow read: if isSignedIn() && (resource.data.sellerId == request.auth.uid || role() == 'admin');
+      allow read: if isSignedIn() && (resource.data.sellerId == request.auth.uid || isAdmin());
       allow write: if false; // written by Cloud Functions only
     }
 
@@ -173,9 +277,12 @@ service cloud.firestore {
     // check would read this doc, so a client write here could grant a
     // seller an unlimited order quota.
     match /subscriptions/{sellerId} {
-      allow read: if isOwner(sellerId) || role() == 'admin';
+      allow read: if isOwner(sellerId) || isAdmin();
       allow write: if false;
     }
+
+    // `rate_limits` (functions/lib/rateLimit.js's per-user counters) has no
+    // match block on purpose: default-denied, Admin SDK only.
 
     // ---- exchange rates ---------------------------------------------------
     // functions/lib/fx.js's daily USD-base rate cache. Public market data,

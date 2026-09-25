@@ -33,7 +33,14 @@ class FirebaseStoreRepository extends GetxService implements StoreRepository {
 
   @override
   Future<StoreModel> createStore(StoreModel store) async {
-    await _fs.stores.doc(store.id).set(store.toMap());
+    // Store and slug reservation land together or not at all. If the slug
+    // was taken since the caller's storeBySlug() check, the reservation
+    // create is refused by firestore.rules and the whole batch fails —
+    // no half-created store.
+    final batch = _fs.batch()
+      ..set(_fs.stores.doc(store.id), store.toMap())
+      ..set(_fs.storeSlugs.doc(store.slug), {'storeId': store.id});
+    await batch.commit();
     return store;
   }
 

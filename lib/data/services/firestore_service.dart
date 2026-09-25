@@ -19,6 +19,14 @@ class FirestoreService extends GetxService {
   CollectionReference<Map<String, dynamic>> get stores =>
       _db.collection('stores');
 
+  /// One doc per claimed slug (id == slug, `{storeId}`), written in the same
+  /// batch as its store. Firestore rules refuse a store whose slug isn't
+  /// reserved here, which is what makes slugs actually unique.
+  CollectionReference<Map<String, dynamic>> get storeSlugs =>
+      _db.collection('store_slugs');
+
+  WriteBatch batch() => _db.batch();
+
   /// The USD-base rate table `functions/lib/fx.js` refreshes daily —
   /// server-written, publicly readable (see firestore.rules).
   DocumentReference<Map<String, dynamic>> get fxRates =>

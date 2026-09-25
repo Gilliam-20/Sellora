@@ -2,6 +2,7 @@
 // this module owns Firestore state (billing_history/subscriptions/users),
 // while index.js orchestrates the actual payment-provider calls.
 const { db } = require("./firebaseAdmin");
+const { badRequest, notFound } = require("./errors");
 
 const BILLING_HISTORY = db.collection("billing_history");
 const SUBSCRIPTIONS = db.collection("subscriptions");
@@ -19,11 +20,11 @@ const USERS = db.collection("users");
  */
 async function createBillingEntry({ sellerId, planId }) {
   if (!planId || typeof planId !== "string") {
-    throw new Error("planId is required");
+    throw badRequest("planId is required");
   }
   const planSnap = await PLANS.doc(planId).get();
   if (!planSnap.exists) {
-    throw new Error(`Plan ${planId} not found`);
+    throw notFound(`Plan ${planId} not found`);
   }
   const plan = planSnap.data();
 

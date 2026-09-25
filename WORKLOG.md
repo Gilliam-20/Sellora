@@ -6,6 +6,67 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-25 — PHASE 12: security + production audit and fixes
+
+**Status:** implemented this session. Emulator rules suite (`firestore-tests`, `npm test`): 33/33
+pass (15 new in `production-hardening.test.js`; one `tenant-isolation` setup changed, see below).
+Functions (`functions`, `npm test`): 244/244 pass (17 new). `flutter analyze`: the same 3
+pre-existing issues. `flutter test --concurrency=1`: only the same 2 pre-existing failures
+(`auth_repository_test.dart` compile error, `seller_shell_controller_test.dart` `NotificationCenter`
+setup) plus the new `slug_test.dart` passing. With default concurrency,
+`admin_dashboard_controller_test.dart` also fails *to load* intermittently; it passes alone and
+serially, so that's a parallel-load flake, not a regression. `flutter build web` succeeds. Nothing
+deployed; `useMockData` is still `true`, so none of this has run against real Firebase.
+
+**Why:** TODO.md's STATUS row called PHASE 12 "done" on the strength of the 2026-09-11 pull-forward.
+Auditing all ten TODO areas showed real holes left, including two privilege escalations.
+
+**Findings and what changed:**
+
+| # | Area | Finding | Fix |
+|---|---|---|---|
+| 1 | Rules / auth | **Critical.** `users` *create* didn't restrict `role`: a brand-new account could create its own doc with `role: 'admin'` (or an active subscription). The 2026-09-11 fix only locked *update*. | Self-create now only allows `buyer`/`seller`, `sellerStatus` null/`pendingApproval`, no subscription fields. This matches exactly what `signUpBuyer`/`signUpSeller` write. |
+| 2 | Rules / payments | `stores/{id}/orders` *create* was client-allowed with any `total`. | `create: if false`, like flat `orders`. No client wrote there. |
+| 3 | Rules / payments | A seller (or admin) could update **any** order field, e.g. `paymentStatus: 'paid'` + `cjOrderStatus: 'FAILED'`, which would get `retryFailedFulfillments` to push an unpaid order to CJ on Sellora's wallet. | Sellers: only `status` (must be an `OrderStatus` value) + `updatedAt`. Admins: anything except `serverOwnedOrderFields()`. |
+| 4 | Rules / tenancy | Store `slug` was mutable and not unique. A seller could re-point their store at another seller's `/s/:slug`. Any signed-in user (not just sellers) could create stores. | New `store_slugs/{slug}` reservation written in the same batch as the store (`FirebaseStoreRepository.createStore`); `stores` create requires it, the `seller` role, and a well-formed slug. `id`/`slug`/`sellerId`/`createdAt` are immutable. `slugify` caps at 60 chars. |
+| 5 | Rules / permissions | Functions authorize admins by the `admin` custom claim, while rules used only the `role` field. Two sources of truth. | New `isAdmin()` accepts the claim (checked first, no doc read) or `role`. |
+| 6 | Rules / data | `createOrder` stores the buyer as `userId`/`uid`, but rules only let `buyerId` read. Buyers couldn't read their own server-created orders. | Flat `orders` read accepts `userId` too. (The client still *queries* `buyerId`, see Still open.) |
+| 7 | Rate limiting | No per-user limits, only global `maxInstances`. `payOrderMpesa` could be looped to spam STK prompts at a phone. | New `functions/lib/rateLimit.js`: Firestore fixed-window counters (`rate_limits/{policy}_{uid}`, Admin-only) on every signed-in endpoint, 429 + `Retry-After`. It fails open if Firestore itself errors. |
+| 8 | Error handling | `sendError` returned raw `err.message` with a 500: CJ/IntaSend error bodies, Firestore paths. The public webhooks echoed it too. | New `functions/lib/errors.js` (`HttpError`, `badRequest`/`notFound`/`unprocessable`). Only those messages reach callers; everything else becomes a generic 500 and is logged in full. Validation throws in `orders.js`/`reviews.js`/`subscriptions.js` converted, so they now return 400/404/422 instead of 500. |
+| 9 | Validation | `calculateFreight` forwarded `products[]` to CJ unbounded and unvalidated. `phoneNumber` was unchecked. Ids went straight into doc paths. | `validateFreightRequest` (≤50 lines, `sanitizeId` vids, int quantity 1–20, 2-letter countries), `isValidMpesaPhone` (`^254[17]\d{8}$`, same as the client validator), `sanitizeId` on every `orderId`/`billingEntryId`. |
+| 10 | Payment security | `redirectUrl`/`returnUrl`/`cancelUrl` were passed to IntaSend/PayPal as sent: an open redirect off a trusted payment page. | `isAllowedRedirectUrl`: https + an allowlisted origin (Hosting domains + sellora.app, override with `ALLOWED_REDIRECT_ORIGINS`). `http://localhost` is accepted only under the emulator. |
+| 11 | Authentication | `verifyIdToken` didn't check revocation, so a disabled account's token worked for up to an hour. | `verifyIdToken(token, true)`. Costs one Auth lookup per signed-in request. |
+| 12 | Secrets | No secret is committed; `git log -S` finds none of the credential values in history. `functions/.env` is gitignored. | No change. See Still open about that file. |
+
+A test fixture changed: `tenant-isolation.test.js`'s "store owner cannot read another store's
+orders" used a *buyer creating a store order with `total: 1000`* as setup, which is finding #2. It
+now seeds the order with rules disabled; its read assertions are unchanged.
+
+**Audited, no change needed:** `requireAuth` precedes every non-public handler. The webhooks re-verify
+with the provider and bind invoice → order, so a forged IntaSend webhook can't fulfil anything.
+`cors: true` is fine because auth is a bearer token, not a cookie. Public browse endpoints are already
+clamped (`params.js`) and cached. The client surfaces the server's `message`, so the new 429 and
+generic-500 texts reach users with no client change.
+
+**Still open (not attempted this session):**
+- Admin access still falls back to the Firestore `role` field. Set the `admin` claim on every admin
+  (`setCustomUserClaims`), then delete the `role() == 'admin'` half of `isAdmin()`.
+- App Check is report-only (`ENFORCE_APP_CHECK`); the Flutter client doesn't send tokens yet.
+- Configure a Firestore TTL policy on `rate_limits.expireAt` at deploy time; without it, counter docs
+  accumulate (one per user per policy, so bounded but never cleaned).
+- `functions/node_modules` (5,168 files) is tracked in git from before `.gitignore` covered it.
+  `git rm -r --cached functions/node_modules` fixes it; not done here because it's a large commit
+  the owner should make deliberately.
+- `functions/.env` holds live-looking provider credentials in plaintext. These belong in Secret Manager
+  (`firebase functions:secrets:set`). A `.env` key with the same name as a `defineSecret` param also
+  conflicts at deploy.
+- `FirebaseOrderRepository.buyerOrders` queries `buyerId`, which server-created orders don't have.
+  Rules now permit reading by `userId`, but the query and `OrderModel.fromMap` still need
+  reconciling with `createOrder`'s shape (a data-model gap, not a security one).
+- Crashlytics/monitoring, Firestore backups, deployment runbooks, performance profiling.
+
+---
+
 ## 2026-09-25 — PHASE 11: internationalization (first slice)
 
 **Status:** implemented this session. `flutter analyze` shows only the same 3 pre-existing issues

@@ -1,4 +1,5 @@
 const { db, admin } = require("./firebaseAdmin");
+const { badRequest, notFound } = require("./errors");
 
 const RATING_KEYS = ["1", "2", "3", "4", "5"];
 
@@ -69,17 +70,17 @@ async function getReviewerProfile(decoded) {
  */
 async function submitReview({ uid, decoded, productId, rating, comment }) {
   if (!productId || typeof productId !== "string") {
-    throw new Error("productId is required");
+    throw badRequest("productId is required");
   }
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-    throw new Error("rating must be an integer between 1 and 5");
+    throw badRequest("rating must be an integer between 1 and 5");
   }
   const trimmedComment = (comment || "").toString().trim();
   if (!trimmedComment) {
-    throw new Error("comment is required");
+    throw badRequest("comment is required");
   }
   if (trimmedComment.length > 1000) {
-    throw new Error("comment must be 1000 characters or fewer");
+    throw badRequest("comment must be 1000 characters or fewer");
   }
 
   const productRef = db.collection("products").doc(productId);
@@ -94,7 +95,7 @@ async function submitReview({ uid, decoded, productId, rating, comment }) {
       tx.get(productRef),
       tx.get(reviewRef),
     ]);
-    if (!productSnap.exists) throw new Error("Product not found");
+    if (!productSnap.exists) throw notFound("Product not found");
 
     const breakdown = {
       ...emptyBreakdown(),
@@ -138,7 +139,7 @@ async function submitReview({ uid, decoded, productId, rating, comment }) {
  */
 async function deleteReview({ uid, productId }) {
   if (!productId || typeof productId !== "string") {
-    throw new Error("productId is required");
+    throw badRequest("productId is required");
   }
   const productRef = db.collection("products").doc(productId);
   const reviewRef = productRef.collection("reviews").doc(uid);
@@ -148,8 +149,8 @@ async function deleteReview({ uid, productId }) {
       tx.get(productRef),
       tx.get(reviewRef),
     ]);
-    if (!reviewSnap.exists) throw new Error("Review not found");
-    if (!productSnap.exists) throw new Error("Product not found");
+    if (!reviewSnap.exists) throw notFound("Review not found");
+    if (!productSnap.exists) throw notFound("Product not found");
 
     const breakdown = {
       ...emptyBreakdown(),

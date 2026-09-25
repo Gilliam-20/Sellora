@@ -1,6 +1,6 @@
 /**
- * Validation for the query parameters of the public (unauthenticated) CJ
- * proxy endpoints.
+ * Request validation: first the query parameters of the public
+ * (unauthenticated) CJ proxy endpoints, then the bodies of the signed-in ones.
  *
  * These reach CJ's API on our single API key, so an unclamped `size` or an
  * arbitrarily long `keyword` is not just a big response - it's a way to get
@@ -72,12 +72,128 @@ function sanitizeId(value) {
   return /^[A-Za-z0-9_-]+$/.test(trimmed) ? trimmed : null;
 }
 
+// ---------------------------------------------------------------------------
+// Signed-in endpoint bodies. Signed-in isn't the same as trusted: anyone can
+// create an account, so these are validated as strictly as the public ones.
+// ---------------------------------------------------------------------------
+
+// Same caps createOrder's validateOrderRequest applies to a cart, so a
+// freight quote can never be asked for something checkout would refuse.
+const MAX_FREIGHT_LINES = 50;
+const MAX_LINE_QUANTITY = 20;
+
+/**
+ * @param {*} value Raw ISO 3166-1 alpha-2 code.
+ * @return {string|null} The upper-cased code, or null if malformed.
+ */
+function sanitizeCountryCode(value) {
+  if (typeof value !== "string") return null;
+  const code = value.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : null;
+}
+
+/**
+ * Validates a /calculateFreight body. Unchecked, `products` went to CJ as
+ * sent - an arbitrarily long array is one request that spends many CJ
+ * quota units on our single key.
+ * @param {object} body Raw request body.
+ * @return {{error: string}|{value: object}} The clean request or why not.
+ */
+function validateFreightRequest(body) {
+  const { endCountryCode, startCountryCode, products } = body || {};
+  const end = sanitizeCountryCode(endCountryCode);
+  if (!end) return { error: "A valid two-letter endCountryCode is required" };
+  let start;
+  if (startCountryCode !== undefined && startCountryCode !== null) {
+    start = sanitizeCountryCode(startCountryCode);
+    if (!start) return { error: "startCountryCode must be a two-letter country code" };
+  }
+  if (!Array.isArray(products) || products.length === 0 ||
+      products.length > MAX_FREIGHT_LINES) {
+    return { error: `products[] must contain between 1 and ${MAX_FREIGHT_LINES} items` };
+  }
+  const clean = [];
+  for (const product of products) {
+    const vid = sanitizeId(product?.vid);
+    const quantity = product?.quantity;
+    if (!vid) return { error: "Each product requires a valid vid" };
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_LINE_QUANTITY) {
+      return { error: `Each quantity must be an integer between 1 and ${MAX_LINE_QUANTITY}` };
+    }
+    clean.push({ vid, quantity });
+  }
+  return { value: { endCountryCode: end, startCountryCode: start, products: clean } };
+}
+
+/**
+ * IntaSend's STK push takes 2547XXXXXXXX / 2541XXXXXXXX - the same shape
+ * lib/core/utils/validators.dart enforces client-side. Checked server-side
+ * too so the endpoint can't be used to push payment prompts at arbitrary
+ * numbers in arbitrary formats.
+ * @param {*} value Raw phone number.
+ * @return {boolean}
+ */
+function isValidMpesaPhone(value) {
+  return typeof value === "string" && /^254[17]\d{8}$/.test(value);
+}
+
+// Where a hosted payment page may send the buyer afterwards. Unchecked, a
+// caller could have IntaSend/PayPal - trusted, payment-branded pages -
+// redirect to any site they like, which is a ready-made phishing hop.
+const DEFAULT_REDIRECT_ORIGINS = [
+  "https://sellora-20.web.app",
+  "https://sellora-20.firebaseapp.com",
+  "https://sellora.app",
+  "https://www.sellora.app",
+];
+
+/**
+ * @return {string[]} Allowed origins: `ALLOWED_REDIRECT_ORIGINS` (comma-
+ *   separated) when set, otherwise the Firebase Hosting + sellora.app ones.
+ */
+function allowedRedirectOrigins() {
+  const configured = (process.env.ALLOWED_REDIRECT_ORIGINS || "")
+      .split(",").map((o) => o.trim()).filter(Boolean);
+  return configured.length ? configured : DEFAULT_REDIRECT_ORIGINS;
+}
+
+/**
+ * @param {*} value Raw redirect/return/cancel URL.
+ * @param {object=} options
+ * @param {string[]=} options.origins Allowed origins (defaults as above).
+ * @param {boolean=} options.allowLocalhost Also accept http://localhost -
+ *   defaults to true only under the Functions emulator, for `flutter run`.
+ * @return {boolean} Whether it's safe to hand to a payment provider.
+ */
+function isAllowedRedirectUrl(value, options = {}) {
+  if (typeof value !== "string" || value.length > 2048) return false;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  const allowLocalhost = options.allowLocalhost ??
+    process.env.FUNCTIONS_EMULATOR === "true";
+  if (allowLocalhost && url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1")) {
+    return true;
+  }
+  if (url.protocol !== "https:" || url.username || url.password) return false;
+  return (options.origins || allowedRedirectOrigins()).includes(url.origin);
+}
+
 module.exports = {
   clampInt,
   clampPage,
   clampPageSize,
   sanitizeKeyword,
   sanitizeId,
+  sanitizeCountryCode,
+  validateFreightRequest,
+  isValidMpesaPhone,
+  isAllowedRedirectUrl,
+  MAX_FREIGHT_LINES,
   MAX_PAGE,
   MAX_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
