@@ -50,16 +50,29 @@ firebase deploy --only hosting
 
 ## Architecture
 
-### The mock/real switch is the central design fact
+### The mock/real switch is the central design fact — except identity
 
 `AppConstants.useMockData` (`lib/core/constants/app_constants.dart`) is a single `const bool` that
-decides which repository implementations `InitialBinding` binds. When `true` the entire app runs on
-in-memory mocks — no Firebase project, IntaSend account, or CJ Dropshipping key required — and every
-screen is clickable end to end.
+decides which repository implementations `InitialBinding` binds for the catalog, orders,
+notifications, subscriptions, admin and FX rates. When `true` those run on in-memory mocks — no CJ
+Dropshipping key or IntaSend account required.
 
-This is currently `true`, and `Firebase.initializeApp()` is still commented out in `lib/main.dart`.
-**The app has never run against a real backend.** Treat anything in `firestore.rules`,
-`functions/src/`, or the `Firebase*Repository` classes as scaffolded-but-unexercised.
+**`AuthRepository` and `StoreRepository` are the one exception** (as of 2026-09-25, see `WORKLOG.md`):
+`InitialBinding` always binds `FirebaseAuthRepository`/`FirebaseStoreRepository`, regardless of
+`useMockData`, and `lib/main.dart` always calls `Firebase.initializeApp()`. `MockAuthRepository`/
+`MockStoreRepository` still exist and are exercised by `test/auth_repository_test.dart` and
+`test/admin_dashboard_controller_test.dart`, but nothing in the running app binds them anymore. This
+means running the app at all — even with `useMockData = true` — now requires a reachable Firebase
+project (`sellora-20`, per `lib/firebase_options.dart`/`android/app/google-services.json`) with
+Email/Password auth enabled and `firestore.rules` deployed; sign-in/sign-up will fail without it.
+One direct consequence: the two demo storefronts `MockProductRepository`/`MockSeedData` seed
+(`aminas-picks`, `jengo-electronics`) are no longer reachable by browsing, since `StoreRepository` now
+reads real (likely empty) Firestore rather than that seed data — only a real signed-up seller's own
+store resolves.
+
+Everything else in `firestore.rules`, `functions/` (plain JS — see the Cloud Functions section above),
+and the remaining `Firebase*Repository` classes should still be treated as scaffolded-but-unexercised:
+**the app has never run its catalog/order/payment flows against a real backend**, only identity.
 
 The consequence for any change: **every repository is an abstract interface with two implementations**
 — a `Firebase*` one in `lib/data/repositories/` and a mock in `lib/data/repositories/mock/`. Adding a
@@ -141,6 +154,11 @@ open:
 - `FirebaseSubscriptionRepository.subscribeSeller` still writes `billing_history` directly from the
   client — `firestore.rules` already blocks that write against real Firestore (`allow write: if
   false`), so subscription billing needs the same server-side move `createOrder` just got for orders.
-- `AppConstants.useMockData` is still `true`. Flipping it needs a real CJ Dropshipping account, a
-  confirmed IntaSend production setup, and `firebase functions:secrets:set` run with real values —
-  none of that is done here.
+- `AppConstants.useMockData` is still `true` for catalog/orders/subscriptions/admin. Flipping it needs
+  a real CJ Dropshipping account, a confirmed IntaSend production setup, and
+  `firebase functions:secrets:set` run with real values — none of that is done here. Identity
+  (`AuthRepository`/`StoreRepository`) is no longer gated by this flag at all — see the Architecture
+  section above.
+- The real Firebase Auth/Firestore path (now always live, see above) has not been confirmed against
+  the actual `sellora-20` project — whether Email/Password sign-in is enabled there, and whether the
+  deployed `firestore.rules` matches what's in this repo, are both unverified.

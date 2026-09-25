@@ -6,6 +6,163 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-25 — Identity is no longer mocked: Auth + Store always bind to Firebase
+
+**Status:** implemented this session. `flutter analyze`: 0 issues (was 1 pre-existing error in
+`test/auth_repository_test.dart`, unrelated to this change — fixed in passing, see below).
+`flutter test`: 36/37 pass; the 1 failure (`seller_shell_controller_test.dart` missing a
+`NotificationCenter` binding) pre-dates this session (confirmed via `git stash`) and is untouched.
+
+**Why:** user request — stop the running app from sourcing sign-in/sign-up from
+`MockAuthRepository`'s in-memory fake session and wire in the real `FirebaseAuthRepository`, which
+already existed fully implemented but was never bound. `AppConstants.useMockData` previously switched
+*every* repository together, and flipping it wholesale is blocked on a real CJ Dropshipping account and
+a confirmed IntaSend production setup (see "Known gaps" in `CLAUDE.md`) — neither of which identity
+depends on. `StoreRepository` moved with it rather than staying mocked, because
+`FirebaseAuthRepository.signUpSeller` creates a seller's store through whatever `StoreRepository` is
+bound: pairing a real, persisted Firebase Auth account with an in-memory `MockStoreRepository` would
+have made a seller's own store vanish on every app restart (`MockStoreRepository` resets to
+`MockSeedData`'s two seed stores on each launch) — worse than either being fully mocked or fully real.
+
+**Changed:**
+- `lib/app/bindings/initial_binding.dart`: `AuthService`, `FirestoreService`, and
+  `StoreRepository`/`AuthRepository` (bound to `FirebaseStoreRepository`/`FirebaseAuthRepository`) are
+  now registered unconditionally, before the `useMockData` branch, which now only covers
+  Product/Order/Notification/Subscription/Admin/FxRate. `MockAuthRepository`/`MockStoreRepository` are
+  no longer instantiated anywhere in the running app.
+- `lib/main.dart`: `Firebase.initializeApp()` now runs unconditionally instead of being gated on
+  `!useMockData`.
+- `lib/core/constants/app_constants.dart`: `useMockData`'s doc comment corrected — it no longer
+  describes "the entire app."
+- `CLAUDE.md`, `README.md`: architecture/quickstart sections updated to describe the split (identity
+  always real; catalog/orders/etc. still gated by `useMockData`) and to drop the now-dead
+  "sign in with an email containing 'seller'/'admin'" quick-login shortcut, which only ever lived in
+  `MockAuthRepository` and no longer applies once it isn't bound.
+- `test/auth_repository_test.dart`: fixed a pre-existing, unrelated compile error (missing
+  `user_model.dart` import for `sellerTermsVersion`) found while verifying this change — not part of
+  the scope, but a one-line fix needed to run the suite at all.
+
+**Deliberately not changed:** `MockAuthRepository`/`MockStoreRepository` themselves are untouched and
+still exist — `test/auth_repository_test.dart` and `test/admin_dashboard_controller_test.dart` exercise
+them directly (signup slug-dedup, terms-version, terms-acceptance business logic) independent of
+`InitialBinding`, and rewriting that coverage against a Firebase-backed fake was out of scope.
+
+**New consequence, disclosed:** the two demo storefronts `MockSeedData.stores()` seeds
+(`aminas-picks` / `jengo-electronics`, matched to `MockProductRepository`'s seeded listings by
+`storeId`) are no longer reachable by browsing — `StoreScope`/`FirebaseAuthController` now resolve
+stores through real (likely empty) Firestore, which has no docs at those slugs. Only a real seller who
+actually signs up gets a real, resolvable store; buyers can no longer browse a demo storefront without
+one existing for real. `AppConstants.useMockData = true` still keeps that seller's *product catalog*
+on mock data once inside their store, but the store itself, and getting a buyer to it, is now real.
+
+**Still open / unverified:**
+- Whether Email/Password sign-in is actually enabled on the live `sellora-20` Firebase project, and
+  whether its deployed `firestore.rules` matches what's checked in here — this session read the rules
+  file and reasoned the `users`/`stores`/`store_slugs` create rules support `signUpSeller`'s write
+  order (user doc, then store), but did not exercise it against the real project.
+- No new Firestore data was seeded for the two former demo stores; if browsable-without-signup demo
+  storefronts still matter, that needs either seeding `stores`/`store_slugs` docs for them in the real
+  project, or keeping a mock fallback for anonymous storefront browsing specifically.
+
+---
+
+## 2026-09-25 — PHASE 8: seller/store attribution + service-fee split (scaffold, no live payout)
+
+**Status:** implemented this session. Functions (`functions`, `npm test`): 254/254 pass (4 new in
+`orders.test.js`). Firestore emulator rules suite (`firestore-tests`, `npm test`): 33/33 pass, unchanged
+— no `firestore.rules` edits were needed, since the fields this touches were already locked to
+Cloud-Function-only writes by today's earlier PHASE 12 pass. `useMockData` is still `true`; none of this
+has run against a real order.
+
+**Why:** continuing SELLORA_IMPLEMENTATION_PLAN.md, scoped to PHASE 4 (CJ catalog/import UI) and a
+PHASE 8 scaffold (seller/store/fee fields, explicitly *not* real IntaSend sub-account wiring — see the
+next entry below for why PHASE 4 turned out to need no work at all).
+
+**A deeper finding than "add sellerId/storeId fields":** `createOrder` never read a seller's own listing.
+It re-derived its own retail price straight from CJ's supplier cost via `pricing.js`'s single global
+margin config — the same pricing a bare single-vendor dropshipping app would use — completely ignoring
+`stores/{storeId}/products/{pid}.sellPrice`, the price a seller actually set on the product_import
+screen. This was already flagged, just not yet fixed: `ProductModel.sellPrice`'s own doc comment says
+"what the *seller* has chosen to charge," and `FirebaseOrderRepository.placeOrder` already had an inline
+comment disclosing that the adopted backend "ignores" `storeId` entirely.
+
+**Changed:**
+- `functions/lib/orders.js`'s `createOrder` now requires `storeId`, looks up
+  `stores/{storeId}/products/{pid}` per line item (must exist, `isListed: true`, and the chosen `vid`
+  must not be a seller-disabled variant — see `ManageVariantsController`), and prices each line at the
+  seller's own `sellPrice` instead of recomputing a fresh CJ-margin price. Adds
+  `buyerId`/`sellerId`/`storeId`/`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue` to the order doc.
+  The `buyerId` addition closes the exact gap today's earlier PHASE 12 entry's "Still open" list flagged
+  (`FirebaseOrderRepository.buyerOrders` queries `buyerId`, which no server-created order carried until
+  now). `estimatedProfitUsd` (Sellora's own take) is corrected to also subtract `sellerRevenueUsd` — it
+  was silently counting the seller's share as platform profit. New pure `splitServiceFee(retailSubtotalUsd)`
+  (2% of product subtotal only, never shipping — the decision already on record in
+  SELLORA_IMPLEMENTATION_PLAN.md) is exported and unit-tested the same way `marginPricingService.js` is.
+  The order is now also mirrored, write-once, into `stores/{storeId}/orders/{orderId}` (previously
+  always empty); no screen reads that path yet (`sellerOrders`, the one the seller order queue/dashboard
+  actually call, already worked off the flat collection and stays the live source), so its staleness
+  after creation is a known, flagged-inline limitation, not a live bug.
+- `functions/index.js`'s `createOrder` handler forwards the new `storeId` field.
+- `lib/data/repositories/firebase_order_repository.dart`'s `placeOrder` now reads
+  `serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue` back off the response — `OrderModel` already had
+  these fields (added 2026-09-11 for the earlier, since-deleted backend) but they'd sat unused since the
+  2026-09-12 backend swap. Its stale comments (claiming the adopted backend has "no seller/fee/store
+  concept at all") are corrected.
+- `functions/test/orders.test.js`: 4 new cases for `splitServiceFee` (rate, rounding reconstitution to
+  the cent, zero, negative/NaN) and `validateOrderRequest`'s new `storeId` requirement.
+
+**Not done, deliberately (user's explicit "scaffold, not full implementation" choice):** no real
+IntaSend Split Payments sub-account wiring — money still flows exactly as before, one IntaSend/PayPal
+charge, no split, no payout. The five API specifics from the 2026-09-09 design entry below (split
+precision, sub-account KYC turnaround, Payouts API minimums/fees, settlement schedule, refund-on-split
+behavior) are still unconfirmed against a real IntaSend account and are what actually blocks turning
+this snapshot into a real payout. `refundOrder`/`attachPaymentAttempt`/the payment webhooks/
+`retryFailedFulfillments`/`refreshOrderTracking` do not update the new `stores/{storeId}/orders` mirror
+— flagged inline in `orders.js` for whoever wires a screen to read it.
+
+**Verification gap, disclosed:** did not drive `createOrder` itself through the Firestore/functions
+emulator — that needs a mocked-CJ-API test harness that doesn't exist for this file's async paths today
+(the existing `orders.test.js` only unit-tests its pure helpers; this pass follows that same pattern
+rather than inventing new infrastructure). Ran the existing `firestore-tests` rules suite as a
+regression check instead (33/33 pass, unchanged) — it confirms `firestore.rules` still holds, not that
+this new logic is correct end-to-end.
+
+---
+
+## 2026-09-25 — SELLORA_IMPLEMENTATION_PLAN.md correction: PHASE 4 was already done
+
+**Status:** documentation-only, no code changed.
+
+**Why:** auditing "what hasn't been done" against the plan doc's own text, before starting the PHASE 8
+work above, found its PHASE 4 section stale — it still read as if catalog-browse/shipping-estimate UI
+didn't exist, three commits after they'd actually shipped (`git log` on the relevant files: "catalog and
+cj import" 2026-09-18, "added freight options" 2026-09-22).
+
+**What's actually true, confirmed by reading the code, not just commit messages:**
+- Category browsing: `SellerCatalogController.loadCategories()` → `ProductRepository.categories()` →
+  `CjDropshippingService.getCategories()` → the `getCategories` Cloud Function, rendering the seller
+  catalog screen's filter chip row.
+- Shipping estimate: `ProductImportController._loadShippingEstimate()` and `CheckoutController`'s
+  shipping picker both call `CjDropshippingService.calculateFreight()`/`getShippingOptions()` → the
+  `calculateFreight` Cloud Function.
+- CJ-catalog-to-per-seller-listing import mapping: the `product_import` screen (2026-09-18/19) already
+  does this — variant picker, landed-cost pricing card, save-as-draft vs. publish via `isListed`.
+- Buyer-facing variant selector: also already shipped (`_BuyerVariantPicker` in
+  `product_details_view.dart`) — the plan's PHASE 5 section separately claimed this didn't exist either;
+  same staleness, same fix.
+
+**What's genuinely still missing:** a server endpoint exposing the *full*
+`marginPricingService.calculatePricing()` formula (advertising/refund/VAT/fx-aware) to the client —
+`ProductImportController.priceForMargin` does its own simpler `landedCost * (1 + margin/100)` markup
+instead. Whether that's a real gap or an intentional simplification is a product call, not a confirmed
+defect, so left alone.
+
+**Changed:** `SELLORA_IMPLEMENTATION_PLAN.md`'s PHASE 4 and PHASE 5 (variant-selector line) sections
+corrected in place, marked with a `2026-09-25 correction` note rather than silently rewritten, so a
+later session can see what the text used to claim. This entry.
+
+---
+
 ## 2026-09-25 — PHASE 12: security + production audit and fixes
 
 **Status:** implemented this session. Emulator rules suite (`firestore-tests`, `npm test`): 33/33

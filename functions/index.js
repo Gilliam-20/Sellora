@@ -336,9 +336,13 @@ exports.calculateFreight = onRequest(checkoutOptions(CJ_SECRETS), async (req, re
 
 /**
  * POST /createOrder   (auth required)
- * body: { items: [{ pid, vid, quantity }], shippingAddress: {...}, logisticName?: string }
- * Prices everything from CJ's live prices + freight, returns totals in both
- * USD (for PayPal) and KES (for M-Pesa/card/Google Pay via IntaSend).
+ * body: { items: [{ pid, vid, quantity }], shippingAddress: {...}, storeId,
+ *   logisticName?: string }
+ * Prices everything from CJ's live prices + the selling store's own listed
+ * price, returns totals in both USD (for PayPal) and KES (for M-Pesa/card/
+ * Google Pay via IntaSend).
+ * `storeId` is the store the buyer is checking out from - required; every
+ * item must be listed and published in that store.
  * `logisticName` is the buyer's chosen CJ shipping line from `calculateFreight`
  * (omit it to auto-pick the cheapest) - only the name is trusted, never a price.
  */
@@ -347,8 +351,8 @@ exports.createOrder = onRequest(checkoutOptions(CJ_SECRETS), async (req, res) =>
   if (!user) return;
   if (!await withinRateLimit(res, "createOrder", user.uid)) return;
   try {
-    const { items, shippingAddress, logisticName } = req.body || {};
-    const order = await orders.createOrder({ uid: user.uid, items, shippingAddress, logisticName });
+    const { items, shippingAddress, logisticName, storeId } = req.body || {};
+    const order = await orders.createOrder({ uid: user.uid, items, shippingAddress, logisticName, storeId });
     logInfo("order_created", {
       orderId: order.id,
       uid: user.uid,

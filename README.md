@@ -7,13 +7,23 @@ through **IntaSend** and **M-Pesa**. One Flutter codebase targets Web,
 Android and iOS, with three role-based portals — Buyer, Seller, Admin —
 behind a single sign-in.
 
-## Try it in 60 seconds — no backend required
+## Try it in 60 seconds — catalog/orders need no backend, sign-in does
 
 The app ships with `AppConstants.useMockData = true`
-(`lib/core/constants/app_constants.dart`), which swaps every repository
-for an in-memory mock implementation with sample CJ-style products and
-plans. No Firebase project, IntaSend account, or CJ Dropshipping key
-needed to click through every screen.
+(`lib/core/constants/app_constants.dart`), which swaps the catalog,
+orders, notifications, subscriptions and admin repositories for
+in-memory mock implementations with sample CJ-style products and
+plans. No IntaSend account or CJ Dropshipping key needed for those.
+
+**Sign-in/sign-up is not covered by that flag.** `InitialBinding`
+always wires `AuthRepository`/`StoreRepository` to their real Firebase
+implementations, so you need a reachable Firebase project — the
+`sellora-20` project's config already ships in this repo
+(`lib/firebase_options.dart`, `android/app/google-services.json`) with
+Email/Password auth enabled and `firestore.rules` deployed. Register a
+real account from the app's own sign-up screen (seller) or a store's
+`/s/{slug}/login` page (buyer) — there is no email-content shortcut
+into a role anymore.
 
 This zip contains the Dart source (`lib/`) and `pubspec.yaml` only —
 platform runner folders (`android/`, `ios/`, `web/`, etc.) aren't
@@ -28,17 +38,6 @@ flutter run
 `flutter create .` is safe to run on top of existing code — it only
 adds the platform folders that are missing; it won't touch `lib/` or
 `pubspec.yaml`.
-
-On the sign-in screen, use any password (8+ characters) and an email
-containing:
-
-| Email contains | Signs you in as |
-|---|---|
-| `seller` | Seller portal, active subscription, a starter storefront |
-| `admin`  | Admin portal |
-| anything else | Buyer portal |
-
-Example: `seller@demo.com` / `password123`.
 
 ## Architecture
 
@@ -66,9 +65,10 @@ lib/
 ```
 
 - **InitialBinding** (`lib/app/bindings/initial_binding.dart`) registers
-  every service and repository once, as permanent singletons. Which
-  repository implementation gets bound — mock or Firebase — is decided
-  by a single flag: `AppConstants.useMockData`.
+  every service and repository once, as permanent singletons.
+  `AuthRepository`/`StoreRepository` always bind to their real Firebase
+  implementations; every other repository's implementation — mock or
+  Firebase — is decided by `AppConstants.useMockData`.
 - Every route's own `Bindings` class `Get.lazyPut`s its controller(s),
   so a controller is created when its page is pushed and disposed when
   popped.
@@ -101,24 +101,29 @@ credentials and endpoints, not writing new architecture.
 
 ### 1. Firebase
 
+`lib/main.dart` already calls `Firebase.initializeApp()` unconditionally, and `AuthRepository`/
+`StoreRepository` are already wired to their real implementations regardless of `useMockData` (see
+Architecture above) — sign-in/sign-up talk to Firebase from a fresh checkout. If you're pointing this
+at your own project rather than the `sellora-20` one this repo ships config for:
+
 ```bash
 npm install -g firebase-tools
 firebase login
-flutterfire configure   # generates lib/firebase_options.dart
-```
-
-Then in `lib/main.dart`, uncomment the `Firebase.initializeApp(...)`
-block and its imports, and in
-`lib/core/constants/app_constants.dart` set:
-
-```dart
-static const bool useMockData = false;
+flutterfire configure   # regenerates lib/firebase_options.dart
 ```
 
 Deploy Firestore rules/indexes:
 
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes
+```
+
+Set `AppConstants.useMockData = false` once you also want the catalog, orders, notifications,
+subscriptions and admin views to run for real — that additionally requires the CJ Dropshipping and
+IntaSend setup in step 2 below:
+
+```dart
+static const bool useMockData = false;
 ```
 
 ### 2. Cloud Functions (CJ Dropshipping + IntaSend proxies)

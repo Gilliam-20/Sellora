@@ -95,13 +95,22 @@ for the client's own persisted `listings` shape). The admin catalog-sync screen 
 server-side pipeline instead of a hand-rolled partial client-side sync into a dead `catalog` collection
 (removed, along with its now-stale `firestore.rules` block).
 
-Still not started as app-facing work: any catalog browse/import screen actually using this plumbing;
+**2026-09-25 correction:** the paragraph below (dated 2026-09-14) was stale — category browsing and
+shipping-estimate UI shipped 2026-09-18/22 and this section was never updated to say so. Confirmed by
+reading the code, not just commit messages: `SellerCatalogController.loadCategories()` →
+`ProductRepository.categories()` → `CjDropshippingService.getCategories()` renders the catalog screen's
+filter chip row; `ProductImportController._loadShippingEstimate()` and `CheckoutController`'s shipping
+picker both call `CjDropshippingService.calculateFreight()`/`getShippingOptions()`. The CJ-catalog-to
+per-seller-listing import mapping is also done — see the `product_import` screen described lower in this
+section. What's still genuinely missing: a server endpoint for the *full* `marginPricingService.calculatePricing()`
+formula (advertising/refund/VAT/fx-aware) — `ProductImportController.priceForMargin` does its own
+simpler `landedCost * (1 + margin/100)` markup instead of calling that engine. Whether that's a real gap
+or an intentional simplification is a product call, not a confirmed defect.
+
+~~Still not started as app-facing work: any catalog browse/import screen actually using this plumbing;
 `getCategories`/`calculateFreight` client methods (endpoints are correctly named in `ApiEndpoints` but
-unconsumed — no category-browsing or shipping-estimate UI exists yet); a backend endpoint for
-interactive margin-slider pricing (today's margin math is baked silently into search/detail responses,
-with no "recalculate for margin X" call to make); and deciding how a shared CJ catalog (`products`/
-`categories`, confirmed no seller/store scoping anywhere) maps onto per-seller `listings` at import
-time. Real per-variant SKU/price/stock also still isn't representable client-side — `ProductVariant`
+unconsumed — no category-browsing or shipping-estimate UI exists yet)~~ — see the 2026-09-25 correction
+above. Real per-variant SKU/price/stock also still isn't representable client-side — `ProductVariant`
 stays an attribute-picker (`{name, options}`) derived from the backend's richer per-SKU variant list,
 not a purchasable-variant model; extending it is deferred until an import/variant-picker screen actually
 needs it.
@@ -159,8 +168,9 @@ started.
 `lib/modules/seller/manage_variants/` screen, reachable by tapping a listing in My Listings, lets a
 seller toggle which imported SKUs a buyer can pick and rename their own SKU reference.
 `ProductModel.visibleVariants` filters the buyer-facing picker in `product_details_view.dart`
-accordingly. Deliberately left CJ's own attributes/price/costPrice/image read-only, and deliberately
-did not add per-variant pricing (touches checkout's `CartItemModel.lineTotal` and the server-side
+accordingly (`_BuyerVariantPicker` — a real picker, not an auto-pick-first; only the price stays fixed
+per listing regardless of variant, by design, per `ProductVariant`'s own doc comment). Deliberately left
+CJ's own attributes/price/costPrice/image read-only, and deliberately did not add per-variant pricing (touches checkout's `CartItemModel.lineTotal` and the server-side
 `createOrder` re-pricing — its own scoped pass) or per-variant stock (that's this phase's own "real
 inventory tracking" item, not to be half-done here).
 
@@ -271,6 +281,31 @@ either adding seller/store/fee support to `functions/lib/orders.js`, or making a
 single-vendor is fine for now and those fields should shrink/go away. Separately, `shippingAddress.line`
 is still one free-text field, not the `{fullName, phone, email, line1, line2, city, province, zip}` shape
 `functions/lib/cjApi.js` needs to actually push a fulfillment to CJ later.
+
+**2026-09-25 update — seller/store attribution + fee split scaffolded (see WORKLOG.md):** closes the
+fork above by adding seller/store support rather than dropping the fields. `createOrder` now requires
+`storeId`, prices every line at the seller's own `stores/{storeId}/products/{pid}.sellPrice` (previously
+it silently re-derived its own price from CJ's cost via a single global margin, ignoring the seller's
+price entirely — a deeper gap than "missing fields," found while doing this pass), and snapshots
+`buyerId`/`sellerId`/`storeId`/`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue` (2% of product
+subtotal only, via a new pure, unit-tested `splitServiceFee`). `buyerId` being unset was also the exact
+gap flagged in today's earlier PHASE 12 WORKLOG entry's "Still open" list (`FirebaseOrderRepository.buyerOrders`
+queries a field no order carried) — closed as a side effect. `stores/{storeId}/orders` is now written
+(previously always empty) but only at creation — nothing later (`attachPaymentAttempt`, the payment
+webhooks, `refundOrder`, `retryFailedFulfillments`, `refreshOrderTracking`) mirrors its updates there
+yet, flagged inline in `orders.js`; harmless today since no screen reads that path (`sellerOrders`, the
+one the seller order queue/dashboard call, already works off the flat `orders` collection and is
+unaffected). `functions/test/orders.test.js` gained 4 cases; `functions` suite and the `firestore-tests`
+emulator rules suite (unchanged, no rules edits needed) both pass in full.
+
+**Deliberately not done this pass (user's explicit "scaffold, not full implementation" choice):** no
+real IntaSend Split Payments sub-account wiring — money still moves exactly as before, one charge, no
+split, no payout. The five API specifics from the 2026-09-09 design entry (split precision, sub-account
+KYC turnaround, Payouts API minimums/fees, settlement schedule, refund-on-split behavior) are still
+unconfirmed against a real IntaSend account and are what actually blocks turning this snapshot into a
+real payout. Also not attempted: driving `createOrder` itself through the Firestore/functions emulator
+— no mocked-CJ-API test harness exists for this file's async paths (same as before this pass; only its
+pure helpers are unit-tested, consistent with how the rest of this file is already tested).
 
 ## PHASE 9 — Analytics + marketing
 

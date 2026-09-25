@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sellora/data/models/store_model.dart';
+import 'package:sellora/data/models/user_model.dart';
 import 'package:sellora/data/repositories/mock/mock_auth_repository.dart';
 import 'package:sellora/data/repositories/store_repository.dart';
 

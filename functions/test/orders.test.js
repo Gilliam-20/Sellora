@@ -7,6 +7,9 @@ const {
   MAX_FULFILLMENT_ATTEMPTS,
   PUSH_CLAIM_STALE_MS,
   DUPLICATE_ATTEMPT_WINDOW_MS,
+  SERVICE_FEE_RATE,
+  splitServiceFee,
+  validateOrderRequest,
 } = require("../lib/orders");
 
 // Firestore hands timestamps back as objects with toMillis(), which is what
@@ -158,5 +161,55 @@ describe("hasPendingAttempt", () => {
         hasPendingAttempt(
             { paymentStatus: "AWAITING_CONFIRMATION", paymentMethod: "MPESA" }, "MPESA"),
         false);
+  });
+});
+
+describe("splitServiceFee", () => {
+  test("takes exactly the platform's 2% rate, seller keeps the rest", () => {
+    assert.equal(SERVICE_FEE_RATE, 0.02);
+    const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(100);
+    assert.equal(serviceFeeAmountUsd, 2);
+    assert.equal(sellerRevenueUsd, 98);
+  });
+
+  test("fee + seller revenue always reconstitute the subtotal exactly", () => {
+    // Cents that don't divide evenly by the rate are the case most likely to
+    // drift under naive rounding - assert the two pieces still sum to the
+    // original subtotal to the cent.
+    for (const subtotal of [0.01, 1, 9.99, 33.33, 1234.56]) {
+      const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(subtotal);
+      assert.equal(
+          Math.round((serviceFeeAmountUsd + sellerRevenueUsd) * 100) / 100,
+          subtotal);
+    }
+  });
+
+  test("a zero subtotal splits to zero, not NaN or a negative fee", () => {
+    assert.deepEqual(
+        splitServiceFee(0), { serviceFeeAmountUsd: 0, sellerRevenueUsd: 0 });
+  });
+
+  test("treats a negative or non-finite subtotal as zero rather than paying a seller for nothing", () => {
+    assert.deepEqual(
+        splitServiceFee(-50), { serviceFeeAmountUsd: 0, sellerRevenueUsd: 0 });
+    assert.deepEqual(
+        splitServiceFee(NaN), { serviceFeeAmountUsd: 0, sellerRevenueUsd: 0 });
+    assert.deepEqual(
+        splitServiceFee(undefined), { serviceFeeAmountUsd: 0, sellerRevenueUsd: 0 });
+  });
+});
+
+describe("validateOrderRequest", () => {
+  const items = [{ pid: "p1", vid: "v1", quantity: 1 }];
+  const address = { countryCode: "KE" };
+
+  test("requires a storeId - a cart can no longer check out unattributed to a seller", () => {
+    assert.throws(() => validateOrderRequest(items, address, undefined));
+    assert.throws(() => validateOrderRequest(items, address, ""));
+    assert.throws(() => validateOrderRequest(items, address, 42));
+  });
+
+  test("passes with a valid storeId and otherwise-valid items/address", () => {
+    assert.doesNotThrow(() => validateOrderRequest(items, address, "store-1"));
   });
 });

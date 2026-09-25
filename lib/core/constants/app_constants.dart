@@ -3,10 +3,13 @@ class AppConstants {
 
   static const String appName = 'Sellora';
 
-  /// When true, the app runs entirely on in-memory mock repositories —
-  /// no Firebase project, IntaSend account or CJ Dropshipping key
-  /// required. Flip to false once real credentials are wired up in
-  /// lib/data/services and InitialBinding. See README.md.
+  /// When true, catalog/orders/notifications/subscriptions/admin run on
+  /// in-memory mock repositories — no CJ Dropshipping key or IntaSend
+  /// account required. Sign-in/sign-up is **not** covered by this flag:
+  /// InitialBinding always wires AuthRepository/StoreRepository to their
+  /// real Firebase implementations, so a real sellora-20 Firebase project
+  /// (Email/Password auth enabled, firestore.rules deployed) is required
+  /// even with this flag true. See WORKLOG.md, 2026-09-25, and README.md.
   static const bool useMockData = true;
 
   /// The platform's cut of an order subtotal — 2%, applied to product

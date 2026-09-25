@@ -12,19 +12,19 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
   @override
   Future<OrderModel> placeOrder(OrderModel order) async {
     // The order doc is never written directly from the client — the
-    // Cloud Function re-prices every item from CJ's own live price itself,
-    // so a tampered `order.total`/fee field here is simply ignored. See
-    // functions/lib/orders.js's createOrder and firestore.rules (`orders`
-    // create is `if false`).
+    // Cloud Function re-prices every item from CJ's own live price and the
+    // store's own listed price itself, so a tampered `order.total`/fee field
+    // here is simply ignored. See functions/lib/orders.js's createOrder and
+    // firestore.rules (`orders` create is `if false`).
     //
     // `pid`/`vid` per item is correct — [OrderItem.cjProductId] and
     // [OrderItem.variantId] carry CJ's own ids all the way from the
     // catalog/variant model. `shippingAddress` now sends the
     // `{countryCode, line}` shape `createOrder` requires (see
-    // [ShippingAddress]). `storeId`/`paymentMethod`/`currency` are sent for
-    // this app's own bookkeeping only — the adopted single-vendor backend
-    // ignores all three: it has no seller/store/fee concept, and derives
-    // `currency` itself from `shippingAddress.countryCode`.
+    // [ShippingAddress]). `storeId` is required — the server re-derives
+    // `sellerId`/the fee split from it. `paymentMethod` is sent for this
+    // app's own bookkeeping only; `currency` is sent but the server derives
+    // its own from `shippingAddress.countryCode` and returns that instead.
     final res = await _dio.post(ApiEndpoints.createOrder, data: {
       'items': order.items
           .map((i) => {
@@ -43,12 +43,12 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
       if (order.logisticName != null) 'logisticName': order.logisticName,
     });
 
-    // The real response is `{id, totalAmount, currency, items, ...}` — no
-    // `orderId`/`code`/`serviceFeeAmount` (no seller/fee/store concept at
-    // all). There's no human-readable code either, so the order id doubles
-    // as one. The response's own `items` lack imageUrl/variantLabel, so
-    // this keeps the richer client-built list rather than overwriting it —
-    // only the fields the server actually recomputed are trusted here.
+    // The real response is `{id, totalAmount, currency, serviceFeeRate,
+    // serviceFeeAmount, sellerRevenue, items, ...}` — no `orderId`/`code`,
+    // so the order id doubles as one. The response's own `items` lack
+    // imageUrl/variantLabel, so this keeps the richer client-built list
+    // rather than overwriting it — only the fields the server actually
+    // recomputed are trusted here.
     return order.copyWith(
       id: res['id'] as String,
       code: res['id'] as String,
@@ -56,6 +56,9 @@ class FirebaseOrderRepository extends GetxService implements OrderRepository {
       currency: res['currency'] as String?,
       paymentStatus: OrderPaymentStatus.pending,
       logisticName: res['logisticName'] as String?,
+      serviceFeeRate: (res['serviceFeeRate'] as num?)?.toDouble(),
+      serviceFeeAmount: (res['serviceFeeAmount'] as num?)?.toDouble(),
+      sellerRevenue: (res['sellerRevenue'] as num?)?.toDouble(),
     );
   }
 

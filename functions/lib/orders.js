@@ -2,7 +2,7 @@ const { db, admin } = require("./firebaseAdmin");
 const cjApi = require("./cjApi");
 const { badRequest, notFound, unprocessable } = require("./errors");
 const { getUsdToKesRate, getRate } = require("./fx");
-const { getPricing, retailProductPrice, retailShippingPrice } = require("./pricing");
+const { getPricing, retailShippingPrice } = require("./pricing");
 const { resolveRegion } = require("./regions");
 const { ALERTS, logAlert, logInfo, logWarning } = require("./logging");
 const {
@@ -27,21 +27,40 @@ const PUSH_CLAIM_STALE_MS = 5 * 60 * 1000;
 // immediately - that's a real user choice.
 const DUPLICATE_ATTEMPT_WINDOW_MS = 2 * 60 * 1000;
 
+// Platform service fee: 2% of the product subtotal only - never shipping or
+// tax - snapshotted onto every order so a later change to this constant
+// can't retroactively change what a historical order owes its seller. See
+// SELLORA_IMPLEMENTATION_PLAN.md's "Decisions on record".
+const SERVICE_FEE_RATE = 0.02;
+
 /**
  * Builds an order from cart items, pricing everything from CJ's live prices
- * (never trust a client-supplied price). Returns the created order doc.
+ * (never trust a client-supplied price) and the selling store's own listed
+ * price (never trust a client-supplied price for that either - only the
+ * storeId is taken from the client, the price is re-read from Firestore).
+ * Returns the created order doc.
  * items: [{ pid, vid, quantity }]
+ * storeId: the store the buyer is checking out from (CartRepository only
+ * ever holds one store's items at a time, so this is the whole cart's
+ * seller - a mixed-seller cart is impossible to construct client-side, and
+ * this function double-checks it below by requiring every pid to resolve to
+ * *this* store's own listing).
  * logisticName: optional - the buyer's chosen CJ shipping line (as shown by
  * `calculateFreight`). Only the *name* is trusted from the client; its price
  * is always re-derived from CJ's own freight quote for this address, never
  * from anything the client sends. Falls back to the cheapest option when
  * omitted or when it no longer matches an option CJ actually offers.
  */
-async function createOrder({ uid, items, shippingAddress, logisticName }) {
-  validateOrderRequest(items, shippingAddress);
+async function createOrder({ uid, items, shippingAddress, logisticName, storeId }) {
+  validateOrderRequest(items, shippingAddress, storeId);
   if (!shippingAddress?.countryCode) {
     throw badRequest("shippingAddress.countryCode is required");
   }
+
+  const storeSnap = await db.collection("stores").doc(storeId).get();
+  if (!storeSnap.exists) throw notFound("Store not found");
+  const sellerId = storeSnap.data().sellerId;
+  const storeProducts = db.collection("stores").doc(storeId).collection("products");
 
   // Currency/region are derived from the shipping address server-side -
   // never trust a client-supplied currency.
@@ -50,7 +69,10 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
   const pricing = await getPricing();
   const priced = await Promise.all(
       items.map(async (item) => {
-        const variant = await cjApi.getVariant(item.vid);
+        const [variant, listingSnap] = await Promise.all([
+          cjApi.getVariant(item.vid),
+          storeProducts.doc(item.pid).get(),
+        ]);
         if (variant.pid !== item.pid) {
           throw badRequest("The selected product variant does not match its product");
         }
@@ -64,10 +86,26 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
               `No usable supplier price for variant ${item.vid}; ` +
               "this product is temporarily unavailable to buy");
         }
-        const retailUnitPriceUsd = retailProductPrice(
-            supplierUnitPriceUsd, pricing, { pid: item.pid, regionKey });
+        // Retail price is the *seller's own* listed price, not a fresh
+        // platform-margin price off CJ's cost - this is what actually makes
+        // sellerRevenue below mean anything. A seller who hasn't listed this
+        // product in this store, or has unpublished/disabled this exact
+        // variant, cannot be checked out against.
+        if (!listingSnap.exists || listingSnap.data().isListed !== true) {
+          throw unprocessable(`Product ${item.pid} is not available in this store`);
+        }
+        const listing = listingSnap.data();
+        const variantEntry = (listing.variants || []).find((v) => v.vid === item.vid);
+        if (listing.variants?.length && (!variantEntry || variantEntry.enabled === false)) {
+          throw unprocessable(`The selected variant is not available for product ${item.pid}`);
+        }
+        // Treated as USD, matching every other *Usd figure in this function.
+        // Holds today because nothing lets a seller list a product in a
+        // currency other than the ProductModel default (USD) - revisit this
+        // line if a seller-side listing-currency picker ever ships.
+        const retailUnitPriceUsd = Number(listing.sellPrice);
         if (!Number.isFinite(retailUnitPriceUsd) || retailUnitPriceUsd <= 0) {
-          throw new Error(`Could not price variant ${item.vid}`);
+          throw unprocessable(`Product ${item.pid} has no usable price set by its seller`);
         }
         return {
           pid: item.pid,
@@ -87,6 +125,12 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
   }
   const supplierSubtotalUsd = priced.reduce((sum, i) => sum + i.supplierLineTotalUsd, 0);
   const retailSubtotalUsd = priced.reduce((sum, i) => sum + i.retailLineTotalUsd, 0);
+  // USD bookkeeping figures, parallel to supplierSubtotalUsd/retailSubtotalUsd
+  // above - not yet wired to a real payout (that's the IntaSend Split
+  // Payments sub-account work in SELLORA_IMPLEMENTATION_PLAN.md PHASE 8,
+  // still gated on confirming its five API specifics against a real
+  // account). This is the snapshot those payouts will eventually read.
+  const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(retailSubtotalUsd);
 
   const freightOptions = await cjApi.calculateFreight({
     endCountryCode: shippingAddress.countryCode,
@@ -125,7 +169,11 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
 
   const retailFreightUsd = retailShippingPrice(freightUsd, pricing, { regionKey });
   const totalUsd = Math.round((retailSubtotalUsd + retailFreightUsd) * 100) / 100;
-  const estimatedProfitUsd = Math.round((totalUsd - supplierSubtotalUsd - freightUsd) * 100) / 100;
+  // Sellora's own platform take: what the buyer paid, minus CJ's actual
+  // costs, minus what's owed to the seller - i.e. the shipping markup plus
+  // the service fee, not the seller's revenue.
+  const estimatedProfitUsd = Math.round(
+      (totalUsd - supplierSubtotalUsd - freightUsd - sellerRevenueUsd) * 100) / 100;
 
   // Last line of defence: never write an order a customer could pay nothing
   // for, whatever combination of upstream prices produced it.
@@ -153,10 +201,14 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
 
   const orderRef = ORDERS.doc();
   const order = {
-    // userId is the canonical query field. uid remains temporarily for legacy
-    // clients and can be removed after the data migration.
+    // userId is the canonical query field. uid/buyerId remain for legacy
+    // clients and firestore.rules' ownership checks (which accept any of
+    // the three - see its "orders" match block).
     userId: uid,
     uid,
+    buyerId: uid,
+    sellerId,
+    storeId,
     status: "pendingPayment",
     itemCount: priced.length,
     supplierSubtotalUsd,
@@ -165,6 +217,9 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
     retailFreightUsd,
     totalUsd,
     estimatedProfitUsd,
+    serviceFeeRate: SERVICE_FEE_RATE,
+    serviceFeeAmount: serviceFeeAmountUsd,
+    sellerRevenue: sellerRevenueUsd,
     fxRate,
     totalKes,
     currency,
@@ -209,6 +264,21 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
   };
   const batch = db.batch();
   batch.set(orderRef, order);
+  // Mirrored into the store's own subcollection (already rules-ready - see
+  // firestore.rules), same doc id as the canonical `orders/{orderId}` above.
+  // No seller screen reads `stores/{storeId}/orders` yet - `sellerOrders`
+  // (the one the seller order queue/dashboard actually call) queries the
+  // flat `orders` collection by `sellerId` instead, which this function also
+  // now sets, and stays live via the payment/tracking/fulfillment updates
+  // below. This mirror is snapshotted at creation only: if a future screen
+  // reads it directly rather than through `sellerOrders`, every place below
+  // that later updates an order (attachPaymentAttempt, the payment webhooks,
+  // refundOrder, retryFailedFulfillments, refreshOrderTracking) needs the
+  // same write added here too, or it will silently go stale.
+  batch.set(
+      db.collection("stores").doc(storeId).collection("orders").doc(orderRef.id),
+      order,
+  );
   for (const item of priced) {
     batch.set(orderRef.collection("items").doc(`${item.pid}_${item.vid}`), {
       productId: item.pid,
@@ -228,7 +298,26 @@ async function createOrder({ uid, items, shippingAddress, logisticName }) {
   return { id: orderRef.id, ...order };
 }
 
-function validateOrderRequest(items, shippingAddress) {
+/**
+ * Splits a USD product subtotal into the platform's service fee and what's
+ * left for the seller. Pure/synchronous so it can be unit-tested without a
+ * Firestore/CJ mock - see marginPricingService.js for the same pattern.
+ * @param {number} retailSubtotalUsd Sum of retail line totals, USD, excluding
+ *   shipping (the fee is never charged on shipping - see SERVICE_FEE_RATE).
+ * @return {{serviceFeeAmountUsd: number, sellerRevenueUsd: number}}
+ */
+function splitServiceFee(retailSubtotalUsd) {
+  const subtotal = Number.isFinite(retailSubtotalUsd) && retailSubtotalUsd > 0 ?
+    retailSubtotalUsd : 0;
+  const serviceFeeAmountUsd = Math.round(subtotal * SERVICE_FEE_RATE * 100) / 100;
+  const sellerRevenueUsd = Math.round((subtotal - serviceFeeAmountUsd) * 100) / 100;
+  return { serviceFeeAmountUsd, sellerRevenueUsd };
+}
+
+function validateOrderRequest(items, shippingAddress, storeId) {
+  if (typeof storeId !== "string" || !storeId) {
+    throw badRequest("storeId is required");
+  }
   if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
     throw badRequest("items[] must contain between 1 and 50 items");
   }
@@ -683,4 +772,7 @@ module.exports = {
   MAX_FULFILLMENT_ATTEMPTS,
   PUSH_CLAIM_STALE_MS,
   DUPLICATE_ATTEMPT_WINDOW_MS,
+  SERVICE_FEE_RATE,
+  splitServiceFee,
+  validateOrderRequest,
 };
