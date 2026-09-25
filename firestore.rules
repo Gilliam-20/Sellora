@@ -15,16 +15,14 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
 
-    // The `admin` custom claim is what refundOrder/runCatalogSync in
-    // functions/index.js check; the `role` field is what the app's own admin
-    // screens were built on. Accepting both keeps the two consistent while
-    // admins are migrated onto the claim — the claim is checked first
-    // because it costs no document read. Once every admin carries the claim,
-    // drop the role() fallback and this ruleset stops trusting a Firestore
-    // field for admin access altogether.
+    // Admin access comes from the `admin` custom claim only — the same
+    // claim refundOrder/runCatalogSync in functions/index.js check. Only the
+    // Admin SDK can set it (functions/scripts/grant-admin.js, run against
+    // the one dedicated admin email), so no client write — to `users` or
+    // anywhere else — can make someone an admin. The `role: admin` field
+    // that script also writes is for the app's routing, never for access.
     function isAdmin() {
-      return isSignedIn() &&
-        (request.auth.token.get('admin', false) == true || role() == 'admin');
+      return isSignedIn() && request.auth.token.get('admin', false) == true;
     }
 
     function storeSellerId(storeId) {
@@ -107,7 +105,12 @@ service cloud.firestore {
         (request.resource.data.role != 'seller' ||
          (request.resource.data.sellerTermsAcceptedAt is string &&
           request.resource.data.sellerTermsVersion == '2026-09-17'));
-      allow update: if isAdmin() ||
+      // An admin may edit anyone, but may not mint another `role: admin`
+      // profile from the client: the admin is a single dedicated account,
+      // provisioned server-side together with its claim.
+      allow update: if (isAdmin() &&
+          (request.resource.data.role == resource.data.role ||
+           request.resource.data.role in ['buyer', 'seller'])) ||
         (isOwner(uid) && request.resource.data.role == resource.data.role &&
          !touchesAny(['subscriptionPlanId', 'subscriptionActiveUntil', 'sellerStatus',
            'sellerTermsAcceptedAt', 'sellerTermsVersion']));

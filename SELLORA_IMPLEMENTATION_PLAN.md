@@ -56,12 +56,14 @@ loading/error guard now sits in front of the seller shell so it can no longer re
 tabs while `StoreScope` is still resolving or failed to find a store (`SellerShellView`, 2026-09-12 —
 see `WORKLOG.md`).
 
+2026-09-25: onboarding now opens with a store-setup step (name, category, country, currency, which
+are new `StoreModel` fields). The shell's "you haven't created a store yet" branch routes there, and
+that step creates the store if it's missing. Email-verification status and resend are shown during
+setup.
+
 Still open: a store switcher for multi-store sellers (today `resolveForSeller` just picks
-`storesForSeller(sellerId).first`) — gated on decision #4; onboarding completion state and plan
-selection (folds into PHASE 3); still no screen that lets a seller *create* a store if the guard's
-"you haven't created a store yet" branch is ever hit for a real account (today it can only offer retry
-and sign-out) — every current signup path already creates one, so this is a defensive path, not a
-known-reachable gap.
+`storesForSeller(sellerId).first`), gated on decision #4. Email verification is shown but not
+required. No Google sign-in.
 
 ## PHASE 3 — Billing: security core + plan schema + usage tracking done, richer UI not started
 

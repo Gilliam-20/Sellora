@@ -122,6 +122,23 @@ test('admin: the `admin` custom claim is honoured without a role field', async (
   await assertFails(asForged.doc(`users/${SELLER_A}`).get());
 });
 
+test('admin: a `role: admin` doc without the claim grants nothing', async () => {
+  // ADMIN's users doc carries role: 'admin' (see beforeEach) — the
+  // Firestore field alone must no longer pass isAdmin().
+  const asRoleOnly = testEnv.authenticatedContext(ADMIN).firestore();
+  await assertFails(asRoleOnly.doc(`users/${SELLER_A}`).get());
+});
+
+test('admin: even an admin cannot promote another user to admin', async () => {
+  const asAdmin = testEnv
+    .authenticatedContext(CLAIM_ADMIN, { admin: true })
+    .firestore();
+  await assertFails(asAdmin.doc(`users/${SELLER_A}`).update({ role: 'admin' }));
+  await assertSucceeds(
+    asAdmin.doc(`users/${SELLER_A}`).update({ sellerStatus: 'suspended' }),
+  );
+});
+
 // ---- stores: slugs are unique and immutable ------------------------
 
 test('stores: a store cannot be created without reserving its slug', async () => {
@@ -203,7 +220,7 @@ test('orders: a seller can advance status but cannot mark an order paid', async 
 });
 
 test('orders: an admin can correct status but not payment fields', async () => {
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertSucceeds(asAdmin.doc('orders/o1').update({ status: 'cancelled' }));
   await assertFails(asAdmin.doc('orders/o1').update({ paymentStatus: 'paid' }));
   await assertFails(asAdmin.doc('orders/o1').update({ refundedAmount: 50 }));

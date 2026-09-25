@@ -3,14 +3,32 @@ class Validators {
 
   static String? email(String? value) {
     if (value == null || value.trim().isEmpty) return 'Enter your email';
-    final pattern = RegExp(r'^[\w\.\-]+@([\w\-]+\.)+[\w\-]{2,4}$');
+    // Allows `+` sub-addressing and any TLD length (.online, .agency); the
+    // real check is Firebase's, this only catches obvious typos.
+    final pattern = RegExp(r"^[\w.+'\-]+@([\w\-]+\.)+[A-Za-z]{2,}$");
     if (!pattern.hasMatch(value.trim())) return 'Enter a valid email address';
     return null;
   }
 
+  /// Sign-in only: an existing password is whatever it is, so the policy
+  /// in [newPassword] must not lock out an account created under an older
+  /// one (or one set via a password-reset link, which Firebase checks only
+  /// against its own minimum).
   static String? password(String? value) {
+    if (value == null || value.isEmpty) return 'Enter your password';
+    return null;
+  }
+
+  /// Sign-up policy. Keep in step with the Firebase Auth password policy
+  /// configured on the project, if one is set there.
+  static String? newPassword(String? value) {
     if (value == null || value.isEmpty) return 'Enter a password';
     if (value.length < 8) return 'Use at least 8 characters';
+    if (value.length > 128) return 'Use at most 128 characters';
+    if (!RegExp(r'[A-Za-z]').hasMatch(value) ||
+        !RegExp(r'[0-9]').hasMatch(value)) {
+      return 'Use both letters and numbers';
+    }
     return null;
   }
 

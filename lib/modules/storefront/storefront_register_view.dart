@@ -99,7 +99,7 @@ class _StorefrontRegisterViewState extends State<StorefrontRegisterView> {
                       controller: _passwordCtrl,
                       obscureText: true,
                       decoration: const InputDecoration(labelText: 'Password'),
-                      validator: Validators.password,
+                      validator: Validators.newPassword,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Obx(() {

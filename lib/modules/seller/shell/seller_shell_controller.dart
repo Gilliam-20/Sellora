@@ -40,6 +40,10 @@ class SellerShellController extends GetxController {
     }
   }
 
+  /// Onboarding's store-setup step creates a store when the seller has
+  /// none, then routes back here.
+  void setUpStore() => Get.offAllNamed(Routes.sellerOnboarding);
+
   void changeTab(int index) => tabIndex.value = index;
 
   Future<void> signOut() async {

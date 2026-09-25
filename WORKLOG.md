@@ -6,6 +6,85 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-25 — PHASE 2: onboarding store-setup step, no-store recovery, email verification
+
+**Status:** implemented this session. `flutter analyze`: 0 errors/warnings (3 pre-existing
+`curly_braces` infos in untouched files). `flutter test`: 45/46, with the same pre-existing
+`seller_shell_controller_test.dart` `NotificationCenter` failure. 8 new tests in
+`test/seller_onboarding_controller_test.dart`. Not run against the live `sellora-20` project.
+
+**Why:** user request: "work on phase 2". The only item the STATUS row listed (the multi-store
+switcher) is still blocked on decision #4. This session did the unblocked Phase 2 work from TODO.md
+§32–33 instead.
+
+**Changed:**
+- `StoreModel` gained `category` (a `StoreCategories.all` key) and `countryCode` (ISO alpha-2, where
+  the business is based, not where it ships), plus `isSetUp` (both are set). Old store docs read
+  them as null. No rules change was needed: the `stores` update rule already allows any field except
+  `id`/`slug`/`sellerId`/`createdAt`.
+- `createStoreForSeller()` in `store_repository.dart` is now the one place that creates a store
+  (first free slug, id `store-{sellerId}`). Both auth repositories' sign-up and onboarding call it,
+  which removes the copy that was duplicated in the Firebase and mock repositories.
+- Seller onboarding is now 3 steps: **store setup** (name, category, country, currency; the
+  currency defaults from the country) → plan → pay. A seller whose store is already set up skips to
+  plan selection. Saving updates the store and mirrors `storeName`/`currencyCode` onto the user doc.
+  The slug never changes. If the seller has no store, saving creates one. The screen has a back
+  button between steps and an error state if plans fail to load.
+- Seller shell: `StoreScope.isMissing` separates "found no store" from "the lookup failed". The
+  no-store case now offers "Create my store", which opens onboarding's setup step, instead of a
+  retry that could never succeed.
+- `AuthRepository.checkEmailVerified()` / `resendVerificationEmail()` (the mock always reports
+  verified). The store-setup step shows a verify-your-email banner with Resend and "I've verified".
+  Verification is still **not required** to continue.
+
+**Still open (Phase 2):** multi-store switcher and store-limit enforcement (decision #4); required
+email verification; Google sign-in (TODO §32, "where configured"); onboarding steps 8–11 (first
+import, payment, shipping, publish) are covered by the dashboard's setup checklist, not by this flow.
+Existing stores created before this session have no category/country. Their sellers only see the
+setup step if they come back through onboarding, for example after a subscription lapses.
+
+---
+
+## 2026-09-25 — Auth flow hardening; admin is one dedicated, server-provisioned email
+
+**Status:** implemented this session. `flutter analyze`: 0 errors (2 pre-existing infos in untouched
+files). `flutter test`: 36/37, the same pre-existing `seller_shell_controller_test.dart`
+`NotificationCenter` failure. Functions `npm test`: 256/256 (6 new in `grantAdmin.test.js`). Rules
+emulator suite: 35/35 (2 new). Not exercised against the live `sellora-20` project.
+
+**Why:** user request — production-ready auth with security intact, and "admin has his separate email".
+
+**Changed:**
+- `firestore.rules`: `isAdmin()` is now the `admin` custom claim **only**; the `role() == 'admin'`
+  fallback is gone, so no Firestore field grants admin. The `users` update rule also stops an admin
+  from setting `role: 'admin'` on another account from the client.
+- `functions/scripts/grant-admin.js` (new): the only way to make an admin. `node scripts/grant-admin.js
+  <email> [--name ..]` creates the Auth account if needed (no password; prints a one-time reset link),
+  sets the claim, and writes the `role: admin` profile. It refuses an email that is already a
+  buyer/seller (the admin must use a separate email) and refuses a second admin. `--revoke` drops the
+  claim, revokes refresh tokens, and deletes the profile.
+- `FirebaseAuthRepository`: a `role: admin` profile without the claim is rejected
+  (`admin-claim-missing`) at sign-in, session resume, and refresh. Sign-in force-refreshes the token so
+  claim changes apply immediately. Firebase exceptions become a provider-neutral `AuthFailure(code)`.
+  Emails are trimmed and lowercased. Sign-up sends a verification email (best effort, not enforced).
+  `signOut` clears the cache.
+- `AuthController`: maps errors by code, including `invalid-credential` (what Firebase returns with
+  email-enumeration protection on, which previously fell through to "Something went wrong"),
+  `too-many-requests`, `user-disabled`, and offline. Suspended sellers are signed out at sign-in and
+  session resume. `signOut` clears `lastRole`.
+- `Validators`: `password` (sign-in) only checks non-empty. The new `newPassword` (seller/buyer sign-up)
+  requires 8–128 characters with letters and digits. The email regex now accepts `+` and long TLDs.
+- `firestore-tests/*`: admin contexts now carry `{ admin: true }`.
+
+**Deploy order (required, otherwise admin access is lost):** run `grant-admin.js` for the admin email
+*before* `firebase deploy --only firestore:rules`. Any existing `role: admin` doc without the claim stops
+working the moment the new rules deploy.
+
+**Still open:** email verification is sent but not required for any action. Suspension is enforced in
+the client only. Rules don't block a suspended seller's writes yet.
+
+---
+
 ## 2026-09-25 — Identity is no longer mocked: Auth + Store always bind to Firebase
 
 **Status:** implemented this session. `flutter analyze`: 0 issues (was 1 pre-existing error in

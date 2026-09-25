@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../data/models/user_model.dart';
@@ -24,7 +24,9 @@ class AuthController extends GetxController {
         const Duration(seconds: 3),
         onTimeout: () => null,
       );
-      if (user != null) {
+      if (user != null && _isSuspended(user)) {
+        await _authRepo.signOut();
+      } else if (user != null) {
         await _goToHome(user);
         return;
       }
@@ -50,6 +52,11 @@ class AuthController extends GetxController {
         await _authRepo.signOut();
         errorMessage.value =
             'This is the seller sign-in. Buyers sign in from their store\'s page.';
+        return;
+      }
+      if (_isSuspended(user)) {
+        await _authRepo.signOut();
+        errorMessage.value = _suspendedMessage;
         return;
       }
       _storage.lastRole = user.role.name;
@@ -118,7 +125,8 @@ class AuthController extends GetxController {
     required bool hasAcceptedTerms,
   }) async {
     if (!hasAcceptedTerms) {
-      errorMessage.value = 'Please accept the Seller Terms & Conditions to continue.';
+      errorMessage.value =
+          'Please accept the Seller Terms & Conditions to continue.';
       return;
     }
     isLoading.value = true;
@@ -152,8 +160,16 @@ class AuthController extends GetxController {
   Future<void> signOut() async {
     await _authRepo.signOut();
     _cartRepo.setStore(null);
+    _storage.lastRole = null;
     Get.offAllNamed(Routes.login);
   }
+
+  static const _suspendedMessage =
+      'This seller account is suspended. Contact support@sellora.app.';
+
+  bool _isSuspended(UserModel user) =>
+      user.role == UserRole.seller &&
+      user.sellerStatus == SellerStatus.suspended;
 
   Future<void> _goToHome(UserModel user) async {
     switch (user.role) {
@@ -187,17 +203,44 @@ class AuthController extends GetxController {
   }
 
   String _friendlyError(Object e) {
-    final message = e.toString();
-    if (message.contains('user-not-found') ||
-        message.contains('wrong-password')) {
-      return 'That email and password combination doesn\'t match an account.';
+    debugPrint('AuthController: $e');
+    if (e is ArgumentError) {
+      return 'Please accept the Seller Terms & Conditions to continue.';
     }
-    if (message.contains('email-already-in-use')) {
-      return 'An account already exists with that email.';
+    final code = e is AuthFailure ? e.code : null;
+    switch (code) {
+      // `invalid-credential` is what Firebase returns for both a wrong
+      // password and an unknown email once email-enumeration protection
+      // is on (the default for new projects) — keep all three identical so
+      // the message never reveals whether an email is registered.
+      case 'invalid-credential':
+      case 'user-not-found':
+      case 'wrong-password':
+        return 'That email and password combination doesn\'t match an account.';
+      case 'invalid-email':
+        return 'Enter a valid email address.';
+      case 'user-disabled':
+        return 'This account has been disabled. Contact support@sellora.app.';
+      case 'too-many-requests':
+        return 'Too many attempts. Wait a few minutes, or reset your password.';
+      case 'network-request-failed':
+      case 'unavailable':
+        return 'You appear to be offline. Check your connection and try again.';
+      case 'email-already-in-use':
+        return 'An account already exists with that email. Try signing in.';
+      case 'weak-password':
+      case 'password-does-not-meet-requirements':
+        return 'Choose a stronger password (at least 8 characters, with letters and numbers).';
+      case 'operation-not-allowed':
+        return 'Email sign-in isn\'t available right now. Please try again later.';
+      case 'profile-missing':
+        return 'This account didn\'t finish setting up. Please register again or contact support.';
+      case 'admin-claim-missing':
+        return 'This account doesn\'t have admin access.';
+      case 'permission-denied':
+        return 'We couldn\'t save your account details. Please try again later.';
+      default:
+        return 'Something went wrong. Please try again.';
     }
-    if (message.contains('weak-password')) {
-      return 'Choose a stronger password (at least 8 characters).';
-    }
-    return 'Something went wrong. Please try again.';
   }
 }

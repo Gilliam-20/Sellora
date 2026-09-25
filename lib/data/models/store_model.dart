@@ -12,6 +12,8 @@ class StoreModel {
     this.logoUrl,
     this.bannerUrl,
     this.primaryColorHex,
+    this.category,
+    this.countryCode,
     this.currencyCode = 'KES',
     this.shippingZones = allShippingZoneIds,
     this.createdAt,
@@ -43,6 +45,15 @@ class StoreModel {
   /// stays free of Flutter imports like every other model in `data/models`.
   final String? primaryColorHex;
 
+  // ---- Onboarding profile -----------------------------------------------
+  /// One of [StoreCategories.all]'s ids. Null until the seller completes
+  /// onboarding's store-setup step.
+  final String? category;
+
+  /// ISO 3166-1 alpha-2 code of the country the seller operates from — not
+  /// where they ship to (that's [shippingZones]). Null until store setup.
+  final String? countryCode;
+
   final String currencyCode;
 
   /// Ids of the `ShippingZone`s (server pricing regions) this store ships
@@ -52,12 +63,17 @@ class StoreModel {
   final List<String> shippingZones;
   final DateTime? createdAt;
 
+  /// Whether the seller has been through onboarding's store-setup step.
+  bool get isSetUp => category != null && countryCode != null;
+
   StoreModel copyWith({
     String? name,
     String? tagline,
     String? logoUrl,
     String? bannerUrl,
     String? primaryColorHex,
+    String? category,
+    String? countryCode,
     String? currencyCode,
     List<String>? shippingZones,
   }) {
@@ -70,6 +86,8 @@ class StoreModel {
       logoUrl: logoUrl ?? this.logoUrl,
       bannerUrl: bannerUrl ?? this.bannerUrl,
       primaryColorHex: primaryColorHex ?? this.primaryColorHex,
+      category: category ?? this.category,
+      countryCode: countryCode ?? this.countryCode,
       currencyCode: currencyCode ?? this.currencyCode,
       shippingZones: shippingZones ?? this.shippingZones,
       createdAt: createdAt,
@@ -86,6 +104,8 @@ class StoreModel {
       logoUrl: map['logoUrl'] as String?,
       bannerUrl: map['bannerUrl'] as String?,
       primaryColorHex: map['primaryColorHex'] as String?,
+      category: map['category'] as String?,
+      countryCode: map['countryCode'] as String?,
       currencyCode: map['currencyCode'] as String? ?? 'KES',
       shippingZones:
           (map['shippingZones'] as List?)?.cast<String>() ?? allShippingZoneIds,
@@ -105,9 +125,27 @@ class StoreModel {
       'logoUrl': logoUrl,
       'bannerUrl': bannerUrl,
       'primaryColorHex': primaryColorHex,
+      'category': category,
+      'countryCode': countryCode,
       'currencyCode': currencyCode,
       'shippingZones': shippingZones,
       'createdAt': createdAt?.toIso8601String(),
     };
   }
+}
+
+/// The store categories onboarding offers. Keys are persisted on
+/// [StoreModel.category]; values are display labels.
+class StoreCategories {
+  StoreCategories._();
+
+  static const all = <String, String>{
+    'fashion': 'Fashion & apparel',
+    'electronics': 'Electronics & gadgets',
+    'home': 'Home & living',
+    'beauty': 'Beauty & personal care',
+    'kids': 'Kids & baby',
+    'sports': 'Sports & outdoors',
+    'general': 'General store',
+  };
 }

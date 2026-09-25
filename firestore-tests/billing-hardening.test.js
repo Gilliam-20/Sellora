@@ -72,7 +72,7 @@ test('subscriptions: no client, including the owning seller, can write their own
     asSellerA.doc(`subscriptions/${SELLER_A}`).set({ status: 'active', orderLimit: -1 }),
   );
 
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertFails(
     asAdmin.doc(`subscriptions/${SELLER_A}`).update({ orderLimit: -1 }),
   );
@@ -87,7 +87,7 @@ test('subscriptions: the owning seller can read their own subscription doc, anot
 });
 
 test('subscriptions: admin can read any subscription doc', async () => {
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertSucceeds(asAdmin.doc(`subscriptions/${SELLER_A}`).get());
 });
 
@@ -110,7 +110,7 @@ test('users: a seller can still edit unrelated fields on their own doc', async (
 });
 
 test('users: an admin can still set a seller\'s subscription fields', async () => {
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertSucceeds(
     asAdmin.doc(`users/${SELLER_A}`).update({
       sellerStatus: 'active',
@@ -126,7 +126,7 @@ test('billing_history: no client can write a billing_history entry directly', as
     asSellerA.doc('billing_history/bh1').set({ sellerId: SELLER_A, status: 'paid' }),
   );
 
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertFails(
     asAdmin.doc('billing_history/bh1').set({ sellerId: SELLER_A, status: 'paid' }),
   );

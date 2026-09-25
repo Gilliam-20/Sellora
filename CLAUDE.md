@@ -145,8 +145,10 @@ open:
 - The IntaSend webhook "challenge" scheme in `functions/src/intasend.ts` is implemented from their
   published docs, not verified against a real account — reconfirm the exact payload shape before going
   live.
-- `firestore.rules` still reads `role` off the client-writable `users/{uid}` document (a user can no
-  longer *change* their own role, but it's still a Firestore field, not a Firebase Auth custom claim).
+- Admin is claim-only as of 2026-09-25: one dedicated email, provisioned solely by
+  `functions/scripts/grant-admin.js` (no in-app admin sign-up). The `seller`/`buyer` distinction
+  in `firestore.rules` still reads `role` off the `users/{uid}` doc. Self-escalation is blocked there,
+  but it's still a Firestore field, not a claim.
 - The current checkout assumes one seller per cart — `createOrder` now rejects a mixed-seller cart
   outright rather than silently misattributing it, but doesn't split it either.
 - CJ Dropshipping's auth handshake and response shapes vary by account type; `functions/src/cj.ts`

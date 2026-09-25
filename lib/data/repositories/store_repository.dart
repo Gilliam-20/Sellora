@@ -1,3 +1,4 @@
+import '../../core/utils/slug.dart';
 import '../models/store_model.dart';
 
 abstract class StoreRepository {
@@ -16,4 +17,37 @@ abstract class StoreRepository {
   Future<StoreModel> createStore(StoreModel store);
 
   Future<void> updateStore(StoreModel store);
+}
+
+/// Creates a seller's store under the first free slug derived from
+/// [storeName] (`my-shop`, `my-shop-2`, ...). Shared by both auth
+/// repositories' sign-up and onboarding's "create your store" recovery path,
+/// so every store creation reserves its slug the same way. The id is
+/// `store-{sellerId}` — one store per seller until decision #4 (see
+/// WORKLOG.md) settles multi-store.
+Future<StoreModel> createStoreForSeller(
+  StoreRepository repository, {
+  required String sellerId,
+  required String storeName,
+  String? category,
+  String? countryCode,
+  String currencyCode = 'KES',
+}) async {
+  final base = slugify(storeName);
+  var slug = base;
+  var suffix = 2;
+  while (await repository.storeBySlug(slug) != null) {
+    slug = '$base-$suffix';
+    suffix++;
+  }
+  return repository.createStore(StoreModel(
+    id: 'store-$sellerId',
+    slug: slug,
+    sellerId: sellerId,
+    name: storeName,
+    category: category,
+    countryCode: countryCode,
+    currencyCode: currencyCode,
+    createdAt: DateTime.now(),
+  ));
 }

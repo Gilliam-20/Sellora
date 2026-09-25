@@ -50,18 +50,28 @@ class SellerShellView extends GetView<SellerShellController> {
           return const Scaffold(
               body: AppLoadingState(label: 'Loading your store…'));
         }
+        final missing = scope.isMissing.value;
         return Scaffold(
           body: Column(
             children: [
               Expanded(
-                child: EmptyState(
-                  icon: Icons.storefront_outlined,
-                  title: 'We couldn\'t load your store',
-                  message: scope.errorMessage.value ??
-                      'Something went wrong loading your store.',
-                  actionLabel: 'Try again',
-                  onAction: controller.resolveStore,
-                ),
+                child: missing
+                    ? EmptyState(
+                        icon: Icons.add_business_outlined,
+                        title: 'Set up your store',
+                        message: 'Your account doesn\'t have a store yet. '
+                            'It takes a minute to create one.',
+                        actionLabel: 'Create my store',
+                        onAction: controller.setUpStore,
+                      )
+                    : EmptyState(
+                        icon: Icons.storefront_outlined,
+                        title: 'We couldn\'t load your store',
+                        message: scope.errorMessage.value ??
+                            'Something went wrong loading your store.',
+                        actionLabel: 'Try again',
+                        onAction: controller.resolveStore,
+                      ),
               ),
               TextButton(
                 onPressed: controller.signOut,

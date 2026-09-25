@@ -67,7 +67,7 @@ test('users: a signed-in user cannot grant themselves admin', async () => {
 });
 
 test('users: an admin can change another user\'s role', async () => {
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertSucceeds(
     asAdmin.doc(`users/${BUYER_X}`).update({ role: 'seller' }),
   );
@@ -78,7 +78,7 @@ test('users: a signed-in user can no longer read every user document', async () 
   await assertFails(asBuyerX.doc(`users/${SELLER_A}`).get());
   await assertSucceeds(asBuyerX.doc(`users/${BUYER_X}`).get());
 
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertSucceeds(asAdmin.doc(`users/${SELLER_A}`).get());
 });
 
@@ -117,7 +117,7 @@ test('orders: no client can create an order document directly', async () => {
     asBuyerX.doc('orders/o1').set({ buyerId: BUYER_X, total: 1 }),
   );
 
-  const asAdmin = testEnv.authenticatedContext(ADMIN).firestore();
+  const asAdmin = testEnv.authenticatedContext(ADMIN, { admin: true }).firestore();
   await assertFails(
     asAdmin.doc('orders/o1').set({ buyerId: BUYER_X, total: 1 }),
   );

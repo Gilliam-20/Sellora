@@ -16,6 +16,10 @@ class StoreScope extends GetxService {
   final isResolving = false.obs;
   final errorMessage = RxnString();
 
+  /// True when the last lookup succeeded but found no store — as opposed to
+  /// failing — so callers can offer "create one" rather than "try again".
+  final isMissing = false.obs;
+
   Future<StoreModel?> resolveSlug(String slug) => _resolve(
         () => _storeRepository.storeBySlug(slug.trim().toLowerCase()),
         notFoundMessage: 'This storefront could not be found.',
@@ -40,11 +44,13 @@ class StoreScope extends GetxService {
   }) async {
     isResolving.value = true;
     errorMessage.value = null;
+    isMissing.value = false;
     try {
       final store = await lookup();
       current.value = store;
       if (store == null) {
         errorMessage.value = notFoundMessage;
+        isMissing.value = true;
       }
       return store;
     } catch (_) {
@@ -59,5 +65,6 @@ class StoreScope extends GetxService {
   void clear() {
     current.value = null;
     errorMessage.value = null;
+    isMissing.value = false;
   }
 }
