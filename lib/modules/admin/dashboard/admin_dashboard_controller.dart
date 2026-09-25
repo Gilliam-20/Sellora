@@ -7,6 +7,7 @@ import '../../../data/repositories/admin_repository.dart';
 import '../../../data/repositories/order_repository.dart';
 import '../../../data/repositories/store_repository.dart';
 import '../../../data/repositories/subscription_repository.dart';
+import 'admin_dashboard_models.dart';
 
 class AdminDashboardController extends GetxController {
   final AdminRepository _adminRepo = Get.find<AdminRepository>();
@@ -20,6 +21,13 @@ class AdminDashboardController extends GetxController {
   final orders = <OrderModel>[].obs;
   final stores = <StoreModel>[].obs;
   final plans = <SubscriptionPlanModel>[].obs;
+
+  /// Controls the platform chart independently of the headline lifetime
+  /// totals. A daily series makes a recent change in marketplace activity
+  /// visible instead of burying it in the all-time number.
+  final selectedTrendDays = 30.obs;
+  final selectedTrendMetric = AdminTrendMetric.gmv.obs;
+  final platformTrend = <PlatformTrendPoint>[].obs;
 
   int get activeSellerCount =>
       sellers.where((s) => s.sellerStatus == SellerStatus.active).length;
@@ -94,6 +102,50 @@ class AdminDashboardController extends GetxController {
     orders.value = results[1] as List<OrderModel>;
     stores.value = results[2] as List<StoreModel>;
     plans.value = results[3] as List<SubscriptionPlanModel>;
+    _recomputePlatformTrend();
     isLoading.value = false;
+  }
+
+  void selectTrendDays(int days) {
+    selectedTrendDays.value = days;
+    _recomputePlatformTrend();
+  }
+
+  void selectTrendMetric(AdminTrendMetric metric) {
+    selectedTrendMetric.value = metric;
+  }
+
+  void _recomputePlatformTrend() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = today.subtract(Duration(days: selectedTrendDays.value - 1));
+    final end = today.add(const Duration(days: 1));
+    final buckets = <DateTime, ({double gmv, double serviceFees})>{
+      for (var day = start; day.isBefore(end); day = day.add(const Duration(days: 1)))
+        day: (gmv: 0, serviceFees: 0),
+    };
+
+    for (final order in _paidOrders) {
+      if (order.createdAt.isBefore(start) || !order.createdAt.isBefore(end)) {
+        continue;
+      }
+      final day = DateTime(
+          order.createdAt.year, order.createdAt.month, order.createdAt.day);
+      final current = buckets[day];
+      if (current != null) {
+        buckets[day] = (
+          gmv: current.gmv + order.total,
+          serviceFees: current.serviceFees + order.serviceFeeAmount,
+        );
+      }
+    }
+
+    platformTrend.value = buckets.entries
+        .map((entry) => PlatformTrendPoint(
+              day: entry.key,
+              gmv: entry.value.gmv,
+              serviceFees: entry.value.serviceFees,
+            ))
+        .toList();
   }
 }

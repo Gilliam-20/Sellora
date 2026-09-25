@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
@@ -7,6 +8,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/manifest_stub.dart';
 import 'admin_dashboard_controller.dart';
+import 'admin_dashboard_models.dart';
 
 class AdminDashboardView extends GetView<AdminDashboardController> {
   const AdminDashboardView({super.key});
@@ -51,6 +53,8 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
                           code: 'KES'),
                       accentColor: AppColors.adminAccent),
                 ]),
+                const SizedBox(height: AppSpacing.lg),
+                const _PlatformTrendCard(),
                 const SizedBox(height: AppSpacing.lg),
                 const SectionHeader(title: 'Sellers & stores'),
                 const SizedBox(height: AppSpacing.sm),
@@ -126,4 +130,166 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
         childAspectRatio: 1.5,
         children: cards,
       );
+}
+
+class _PlatformTrendCard extends GetView<AdminDashboardController> {
+  const _PlatformTrendCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final metric = controller.selectedTrendMetric.value;
+      final points = controller.platformTrend;
+      final hasValues = points.any((point) => point.amountFor(metric) > 0);
+      final accent = metric == AdminTrendMetric.gmv
+          ? AppColors.cargoNavy
+          : AppColors.manifestGoldDeep;
+
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.cloud,
+          borderRadius: BorderRadius.circular(AppRadii.card),
+          border: Border.all(color: AppColors.hairline),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Platform performance',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 2),
+            Text(
+              metric == AdminTrendMetric.gmv
+                  ? 'Paid order value across seller stores.'
+                  : 'Sellora service fees from paid orders only.',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.slate),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final days in [7, 30, 90])
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.xs),
+                      child: ChoiceChip(
+                        label: Text('Last $days days'),
+                        selected: controller.selectedTrendDays.value == days,
+                        onSelected: (_) => controller.selectTrendDays(days),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            SegmentedButton<AdminTrendMetric>(
+              segments: [
+                for (final option in AdminTrendMetric.values)
+                  ButtonSegment(value: option, label: Text(option.label)),
+              ],
+              selected: {metric},
+              onSelectionChanged: (selection) =>
+                  controller.selectTrendMetric(selection.first),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            SizedBox(
+              height: 190,
+              child: hasValues
+                  ? LineChart(_chartData(points, metric, accent))
+                  : Center(
+                      child: Text(
+                        metric == AdminTrendMetric.gmv
+                            ? 'No paid orders in this period yet.'
+                            : 'No service-fee revenue is recorded in this period.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  LineChartData _chartData(
+    List<PlatformTrendPoint> points,
+    AdminTrendMetric metric,
+    Color accent,
+  ) {
+    final amounts = points.map((point) => point.amountFor(metric)).toList();
+    final maxY = amounts.fold(0.0, (max, amount) => amount > max ? amount : max);
+    final labelEvery = (points.length / 5).ceil().clamp(1, points.length);
+    return LineChartData(
+      minY: 0,
+      maxY: maxY * 1.2,
+      gridData: FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        horizontalInterval: maxY / 3,
+        getDrawingHorizontalLine: (_) =>
+            const FlLine(color: AppColors.hairline, strokeWidth: 1),
+      ),
+      borderData: FlBorderData(show: false),
+      titlesData: FlTitlesData(
+        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles:
+            const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        bottomTitles: AxisTitles(
+          sideTitles: SideTitles(
+            showTitles: true,
+            interval: labelEvery.toDouble(),
+            reservedSize: 26,
+            getTitlesWidget: (value, meta) {
+              final index = value.round();
+              if (index < 0 || index >= points.length) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  Formatters.date_(points[index].day),
+                  style: const TextStyle(fontSize: 10, color: AppColors.slate),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+      lineTouchData: LineTouchData(
+        touchTooltipData: LineTouchTooltipData(
+          getTooltipItems: (spots) => spots.map((spot) {
+            final point = points[spot.x.round()];
+            return LineTooltipItem(
+              '${Formatters.date_(point.day)}\n${Formatters.currency(spot.y, code: 'KES')}',
+              const TextStyle(
+                color: AppColors.cloud,
+                fontWeight: FontWeight.w600,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+      lineBarsData: [
+        LineChartBarData(
+          spots: [
+            for (var index = 0; index < amounts.length; index++)
+              FlSpot(index.toDouble(), amounts[index]),
+          ],
+          isCurved: false,
+          barWidth: 2,
+          color: accent,
+          dotData: const FlDotData(show: false),
+          belowBarData: BarAreaData(
+            show: true,
+            color: accent.withValues(alpha: 0.12),
+          ),
+        ),
+      ],
+    );
+  }
 }
