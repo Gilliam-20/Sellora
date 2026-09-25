@@ -1,6 +1,6 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-21 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-25 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
@@ -15,7 +15,7 @@
 | **8 — Payments + orders** | `IntasendService` (order-checkout payment) reconciled with the real backend 2026-09-14; the per-SKU CJ variant id gap closed 2026-09-15 — `FirebaseOrderRepository.placeOrder` now sends real `{pid, vid, quantity}` per item. `shippingAddress`/response-shape gap also closed 2026-09-15 — checkout now collects a country and sends `{countryCode, line}`, and `placeOrder` reads the real `{id, totalAmount, currency, items, ...}` response. Still open: `shippingAddress.line` is one free-text string, not CJ's full fulfillment-address shape; no provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
 | **9 — Analytics + marketing** | Dashboard-analytics slice shipped 2026-09-21: date-range filtering, gross sales/net revenue/AOV/order-status breakdown, a sales-over-time chart, top products, a store-health card (plan/listing/order usage), and a guided setup checklist. Not started: discount codes, customer analytics/CustomerModel, marketing campaigns |
 | **10 — Admin** | First slice shipped 2026-09-22: the admin shell's screens (Overview, Sellers, Sync, Orders, Plans) already ran against the real backend, not marketplace-era mocks — this row was stale. What was actually missing was fixed this session: a platform-financial-model overview (seller GMV vs Sellora service-fee revenue vs subscription MRR/ARR, kept separate per TODO.md §35) replacing a single naive GMV tile, plus a new Stores tab (`StoreRepository.allStores()` was already there, unused). Not started: store suspension (no `StoreModel` status field), refunds UI, coupons, categories, themes, feature flags, platform settings, reports, support, churn |
-| **11 — i18n** | Not started |
+| **11 — i18n** | First slice shipped 2026-09-25: `lib/core/i18n/` adds a KES/USD/GBP/EUR currency registry, an integer-minor-unit `Money` type, a country/shipping-zone/payment-method registry mirroring `functions/lib/regions.js` (sync-tested), and `flutter_localizations` wiring. `CurrencyService` converts all four currencies from the server's cached `config/fx` rates; sellers pick shipping zones in Customize store; checkout offers only in-zone countries, converts CJ freight into the cart currency, and offers card (IntaSend hosted page) alongside Kenya-only M-Pesa. Not done: server-side zone enforcement, non-KES settlement, minor-unit persisted models, ARB string extraction/second language |
 | **12 — Security + production** | Pulled forward and done: role self-escalation closed, `listings` ownership-checked, `orders` locked to server-only creation, secrets moved to `defineSecret` |
 
 `useMockData` is still `true` — nothing points at real Firebase/CJ/IntaSend yet. CJ and IntaSend

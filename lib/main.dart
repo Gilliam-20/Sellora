@@ -8,6 +8,7 @@ import 'app/routes/app_pages.dart';
 import 'app/routes/app_routes.dart';
 import 'app/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'core/i18n/app_locales.dart';
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -37,6 +38,8 @@ class SelloraApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       themeMode: ThemeMode.light,
+      localizationsDelegates: AppLocales.delegates,
+      supportedLocales: AppLocales.supported,
       // Web opens straight on the marketing/landing page, matching how a
       // browser homepage behaves. Mobile leads with the branded splash,
       // which (once its session check finds nobody signed in) continues to

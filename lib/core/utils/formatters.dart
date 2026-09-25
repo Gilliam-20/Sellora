@@ -1,22 +1,26 @@
 import 'package:intl/intl.dart';
 
+import '../i18n/currencies.dart';
+import '../i18n/money.dart';
+
 class Formatters {
   Formatters._();
 
   /// Sellora stores all prices in the seller's chosen currency code
   /// alongside the amount (see [ProductModel.currency]); this formats
   /// using that code so a Nairobi seller sees KES and a US seller sees USD.
+  /// Symbol and decimal places come from [Currencies], so every currency
+  /// renders from one registry.
   static String currency(double amount, {String code = 'USD'}) {
-    final symbol = switch (code) {
-      'KES' => 'KSh ',
-      'USD' => r'$',
-      'EUR' => '€',
-      'GBP' => '£',
-      _ => '$code ',
-    };
-    final formatted = NumberFormat('#,##0.00').format(amount);
-    return '$symbol$formatted';
+    final info = Currencies.of(code);
+    final pattern =
+        info.decimalDigits == 0 ? '#,##0' : '#,##0.${'0' * info.decimalDigits}';
+    final formatted = NumberFormat(pattern).format(amount.abs());
+    return '${amount < 0 ? '-' : ''}${info.symbol}$formatted';
   }
+
+  static String money(Money value) =>
+      currency(value.toMajor(), code: value.currency);
 
   static String date(DateTime date) => DateFormat('MMM d, y').format(date);
 

@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/i18n/currencies.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -80,14 +81,27 @@ class BuyerProfileView extends StatelessWidget {
                           style: Theme.of(context).textTheme.bodyMedium)),
                   Obx(() {
                     final currency = Get.find<CurrencyService>();
-                    return SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'USD', label: Text('USD')),
-                        ButtonSegment(value: 'KES', label: Text('KSh')),
-                      ],
-                      selected: {currency.code.value},
-                      onSelectionChanged: (selection) =>
-                          currency.setCode(selection.first),
+                    // A dropdown rather than a segmented control — four
+                    // currencies no longer fit one row on a phone.
+                    return DropdownButton<String>(
+                      value: currency.code.value,
+                      underline: const SizedBox.shrink(),
+                      // Closed state shows only the code; names are in
+                      // the open menu, where there's room for them.
+                      selectedItemBuilder: (_) => Currencies.all
+                          .map((c) => Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(c.code)))
+                          .toList(),
+                      items: Currencies.all
+                          .map((c) => DropdownMenuItem(
+                                value: c.code,
+                                child: Text('${c.code} · ${c.name}'),
+                              ))
+                          .toList(),
+                      onChanged: (code) {
+                        if (code != null) currency.setCode(code);
+                      },
                     );
                   }),
                 ],

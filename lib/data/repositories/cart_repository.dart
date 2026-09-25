@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import '../../core/i18n/money.dart';
 import '../models/cart_item_model.dart';
 import '../models/product_model.dart';
 
@@ -23,7 +24,14 @@ class CartRepository extends GetxService {
     }
   }
 
-  double get subtotal => items.fold(0, (sum, item) => sum + item.lineTotal);
+  /// Summed in integer minor units (see [Money]) so a long cart can't
+  /// accumulate floating-point drift into its total.
+  Money get subtotalMoney => Money.sum(
+      items.map(
+          (i) => Money.fromMajor(i.product.sellPrice, currency) * i.quantity),
+      currency);
+
+  double get subtotal => subtotalMoney.toMajor();
   int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
 
   /// The currency the subtotal is priced in. Checkout already rejects a

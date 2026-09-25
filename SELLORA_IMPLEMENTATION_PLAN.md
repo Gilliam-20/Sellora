@@ -296,8 +296,14 @@ historical snapshot to compute it from yet).
 
 ## PHASE 11 — Internationalization
 
-Not started. `platformServiceFeeRate` and `StoreModel.currencyCode` exist as seams; no multi-currency
-conversion service yet.
+First slice shipped 2026-09-25 (see WORKLOG.md). Done: currency registry (KES/USD/GBP/EUR) and a
+`Money` minor-unit type in `lib/core/i18n/`; `CurrencyService` converting all four from the server's
+`config/fx` rate cache (`FxRateRepository`, Firebase + mock); a country/shipping-zone/payment-method
+registry mirroring `functions/lib/regions.js`, with a test that fails on drift; per-store
+`shippingZones` editable in Customize store and applied to checkout's country list; card payment via
+IntaSend's hosted page for non-Kenyan buyers; `flutter_localizations` wired (English only). Still open:
+server-side zone enforcement (blocked on the same store-less `createOrder` as PHASE 8), non-KES
+settlement, a real `PaymentProvider` interface, minor-unit persisted amounts, ARB string extraction.
 
 ## PHASE 12 — Security + production
 

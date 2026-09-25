@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/i18n/countries.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../data/models/store_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/services/currency_service.dart';
+import '../../storefront/store_scope.dart';
 import 'checkout_controller.dart';
 
 class CheckoutView extends StatefulWidget {
@@ -18,19 +21,6 @@ class CheckoutView extends StatefulWidget {
   State<CheckoutView> createState() => _CheckoutViewState();
 }
 
-/// Curated against `functions/lib/regions.js`'s `REGION_CONFIG`: these are
-/// the country codes with their own named pricing region (kenya/us/uk/eu);
-/// anything else still works (the backend falls back to us/USD) but isn't
-/// worth listing here. Kenya defaults first per the product's Kenya-first
-/// positioning.
-const _countries = [
-  ('KE', 'Kenya'),
-  ('US', 'United States'),
-  ('GB', 'United Kingdom'),
-  ('DE', 'Germany'),
-  ('FR', 'France'),
-];
-
 class _CheckoutViewState extends State<CheckoutView> {
   // Owned here rather than created in build() — a rebuild (e.g. from
   // the responsive width check below) would otherwise hand every field
@@ -38,7 +28,31 @@ class _CheckoutViewState extends State<CheckoutView> {
   final _formKey = GlobalKey<FormState>();
   final _addressCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  String _countryCode = _countries.first.$1;
+
+  /// Only the countries in the store's enabled shipping zones (see
+  /// `StoreModel.shippingZones`), Kenya first. Falls back to every
+  /// configured country if a store somehow has no zones, rather than
+  /// leaving checkout with an empty dropdown.
+  late final List<CountryConfig> _countries = () {
+    final zones = ShippingZone.parseAll(
+        Get.find<StoreScope>().current.value?.shippingZones ??
+            StoreModel.allShippingZoneIds);
+    final countries = Countries.forZones(zones);
+    return countries.isEmpty
+        ? Countries.forZones(ShippingZone.values)
+        : countries;
+  }();
+  late String _countryCode = _countries.first.code;
+  late PaymentMethodType _method =
+      Countries.resolve(_countryCode).paymentMethods.first;
+
+  void _selectCountry(String code) {
+    final methods = Countries.resolve(code).paymentMethods;
+    setState(() {
+      _countryCode = code;
+      if (!methods.contains(_method)) _method = methods.first;
+    });
+  }
 
   @override
   void initState() {
@@ -167,13 +181,13 @@ class _CheckoutViewState extends State<CheckoutView> {
                   decoration: const InputDecoration(labelText: 'Country'),
                   items: _countries
                       .map((c) => DropdownMenuItem(
-                            value: c.$1,
-                            child: Text(c.$2),
+                            value: c.code,
+                            child: Text(c.name),
                           ))
                       .toList(),
                   onChanged: (v) {
                     if (v != null) {
-                      setState(() => _countryCode = v);
+                      _selectCountry(v);
                       controller.refreshShippingEstimate(v);
                     }
                   },
@@ -208,7 +222,8 @@ class _CheckoutViewState extends State<CheckoutView> {
                           subtitle: option.estimatedDelivery != null
                               ? Text(option.estimatedDelivery!)
                               : null,
-                          secondary: Text(currencyService.format(option.cost,
+                          secondary: Text(currencyService.format(
+                              controller.optionCost(option),
                               fromCode: currency)),
                         ),
                       ),
@@ -223,15 +238,48 @@ class _CheckoutViewState extends State<CheckoutView> {
                   validator: (v) => Validators.notEmpty(v, label: 'Address'),
                 ),
                 const SizedBox(height: AppSpacing.lg),
-                Text('Pay with M-Pesa',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text('Payment', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.sm),
-                TextFormField(
-                  controller: _phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(hintText: '07XXXXXXXX'),
-                  validator: Validators.mpesaPhone,
-                ),
+                ...Countries.resolve(_countryCode).paymentMethods.map(
+                      (m) => RadioListTile<PaymentMethodType>(
+                        value: m,
+                        groupValue: _method,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (v) {
+                          if (v != null) setState(() => _method = v);
+                        },
+                        title: Text(m.label),
+                        subtitle: Text(m == PaymentMethodType.mpesa
+                            ? 'STK push to a Kenyan Safaricom number'
+                            : 'Visa or Mastercard, on a secure payment page'),
+                      ),
+                    ),
+                if (_method == PaymentMethodType.mpesa) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  TextFormField(
+                    controller: _phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                        labelText: 'M-Pesa number', hintText: '07XXXXXXXX'),
+                    validator: Validators.mpesaPhone,
+                  ),
+                ],
+                Obx(() {
+                  final currency = controller.cartRepo.currency;
+                  final display = Get.find<CurrencyService>();
+                  if (!display.isConverted(currency)) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.md),
+                    child: Text(
+                      'Prices are shown in ${display.code.value}, converted '
+                      'from $currency at an indicative rate. The amount '
+                      'charged is confirmed on the payment step.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  );
+                }),
                 const SizedBox(height: AppSpacing.md),
                 Obx(() {
                   final error = controller.errorMessage.value;
@@ -255,6 +303,7 @@ class _CheckoutViewState extends State<CheckoutView> {
               controller.placeOrder(
                   address: _addressCtrl.text.trim(),
                   countryCode: _countryCode,
+                  method: _method,
                   mpesaPhone: _phoneCtrl.text.trim());
             }
           },

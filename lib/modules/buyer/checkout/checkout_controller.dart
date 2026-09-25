@@ -1,6 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/i18n/countries.dart';
+import '../../../core/i18n/money.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/freight_estimate.dart';
 import '../../../data/models/order_model.dart';
@@ -9,6 +13,7 @@ import '../../../data/repositories/cart_repository.dart';
 import '../../../data/repositories/order_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../../data/services/currency_service.dart';
 import '../../../data/services/intasend_service.dart';
 
 class CheckoutController extends GetxController {
@@ -37,9 +42,26 @@ class CheckoutController extends GetxController {
   /// `createOrder` re-validates [selectedShippingOption]'s name and
   /// re-derives the price itself from CJ's own quote (see
   /// functions/lib/orders.js) — this never trusts its own [cost] value.
-  double get shippingFee => selectedShippingOption.value?.cost ?? 0;
+  double get shippingFee => shippingFeeMoney.toMajor();
 
-  double get total => cartRepo.subtotal + shippingFee;
+  /// CJ quotes freight in its own currency (USD) while the cart is priced in
+  /// the listings' currency — converted here before the two are ever added,
+  /// rather than summing two currencies' raw numbers.
+  Money get shippingFeeMoney {
+    final option = selectedShippingOption.value;
+    if (option == null) return Money.zero(cartRepo.currency);
+    return _toCartCurrency(option);
+  }
+
+  /// One quoted [option]'s cost in the cart's currency, for listing each
+  /// shipment type.
+  double optionCost(FreightOption option) => _toCartCurrency(option).toMajor();
+
+  Money _toCartCurrency(FreightOption option) =>
+      Get.find<CurrencyService>().convertMoney(
+          Money.fromMajor(option.cost, option.currency), cartRepo.currency);
+
+  double get total => (cartRepo.subtotalMoney + shippingFeeMoney).toMajor();
 
   /// Re-quotes [shippingOptions] for [countryCode]. Called on load and
   /// whenever the buyer changes the destination country — never blocks or
@@ -94,12 +116,23 @@ class CheckoutController extends GetxController {
     selectedShippingOption.value = option;
   }
 
-  Future<void> placeOrder(
-      {required String address,
-      required String countryCode,
-      required String mpesaPhone}) async {
+  /// Places the order and starts payment by [method]. [mpesaPhone] is
+  /// required for [PaymentMethodType.mpesa] and ignored otherwise. A method
+  /// the destination country doesn't support (M-Pesa outside Kenya) is
+  /// refused here too, not just hidden in the UI.
+  Future<void> placeOrder({
+    required String address,
+    required String countryCode,
+    required PaymentMethodType method,
+    String? mpesaPhone,
+  }) async {
     final user = _authRepo.cachedUser;
     if (user == null || cartRepo.items.isEmpty) return;
+    if (!Countries.resolve(countryCode).paymentMethods.contains(method)) {
+      errorMessage.value =
+          '${method.label} isn\'t available for this shipping country.';
+      return;
+    }
 
     isPlacingOrder.value = true;
     errorMessage.value = null;
@@ -142,7 +175,7 @@ class CheckoutController extends GetxController {
           total: total,
           currency: cartRepo.currency,
           shippingAddress: shippingAddress,
-          paymentMethod: 'IntaSend M-Pesa',
+          paymentMethod: method.orderLabel,
           paymentReference: 'MOCK-PAY-${DateTime.now().millisecondsSinceEpoch}',
           paymentStatus: OrderPaymentStatus.paid,
           createdAt: DateTime.now(),
@@ -182,7 +215,7 @@ class CheckoutController extends GetxController {
         total: total,
         currency: cartRepo.currency,
         shippingAddress: shippingAddress,
-        paymentMethod: 'IntaSend M-Pesa',
+        paymentMethod: method.orderLabel,
         createdAt: DateTime.now(),
         shippingFee: shippingFee,
         logisticName: selectedShippingOption.value?.logisticName,
@@ -191,15 +224,40 @@ class CheckoutController extends GetxController {
       await _notificationRepo.notifyOrderPlaced(order);
 
       final intasend = Get.find<IntasendService>();
-      await intasend.payOrderMpesa(
-        orderId: order.id,
-        phoneNumber: Formatters.toMpesaFormat(mpesaPhone),
-      );
-      _onOrderPlaced(order.code,
-          'Order ${order.code} placed — complete the M-Pesa prompt on your phone to finish payment.');
+      switch (method) {
+        case PaymentMethodType.mpesa:
+          await intasend.payOrderMpesa(
+            orderId: order.id,
+            phoneNumber: Formatters.toMpesaFormat(mpesaPhone ?? ''),
+          );
+          _onOrderPlaced(order.code,
+              'Order ${order.code} placed — complete the M-Pesa prompt on your phone to finish payment.');
+        case PaymentMethodType.card:
+          // IntaSend's hosted card page. Like M-Pesa, completion is
+          // confirmed by intasendWebhook server-side, not by this client.
+          final checkoutUrl = await intasend.payOrderCard(
+            orderId: order.id,
+            method: method.intasendMethod!,
+            // Back to the storefront (hash routing), not this checkout
+            // page — the cart is already cleared by then.
+            redirectUrl: kIsWeb
+                ? Uri.base
+                    .replace(fragment: '/s/${Get.parameters['slug'] ?? ''}')
+                    .toString()
+                : null,
+          );
+          if (checkoutUrl == null || checkoutUrl.isEmpty) {
+            throw StateError('No checkout URL returned');
+          }
+          await launchUrl(Uri.parse(checkoutUrl),
+              mode: LaunchMode.externalApplication);
+          _onOrderPlaced(order.code,
+              'Order ${order.code} placed — finish paying by card in the page that just opened.');
+      }
     } catch (e) {
-      errorMessage.value =
-          'Payment didn\'t go through. Check the number and try again.';
+      errorMessage.value = method == PaymentMethodType.mpesa
+          ? 'Payment didn\'t go through. Check the number and try again.'
+          : 'Couldn\'t start card payment. Please try again.';
     } finally {
       isPlacingOrder.value = false;
     }

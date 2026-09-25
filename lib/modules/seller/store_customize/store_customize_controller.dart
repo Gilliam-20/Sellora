@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/image_data_url.dart';
+import '../../../data/models/store_model.dart';
 import '../../../data/repositories/store_repository.dart';
 import '../../storefront/store_scope.dart';
 
@@ -26,6 +27,9 @@ class StoreCustomizeController extends GetxController {
   late final TextEditingController hexCtrl;
 
   final colorHex = RxnString();
+
+  /// Enabled `ShippingZone` ids — checkout only offers countries in these.
+  final shippingZones = <String>[].obs;
   final isSaving = false.obs;
   final isPickingLogo = false.obs;
   final isPickingBanner = false.obs;
@@ -42,6 +46,8 @@ class StoreCustomizeController extends GetxController {
     bannerUrlCtrl = TextEditingController(text: store?.bannerUrl);
     colorHex.value = store?.primaryColorHex;
     hexCtrl = TextEditingController(text: store?.primaryColorHex);
+    shippingZones
+        .assignAll(store?.shippingZones ?? StoreModel.allShippingZoneIds);
   }
 
   @override
@@ -57,6 +63,19 @@ class StoreCustomizeController extends GetxController {
   void selectPreset(String hex) {
     colorHex.value = hex;
     hexCtrl.text = hex;
+  }
+
+  /// Toggles zone [id] on or off. The last enabled zone can't be turned
+  /// off — a store that ships nowhere would leave checkout with no country
+  /// to pick. Returns false when that toggle was refused.
+  bool toggleZone(String id) {
+    if (shippingZones.contains(id)) {
+      if (shippingZones.length == 1) return false;
+      shippingZones.remove(id);
+    } else {
+      shippingZones.add(id);
+    }
+    return true;
   }
 
   void setHexFromField(String value) {
@@ -106,6 +125,7 @@ class StoreCustomizeController extends GetxController {
         logoUrl: logoUrlCtrl.text.trim(),
         bannerUrl: bannerUrlCtrl.text.trim(),
         primaryColorHex: validHex,
+        shippingZones: shippingZones.toList(),
       );
       await _storeRepository.updateStore(updated);
       scope.current.value = updated;

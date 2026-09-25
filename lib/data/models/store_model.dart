@@ -13,8 +13,15 @@ class StoreModel {
     this.bannerUrl,
     this.primaryColorHex,
     this.currencyCode = 'KES',
+    this.shippingZones = allShippingZoneIds,
     this.createdAt,
   });
+
+  /// Every zone id `lib/core/i18n/countries.dart`'s `ShippingZone` defines,
+  /// duplicated as plain strings so this model stays import-free. A store
+  /// document written before shipping zones existed ships everywhere, which
+  /// is what checkout offered before this field did.
+  static const allShippingZoneIds = ['kenya', 'us', 'uk', 'eu'];
 
   final String id;
 
@@ -37,6 +44,12 @@ class StoreModel {
   final String? primaryColorHex;
 
   final String currencyCode;
+
+  /// Ids of the `ShippingZone`s (server pricing regions) this store ships
+  /// to — checkout only offers countries in these zones. Enforced
+  /// client-side only for now: the adopted single-vendor `createOrder` has
+  /// no store concept to check it against (see WORKLOG.md, PHASE 11).
+  final List<String> shippingZones;
   final DateTime? createdAt;
 
   StoreModel copyWith({
@@ -46,6 +59,7 @@ class StoreModel {
     String? bannerUrl,
     String? primaryColorHex,
     String? currencyCode,
+    List<String>? shippingZones,
   }) {
     return StoreModel(
       id: id,
@@ -57,6 +71,7 @@ class StoreModel {
       bannerUrl: bannerUrl ?? this.bannerUrl,
       primaryColorHex: primaryColorHex ?? this.primaryColorHex,
       currencyCode: currencyCode ?? this.currencyCode,
+      shippingZones: shippingZones ?? this.shippingZones,
       createdAt: createdAt,
     );
   }
@@ -72,6 +87,8 @@ class StoreModel {
       bannerUrl: map['bannerUrl'] as String?,
       primaryColorHex: map['primaryColorHex'] as String?,
       currencyCode: map['currencyCode'] as String? ?? 'KES',
+      shippingZones:
+          (map['shippingZones'] as List?)?.cast<String>() ?? allShippingZoneIds,
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'] as String)
           : null,
@@ -89,6 +106,7 @@ class StoreModel {
       'bannerUrl': bannerUrl,
       'primaryColorHex': primaryColorHex,
       'currencyCode': currencyCode,
+      'shippingZones': shippingZones,
       'createdAt': createdAt?.toIso8601String(),
     };
   }

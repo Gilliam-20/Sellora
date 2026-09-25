@@ -176,5 +176,15 @@ service cloud.firestore {
       allow read: if isOwner(sellerId) || role() == 'admin';
       allow write: if false;
     }
+
+    // ---- exchange rates ---------------------------------------------------
+    // functions/lib/fx.js's daily USD-base rate cache. Public market data,
+    // read by the app only to display converted price estimates — the server
+    // prices orders from its own read of this doc, never a client figure.
+    // Only config/fx is opened; the rest of `config` stays denied.
+    match /config/fx {
+      allow read: if true;
+      allow write: if false;
+    }
   }
 }

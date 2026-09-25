@@ -19,6 +19,11 @@ class FirestoreService extends GetxService {
   CollectionReference<Map<String, dynamic>> get stores =>
       _db.collection('stores');
 
+  /// The USD-base rate table `functions/lib/fx.js` refreshes daily —
+  /// server-written, publicly readable (see firestore.rules).
+  DocumentReference<Map<String, dynamic>> get fxRates =>
+      _db.collection('config').doc('fx');
+
   /// A store's buyers, as `stores/{storeId}/customers/{uid}` — kept as
   /// its own subcollection (not a field on `users`) so a store's seller
   /// can be granted read access to their own customers without touching

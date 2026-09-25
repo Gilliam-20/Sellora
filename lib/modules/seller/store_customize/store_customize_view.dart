@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/i18n/countries.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/image_data_url.dart';
 import '../../../core/utils/responsive.dart';
@@ -25,7 +26,7 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
   Future<void> _save(BuildContext context) async {
     final success = await controller.save();
     if (success) {
-      Get.snackbar('Store updated', 'Your storefront branding was saved.');
+      Get.snackbar('Store updated', 'Your storefront settings were saved.');
     }
   }
 
@@ -157,6 +158,38 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
                         ?.copyWith(color: AppColors.danger)),
               );
             }),
+            const SizedBox(height: AppSpacing.lg),
+            Text('Shipping zones',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Customers can only check out to countries in the zones you '
+              'ship to. Each zone is priced in its own currency.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Obx(
+              () => Column(
+                children: ShippingZone.values.map((zone) {
+                  final enabled = controller.shippingZones.contains(zone.id);
+                  final countryCount = zone.countries.length;
+                  return CheckboxListTile(
+                    value: enabled,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: Text(zone.label),
+                    subtitle: Text('${zone.currency} · $countryCount '
+                        '${countryCount == 1 ? 'country' : 'countries'}'),
+                    onChanged: (_) {
+                      if (!controller.toggleZone(zone.id)) {
+                        Get.snackbar('Keep at least one zone',
+                            'Your store needs somewhere to ship to.');
+                      }
+                    },
+                  );
+                }).toList(),
+              ),
+            ),
             const SizedBox(height: AppSpacing.xxl),
           ],
         ),

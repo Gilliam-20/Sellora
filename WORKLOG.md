@@ -6,6 +6,80 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-25 — PHASE 11: internationalization (first slice)
+
+**Status:** implemented this session. `flutter analyze` shows only the same 3 pre-existing issues
+(`responsive.dart`/`mock_admin_repository.dart` curly-brace info, `test/auth_repository_test.dart`'s
+missing-`sellerTermsVersion` compile error). `flutter test`: the new `money_test.dart` and
+`countries_test.dart` pass (19 cases) along with `admin_dashboard_controller_test.dart`; the only
+failures are the same two pre-existing ones (that compile error, and `seller_shell_controller_test.dart`'s
+`NotificationCenter` setup gap). `flutter build web` succeeds. Not click-through-verified in a live
+browser this session.
+
+**Why:** TODO.md's PHASE 11 lists multi-currency, country configuration, shipping zones,
+international payment architecture and localization readiness. Auditing first showed the server
+already had most of the currency backbone — `functions/lib/regions.js` (country → pricing region →
+currency) and `functions/lib/fx.js` (a daily USD-base rate cache at `config/fx`) — while the Flutter
+side had a USD/KES-only display toggle on a hardcoded `AppConstants.usdToKesRate`, a hand-picked
+5-country checkout list, and M-Pesa as the *only* payment option for every country, including US/UK/EU
+buyers who can't use it. This slice closes the client-side gaps against what the server already does.
+
+**Changed:**
+- **New `lib/core/i18n/`:**
+  - `currencies.dart` — `CurrencyInfo`/`Currencies` registry (KES, USD, GBP, EUR: symbol, name,
+    minor-unit digits). `Formatters.currency` now reads symbols/decimals from it.
+  - `money.dart` — `Money`, an integer-minor-unit amount (build spec §36). Exact `+`/`-`/`× quantity`,
+    one explicit rounding for `scale`/`convertTo`, and throws on mixing currencies. Models still store
+    `double` major units — `Money` is used at the arithmetic sites (cart subtotal, checkout total,
+    conversion), not persisted.
+  - `countries.dart` — `CountryConfig`/`Countries` (KE, US, GB + all 27 EU members), `ShippingZone`
+    (kenya/us/uk/eu — the same ids and currencies as regions.js's regions, including its US/USD
+    fallback for unknown countries), and `PaymentMethodType` (M-Pesa for Kenya only; card everywhere).
+    `test/countries_test.dart` parses regions.js and fails if the two drift apart.
+  - `app_locales.dart` — `flutter_localizations` delegates + `supportedLocales`, wired into
+    `GetMaterialApp`. English only, deliberately — see "Still open".
+- **FX rates:** new `FxRates` model (pivot logic mirrors fx.js's `pivotRate`; `FxRates.fallback`
+  mirrors its `FALLBACK_RATES`), `FxRateRepository` with `FirebaseFxRateRepository` (reads `config/fx`)
+  and `MockFxRateRepository`, both bound in `InitialBinding`. `firestore.rules` opens **only**
+  `config/fx` for public read (it's market data the server writes; the rest of `config` stays denied).
+- **`CurrencyService`** supports all four currencies, converts via `Money` using the loaded rate table
+  (`refreshRates()` fires once at startup, falls back silently), and exposes `isConverted()`.
+  `AppConstants.usdToKesRate` is deleted. The buyer profile's USD/KSh segmented toggle is now a
+  four-currency dropdown.
+- **Shipping zones:** `StoreModel.shippingZones` (zone ids; a document without the field defaults to
+  all zones — the same countries checkout offered before). "Customize store" gains a Shipping zones
+  section (can't disable the last zone). Checkout's country dropdown now lists only countries in the
+  store's zones, Kenya first.
+- **Checkout:** CJ freight quotes (`FreightOption.currency`, USD) are converted into the cart's
+  currency before being added to the subtotal — previously the raw numbers were summed regardless of
+  currency (latent today since listings default to USD too, but wrong the moment a store prices in
+  KES). Totals are computed in `Money`. A payment-method picker offers what the destination country
+  supports; the M-Pesa phone field only shows for M-Pesa. Real-mode card payment calls the existing
+  `payOrderCard` endpoint and opens IntaSend's hosted page via the new `url_launcher` dependency;
+  `CheckoutController.placeOrder` also refuses a method the country doesn't support, not just the UI.
+  A note appears when prices are shown converted.
+- **pubspec:** added `url_launcher`, `flutter_localizations`; `intl` bumped `^0.19.0` → `^0.20.2`
+  (flutter_localizations pins 0.20.2; only `NumberFormat`/`DateFormat` are used, unchanged).
+
+**Still open (not attempted this session):**
+- Shipping zones are enforced client-side only. The adopted single-vendor `createOrder` has no
+  store concept to check a store's zones against — same root gap as PHASE 8's service-fee note.
+- Every IntaSend charge is still in KES (`payOrderCard`/`payOrderMpesa` charge `order.totalKes`),
+  so a GBP/EUR buyer's card is charged the KES equivalent. A true multi-currency settlement needs
+  either IntaSend multi-currency confirmation or a second provider (`paypalApi.js` exists server-side,
+  unreconciled). There's still no `PaymentProvider` interface — checkout switches on
+  `PaymentMethodType`, which is a step toward one, not the abstraction itself.
+- Monetary *models* (`OrderModel.total`, `ProductModel.sellPrice`, …) are still `double`; moving
+  persisted amounts to minor units needs a coordinated server/Firestore migration.
+- No per-store currency selector: `StoreModel.currencyCode` exists, but products carry their own
+  `currency` and nothing re-prices them when a store's currency changes, so exposing it would mislead.
+- Localization is wired but English-only: all UI strings are still inline literals. Next step is
+  extracting them into ARB files (`flutter gen-l10n`) before adding e.g. Swahili.
+- `CurrencyService` has no unit test of its own (`StorageService`/`GetStorage` need test setup
+  nobody has built yet); its conversion logic is covered through `FxRates`/`Money` tests.
+
+---
+
 ## 2026-09-25 — Sellora visual identity assets
 
 **Status:** implemented this session. Focused `flutter analyze` of the updated splash view completed

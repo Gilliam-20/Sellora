@@ -5,6 +5,8 @@ import '../../data/repositories/admin_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/cart_repository.dart';
 import '../../data/repositories/firebase_admin_repository.dart';
+import '../../data/repositories/firebase_fx_rate_repository.dart';
+import '../../data/repositories/fx_rate_repository.dart';
 import '../../data/repositories/firebase_order_repository.dart';
 import '../../data/repositories/firebase_notification_repository.dart';
 import '../../data/repositories/firebase_product_repository.dart';
@@ -12,6 +14,7 @@ import '../../data/repositories/firebase_store_repository.dart';
 import '../../data/repositories/firebase_subscription_repository.dart';
 import '../../data/repositories/mock/mock_admin_repository.dart';
 import '../../data/repositories/mock/mock_auth_repository.dart';
+import '../../data/repositories/mock/mock_fx_rate_repository.dart';
 import '../../data/repositories/mock/mock_order_repository.dart';
 import '../../data/repositories/mock/mock_notification_repository.dart';
 import '../../data/repositories/mock/mock_product_repository.dart';
@@ -65,6 +68,7 @@ class InitialBinding extends Bindings {
       Get.put<SubscriptionRepository>(MockSubscriptionRepository(),
           permanent: true);
       Get.put<AdminRepository>(MockAdminRepository(), permanent: true);
+      Get.put<FxRateRepository>(MockFxRateRepository(), permanent: true);
     } else {
       Get.put(AuthService(), permanent: true);
       Get.put(FirestoreService(), permanent: true);
@@ -81,7 +85,11 @@ class InitialBinding extends Bindings {
       Get.put<SubscriptionRepository>(FirebaseSubscriptionRepository(),
           permanent: true);
       Get.put<AdminRepository>(FirebaseAdminRepository(), permanent: true);
+      Get.put<FxRateRepository>(FirebaseFxRateRepository(), permanent: true);
     }
+
+    // Fire-and-forget: display prices use FxRates.fallback until this lands.
+    Get.find<CurrencyService>().refreshRates();
 
     // StoreScope resolves StoreRepository in its constructor, so it must be
     // registered after either the mock or Firebase repository set above.
