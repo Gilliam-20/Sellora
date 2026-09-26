@@ -39,7 +39,11 @@ npx supabase db push                    # apply supabase/migrations to the linke
 npm run deploy                          # supabase functions deploy api
 npm run serve                           # local function; secrets from functions/.env (gitignored)
 SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/grant-admin.js admin@example.com
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/preflight.js   # read-only rollout check
 ```
+
+A new `cron.schedule(...)` job must also be added to `EXPECTED_CRON_JOBS` in `scripts/preflight.js`
+(its test fails otherwise).
 
 Deno tooling must run from `supabase/functions/` with `--config deno.json` (the npm scripts do),
 or Deno picks up `supabase/package.json` and can't resolve `npm:` imports.
@@ -90,7 +94,9 @@ sellers and admin read it through the `seller_orders` view. `products` is readab
 owner and admin. Anything buyer-facing reads the `storefront_products` view, which has no cost
 prices and only shows sellers in good standing. Both views are select-only. Status moves,
 publishing, plan limits, the append-only `audit_logs`/`ledger_entries` and account deletion are
-enforced in `20260928000000_security_hardening.sql` (see `SELLORA_SECURITY_AUDIT.md` §6). Firestore transactions became compare-and-set UPDATEs in the
+enforced in `20260928000000_security_hardening.sql` (see `SELLORA_SECURITY_AUDIT.md` §6); plan
+usage (`my_plan_usage()`), the downgrade listing cap and the listing-sync columns followed in the
+2026-09-29/30 migrations (§7). The live CJ catalog routes are seller/admin-only, not public. Firestore transactions became compare-and-set UPDATEs in the
 function (CJ push and refund claims) or SQL functions (`activate_subscription`,
 `attach_order_payment_attempt`, `consume_rate_limit`).
 
@@ -123,9 +129,10 @@ snake_case columns and fix up timestamp offsets. Always go through them rather t
 The Flutter app never calls CJ Dropshipping or IntaSend directly. It calls Sellora's own `api` Edge
 Function (`ApiEndpoints` in `app_constants.dart`), which holds the real keys as Supabase function
 secrets (`CJ_API_KEY`, `INTASEND_SECRET_KEY`, `CRON_SECRET`, optional
-`INTASEND_WEBHOOK_CHALLENGE`/`ALLOWED_REDIRECT_ORIGINS`). `DioClient` attaches the Supabase access
+`INTASEND_WEBHOOK_CHALLENGE`/`ALLOWED_REDIRECT_ORIGINS`, and `SELLORA_DEBUG_LOGS=true` to turn on the
+per-product `logDebug` lines in `_shared/logging.js` — leave it off in production). `DioClient` attaches the Supabase access
 token (JWT) to every request. The function has gateway JWT checks off (`supabase/config.toml`) because
-browsing and the webhook are public, so each signed-in route goes through `signedIn()` →
+the webhook, `/health` and the cron routes (shared secret) take no JWT, so each signed-in route goes through `signedIn()` →
 `verifyAuth`, which checks the token with Supabase Auth. That is the only thing between the open
 internet and the secret keys: any new route must use it. The function uses the service role, which
 bypasses RLS, so it re-checks ownership itself (`loadOwnedOrder` etc.).

@@ -65,7 +65,6 @@ class SellerDashboardController extends GetxController {
   // ---- Store health / subscription -----------------------------------------
   final Rxn<SubscriptionUsageModel> usage = Rxn<SubscriptionUsageModel>();
   final Rxn<SubscriptionPlanModel> plan = Rxn<SubscriptionPlanModel>();
-  final ordersThisPeriod = 0.obs;
 
   // ---- Guided setup checklist ------------------------------------------
   final hasProduct = false.obs;
@@ -125,12 +124,6 @@ class SellerDashboardController extends GetxController {
             store.logoUrl != null ||
             store.bannerUrl != null ||
             store.primaryColorHex != null);
-
-    final now = DateTime.now();
-    final periodStart = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: (plan.value?.billingPeriodDays ?? 30) - 1));
-    ordersThisPeriod.value =
-        _allOrders.where((o) => !o.createdAt.isBefore(periodStart)).length;
 
     _recomputeRangeMetrics();
     isLoading.value = false;

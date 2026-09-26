@@ -473,12 +473,14 @@ class _StoreHealthCard extends StatelessWidget {
                   used: usage.listingCount,
                   limit: usage.listingLimit,
                 ),
-              if (plan != null && plan.orderLimit > 0) ...[
+              // The server's count: paid orders over the rolling billing
+              // period, against the limit checkout actually enforces.
+              if (usage != null && usage.orderLimit > 0) ...[
                 const SizedBox(height: AppSpacing.xs),
                 _UsageBar(
-                  label: 'Orders this billing period',
-                  used: controller.ordersThisPeriod.value,
-                  limit: plan.orderLimit,
+                  label: 'Paid orders this billing period',
+                  used: usage.orderCount,
+                  limit: usage.orderLimit,
                 ),
               ],
             ],

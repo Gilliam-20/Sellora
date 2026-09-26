@@ -6,6 +6,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
+import '../../../data/models/billing_history_entry_model.dart';
 import '../../../data/models/subscription_plan_model.dart';
 import '../../../data/models/subscription_usage_model.dart';
 import 'seller_subscription_controller.dart';
@@ -50,9 +51,11 @@ class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
                             .displaySmall
                             ?.copyWith(color: AppColors.cloud, fontSize: 24)),
                     const SizedBox(height: 4),
-                    if (user?.subscriptionActiveUntil != null)
+                    if (_periodLine(controller.usage.value,
+                            user?.subscriptionActiveUntil)
+                        case final line?)
                       Text(
-                        'Renews ${Formatters.date(user!.subscriptionActiveUntil!)}',
+                        line,
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall
@@ -91,10 +94,71 @@ class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
                       _PlanRow(plan: plan, isCurrent: plan.id == current?.id),
                 ),
               ),
+              if (controller.history.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Text('Billing history',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: AppSpacing.sm),
+                ...controller.history.map((e) => _BillingRow(entry: e)),
+              ],
             ],
           ),
         );
       }),
+    );
+  }
+
+  /// There's no automatic renewal (each period is an M-Pesa payment the
+  /// seller makes), so this says when the paid time ends, not "renews".
+  static String? _periodLine(
+      SubscriptionUsageModel? usage, DateTime? profileUntil) {
+    final end = usage?.currentPeriodEnd ?? profileUntil;
+    if (end == null) return null;
+    return switch (usage?.subscriptionStatus) {
+      'lapsed' => 'Ended ${Formatters.date(end)}. Renew to keep selling.',
+      'cancelled' => 'Cancelled',
+      _ => 'Paid through ${Formatters.date(end)}',
+    };
+  }
+}
+
+class _BillingRow extends StatelessWidget {
+  const _BillingRow({required this.entry});
+  final BillingHistoryEntryModel entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final (label, color) = switch (entry.status) {
+      'paid' => ('Paid', AppColors.horizonTealDeep),
+      'failed' => ('Failed', AppColors.danger),
+      _ => ('Pending', AppColors.slate),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(entry.planName, style: textTheme.bodyMedium),
+                Text(Formatters.date(entry.paidAt ?? entry.createdAt),
+                    style: textTheme.bodySmall),
+              ],
+            ),
+          ),
+          Text(Formatters.currency(entry.amountKes, code: 'KES'),
+              style: textTheme.bodyMedium),
+          const SizedBox(width: AppSpacing.sm),
+          SizedBox(
+            width: 64,
+            child: Text(label,
+                textAlign: TextAlign.end,
+                style: textTheme.labelMedium?.copyWith(color: color)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -123,12 +187,14 @@ class _UsageCard extends StatelessWidget {
                 Text('Usage this period',
                     style: Theme.of(context).textTheme.labelMedium),
                 const SizedBox(height: 2),
-                Text(
-                  usage.listingLimit == -1
-                      ? '${usage.listingCount} products listed (unlimited)'
-                      : '${usage.listingCount} of ${usage.listingLimit} products listed',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                for (final line in [
+                  _usageLine(usage.listingCount, usage.listingLimit,
+                      'products listed'),
+                  _usageLine(usage.orderCount, usage.orderLimit,
+                      'paid orders in the last ${usage.billingPeriodDays} days'),
+                  _usageLine(usage.storeCount, usage.storeLimit, 'stores'),
+                ])
+                  Text(line, style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           ),
@@ -137,6 +203,12 @@ class _UsageCard extends StatelessWidget {
     );
   }
 }
+
+String _usageLine(int used, int limit, String what) =>
+    limit < 0 ? '$used $what (unlimited)' : '$used of $limit $what';
+
+String _limit(int limit, String what) =>
+    limit < 0 ? 'Unlimited $what' : '$limit $what';
 
 class _PlanRow extends StatelessWidget {
   const _PlanRow({required this.plan, required this.isCurrent});
@@ -162,21 +234,26 @@ class _PlanRow extends StatelessWidget {
               children: [
                 Text(plan.name, style: Theme.of(context).textTheme.titleMedium),
                 Text(
-                    '${Formatters.currency(plan.priceKes, code: 'KES')} / month',
+                    '${Formatters.currency(plan.priceKes, code: 'KES')} / ${plan.billingPeriodDays} days',
                     style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 2),
+                Text(
+                  [
+                    _limit(plan.listingLimit, 'listings'),
+                    _limit(plan.orderLimit, 'orders'),
+                    _limit(plan.storeLimit,
+                        plan.storeLimit == 1 ? 'store' : 'stores'),
+                  ].join(' · '),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ],
             ),
           ),
-          if (isCurrent)
-            const Text('Active',
-                style: TextStyle(
-                    color: AppColors.horizonTealDeep,
-                    fontWeight: FontWeight.w700))
-          else
-            OutlinedButton(
-                onPressed: () => Get.bottomSheet(_SwitchPlanSheet(plan: plan),
-                    isScrollControlled: true),
-                child: const Text('Switch')),
+          OutlinedButton(
+              onPressed: () => Get.bottomSheet(
+                  _SwitchPlanSheet(plan: plan, isRenewal: isCurrent),
+                  isScrollControlled: true),
+              child: Text(isCurrent ? 'Renew' : 'Switch')),
         ],
       ),
     );
@@ -184,8 +261,11 @@ class _PlanRow extends StatelessWidget {
 }
 
 class _SwitchPlanSheet extends StatefulWidget {
-  const _SwitchPlanSheet({required this.plan});
+  const _SwitchPlanSheet({required this.plan, this.isRenewal = false});
   final SubscriptionPlanModel plan;
+
+  /// Paying for the plan already held: another period, added to the end.
+  final bool isRenewal;
 
   @override
   State<_SwitchPlanSheet> createState() => _SwitchPlanSheetState();
@@ -230,11 +310,16 @@ class _SwitchPlanSheetState extends State<_SwitchPlanSheet> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Switch to ${widget.plan.name}',
+                    Text(
+                        widget.isRenewal
+                            ? 'Renew ${widget.plan.name}'
+                            : 'Switch to ${widget.plan.name}',
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'You\'ll be charged ${Formatters.currency(widget.plan.priceKes, code: 'KES')} now via M-Pesa.',
+                      'You\'ll be charged ${Formatters.currency(widget.plan.priceKes, code: 'KES')} now via M-Pesa. '
+                      '${widget.isRenewal ? 'Another' : 'The new plan starts once you pay, and a'} '
+                      '${widget.plan.billingPeriodDays}-day period is added after any paid time you have left.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -274,7 +359,9 @@ class _SwitchPlanSheetState extends State<_SwitchPlanSheet> {
                                   width: 18,
                                   child: CircularProgressIndicator(
                                       strokeWidth: 2, color: AppColors.ink))
-                              : const Text('Pay & switch'),
+                              : Text(widget.isRenewal
+                                  ? 'Pay & renew'
+                                  : 'Pay & switch'),
                         ),
                       ),
                     ),

@@ -65,7 +65,7 @@ Still open: a store switcher for multi-store sellers (today `resolveForSeller` j
 `storesForSeller(sellerId).first`), gated on decision #4. Email verification is shown but not
 required. No Google sign-in.
 
-## PHASE 3 — Billing: security core + plan schema + usage tracking done, richer UI not started
+## PHASE 3 — Billing: done in code except cancel/resume (see the 2026-09-26 update)
 
 Done (2026-09-12, see `WORKLOG.md`): `subscribeSeller` moved fully server-side (`functions/lib/
 subscriptions.js` + three new `payBillingMpesa`/`payBillingCard`/`confirmBillingPayment` endpoints,
@@ -82,6 +82,15 @@ Not started: order-limit enforcement and order-usage display (both need `sellerI
 document, which the PHASE 4 backend swap below doesn't have yet — this is the same gap, not a new one);
 store-limit enforcement (gated on decision #4); cancel/resume, billing-history/invoices UI, a real
 plan-comparison screen — none of this was in the confirmed scope for the 2026-09-12 pass.
+
+**2026-09-26 update (see `WORKLOG.md` and `SELLORA_SECURITY_AUDIT.md` §6/§7):** the paragraph above
+is superseded. Orders carry `seller_id` since the Supabase move, and order, store and listing limits
+are all enforced server-side (§6, H6). Usage is now read from the server's `my_plan_usage()`, so the
+screen shows what enforcement counts: paid orders over the rolling period, against the subscription's
+snapshot. The subscription screen gained a Renew action, billing history, and each plan's limits for
+comparison. A downgrade below the seller's listed count is refused, with a trigger backstop. Not
+built: cancel/resume, since there's no auto-renewal to cancel and an unpaid plan just lapses.
+Proration on a mid-period upgrade is an owner decision.
 
 ## PHASE 4 — Catalog, pricing, and CJ import
 
@@ -151,6 +160,17 @@ fixed in passing: `MyListingsController`/`SellerDashboardController` only loaded
 `IndexedStack`) — a seller importing a product wouldn't see it in My listings or the dashboard's
 listing count without leaving and re-entering the seller shell. Fixed by having the import screen call
 `.load()` on both after a successful write.
+
+**2026-09-26 (see `WORKLOG.md` and `SELLORA_SECURITY_AUDIT.md` §7):** product synchronization now
+exists. The hourly `syncListings` job (`supabase/functions/_shared/listingSync.js`) re-reads CJ for
+listed products, never-checked first, 40 per run. It refreshes their cost, and flags a listing that
+checkout would refuse (`products.supplier_alert`: `below_cost` using `lineRefusal`'s own floor, or
+`unavailable`). It notifies the seller once and never unlists. My Listings shows the flag. The import
+screen's readout now shows what the seller actually earns (price − 7% fee − CJ cost; the buyer pays
+shipping on top), and its margin presets solve for that. The live CJ catalog routes are sellers-only
+now (audit §7, N1). Listing-id mapping at scale is no longer a concern: `products` is keyed
+`(store_id, id)`. Still open: confirming CJ's response shapes against a real account, and whether a
+server-side full `marginPricingService` quote is wanted at all.
 
 ## PHASE 5 — Seller product management
 

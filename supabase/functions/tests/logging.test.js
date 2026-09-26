@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { ALERTS, buildEntry } from "../_shared/logging.js";
+import { ALERTS, buildEntry, logDebug, logInfo, setLogSink } from "../_shared/logging.js";
 
 describe("ALERTS", () => {
   test("names are stable - log-based alert policies filter on these exact values", () => {
@@ -63,5 +63,47 @@ describe("buildEntry", () => {
     const entry = buildEntry("e", { body: "x".repeat(5000) });
     assert.equal(entry.body.length, 1003);
     assert.ok(entry.body.endsWith("..."));
+  });
+});
+
+describe("logDebug", () => {
+  // Captures what would have been written, and restores the env afterwards.
+  function capture(debugFlag, body) {
+    const lines = [];
+    const push = (line) => lines.push(JSON.parse(line));
+    const previous = setLogSink({ info: push, warn: push, error: push });
+    const before = Deno.env.get("SELLORA_DEBUG_LOGS");
+    if (debugFlag === undefined) Deno.env.delete("SELLORA_DEBUG_LOGS");
+    else Deno.env.set("SELLORA_DEBUG_LOGS", debugFlag);
+    try {
+      body();
+    } finally {
+      setLogSink(previous);
+      if (before === undefined) Deno.env.delete("SELLORA_DEBUG_LOGS");
+      else Deno.env.set("SELLORA_DEBUG_LOGS", before);
+    }
+    return lines;
+  }
+
+  test("writes nothing when SELLORA_DEBUG_LOGS is unset - the production default", () => {
+    assert.deepEqual(capture(undefined, () => logDebug("e", { pid: "p1" })), []);
+  });
+
+  test("writes nothing for any value other than \"true\"", () => {
+    assert.deepEqual(capture("1", () => logDebug("e", { pid: "p1" })), []);
+  });
+
+  test("writes a debug-level entry when SELLORA_DEBUG_LOGS=true", () => {
+    assert.deepEqual(
+        capture("true", () => logDebug("e", { pid: "p1" }, new Error("boom"))),
+        [{ level: "debug", event: "e", pid: "p1", error: "boom" }],
+    );
+  });
+
+  test("leaves info and above untouched when debug is off", () => {
+    assert.deepEqual(
+        capture(undefined, () => logInfo("run", { count: 3 })),
+        [{ level: "info", event: "run", count: 3 }],
+    );
   });
 });

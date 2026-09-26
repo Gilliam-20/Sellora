@@ -19,7 +19,12 @@ abstract class SubscriptionRepository {
 
   Future<void> updatePlan(SubscriptionPlanModel plan);
 
-  /// Read-only usage against the seller's current plan limits, for the
-  /// subscription screen.
+  /// Read-only usage against the seller's current plan limits, counted the
+  /// way the server enforces them.
   Future<SubscriptionUsageModel> fetchUsage(String sellerId);
+
+  /// The seller's subscription payments, newest first — pending and failed
+  /// attempts included, since those are what a seller asks support about.
+  Future<List<BillingHistoryEntryModel>> billingHistory(String sellerId,
+      {int limit = 24});
 }

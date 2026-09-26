@@ -1,6 +1,7 @@
 import { db, must } from "./db.js";
 import * as margin from "./marginPricingService.js";
 import { REGION_CONFIG } from "./regions.js";
+import { logDebug } from "./logging.js";
 
 const CACHE_MS = 5 * 60 * 1000;
 let cachedPricing;
@@ -247,7 +248,7 @@ function retailProductPrice(supplierCostUsd, pricing, opts = {}) {
   });
   if (result.flags.length) {
     const codes = result.flags.map((f) => f.code).join(", ");
-    console.warn(`[pricing] product ${pid || "unknown"} flags:`, codes);
+    logDebug("pricing_flags", { pid: pid || "unknown", codes });
   }
   return result.sellingPrice;
 }

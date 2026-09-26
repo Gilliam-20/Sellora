@@ -25,6 +25,13 @@ const forbidden = (message) => new HttpError(403, message);
 /** @param {string} message @return {HttpError} A 404. */
 const notFound = (message) => new HttpError(404, message);
 /**
+ * The request conflicts with the caller's current state (e.g. a downgrade
+ * with more listings than the plan allows) - fixable by them, then retried.
+ * @param {string} message
+ * @return {HttpError} A 409.
+ */
+const conflict = (message) => new HttpError(409, message);
+/**
  * A well-formed request the server can't act on (e.g. no shipping line to
  * that address) - distinct from a malformed one.
  * @param {string} message
@@ -50,6 +57,7 @@ export {
   badRequest,
   forbidden,
   notFound,
+  conflict,
   unprocessable,
   publicError,
   GENERIC_MESSAGE,

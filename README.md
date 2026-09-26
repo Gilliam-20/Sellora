@@ -119,6 +119,7 @@ never leaves your server."
 ```bash
 npx supabase secrets set CJ_API_KEY=... INTASEND_SECRET_KEY=... CRON_SECRET=<long random string>
 # optional: INTASEND_WEBHOOK_CHALLENGE=... (enforced when set), ALLOWED_REDIRECT_ORIGINS=https://a,https://b
+# optional: SELLORA_DEBUG_LOGS=true (per-product CJ/pricing diagnostics; off by default to keep log ingest down)
 npm run deploy
 ```
 

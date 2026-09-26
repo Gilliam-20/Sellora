@@ -453,5 +453,62 @@ ok('L4: the profile email follows an Auth email change', (await one('postgres', 
 r = await one('postgres', "select has_table_privilege('anon', 'public.orders', 'TRUNCATE') t, has_table_privilege('authenticated', 'public.products', 'TRIGGER') g");
 ok('L5: clients hold no TRUNCATE/TRIGGER', r.t === false && r.g === false);
 
+// ---- 20260929000000_billing_usage.sql: implementation plan PHASE 3.
+console.log('billing: usage');
+await as('postgres', "insert into orders (id, code, buyer_id, seller_id, store_id, payment_status, status) values ('o-unpaid', 'U', $1, $2, $3, 'pending', 'pending')", [B1, S1, 'store-' + S1]);
+let usage = (await one(seller1, 'select public.my_plan_usage() u')).u;
+const listedS1 = Number((await one('postgres', 'select count(*) c from products where seller_id = $1 and is_listed', [S1])).c);
+ok('usage: counts listed products, not drafts', usage.listingCount === listedS1 && listedS1 >= 2, JSON.stringify(usage));
+r = await one('postgres', "select count(*) filter (where payment_status in ('paid', 'partially_refunded', 'refunded')) paid, count(*) total from orders where seller_id = $1", [S1]);
+ok('usage: counts paid orders only', usage.orderCount === Number(r.paid) && usage.orderCount < Number(r.total),
+  `${usage.orderCount} vs ${r.paid}/${r.total}`);
+ok('usage: reports the subscription and store counts', usage.subscriptionStatus === 'active' &&
+  usage.planId === 'basic' && usage.storeCount === 2 && usage.storeLimit === 2, JSON.stringify(usage));
+await as('postgres', 'update subscriptions set order_limit = $2 where seller_id = $1', [S1, usage.orderCount]);
+ok('usage: at orderCount = orderLimit, checkout refuses too', await gate(S1) === 'order_limit_reached' &&
+  (await one(seller1, 'select public.my_plan_usage() u')).u.orderLimit === usage.orderCount);
+await as('postgres', 'update subscriptions set order_limit = $2 where seller_id = $1', [S1, usage.orderCount + 1]);
+ok('usage: one below the limit, checkout allows it', await gate(S1) === 'ok');
+await as('postgres', 'update subscriptions set order_limit = -1 where seller_id = $1', [S1]);
+ok('usage: anon cannot ask', await throws(() => as('anon', 'select public.my_plan_usage()')));
+ok("usage: reads only the caller's own", (await one(seller2, 'select public.my_plan_usage() u')).u.listingCount === 0);
+
+console.log('billing: downgrades');
+await as('postgres', "insert into subscription_plans (id, name, listing_limit) values ('tiny', 'Tiny', 1)");
+const oldest = (await one('postgres', 'select id from products where seller_id = $1 and is_listed order by created_at, id limit 1', [S1])).id;
+await as('postgres', "insert into billing_history (id, seller_id, plan_id, amount_kes) values ('bh-down', $1, 'tiny', 1)", [S1]);
+await asService("select public.activate_subscription('bh-down', 'INV-DOWN')");
+r = await as('postgres', 'select id from products where seller_id = $1 and is_listed', [S1]);
+ok('downgrade: listings above the new cap are unlisted', r.rows.length === 1, JSON.stringify(r.rows));
+ok('downgrade: the oldest listing is the one kept', r.rows[0]?.id === oldest);
+r = await one('postgres', "select details from audit_logs where action = 'subscription.listings_unlisted' and entity_id = $1", [S1]);
+ok('downgrade: the unlisting is audited', r?.details?.unlisted === listedS1 - 1 && r.details.listingLimit === 1, JSON.stringify(r));
+await as('postgres', "update subscriptions set current_period_start = current_period_start where seller_id = $1", [S1]);
+ok('downgrade: an update that keeps the plan changes nothing',
+  (await as('postgres', 'select id from products where seller_id = $1 and is_listed', [S1])).rows.length === 1);
+ok('downgrade: clients cannot call the trigger function', await throws(() => as(seller1, 'select public.subscriptions_enforce_listing_cap()')));
+
+// ---- 20260930000000_listing_sync.sql: implementation plan PHASE 4.
+console.log('listing sync');
+await asService("update products set supplier_alert = 'below_cost', supplier_checked_at = now(), cost_price = 19 where id = 'p1'");
+r = await one('postgres', "select supplier_alert, supplier_checked_at, cost_price from products where id = 'p1'");
+ok('sync: the server can flag a listing and refresh its cost', r.supplier_alert === 'below_cost' && r.supplier_checked_at && Number(r.cost_price) === 19);
+await as(seller1, "update products set supplier_alert = null, supplier_checked_at = null, title = 'Lamp v3' where id = 'p1'");
+r = await one('postgres', "select supplier_alert, supplier_checked_at, title from products where id = 'p1'");
+ok('sync: a seller cannot clear their own alert', r.supplier_alert === 'below_cost' && r.supplier_checked_at && r.title === 'Lamp v3');
+r = await as(seller1, "insert into products (store_id, id, seller_id, is_listed, supplier_alert, supplier_checked_at) values ($1, 'p-new', $2, false, 'unavailable', now()) returning supplier_alert, supplier_checked_at", ['store-' + S1, S1]);
+ok('sync: a seller cannot insert a listing pre-checked', r.rows[0].supplier_alert === null && r.rows[0].supplier_checked_at === null);
+ok('sync: only known alerts are stored', await throws(() => asService("update products set supplier_alert = 'fine' where id = 'p1'")));
+r = await one(seller1, "select supplier_alert from products where id = 'p1'");
+ok('sync: the seller can read the alert', r?.supplier_alert === 'below_cost');
+
+// ---- 20260930000100_deployment_report.sql: scripts/preflight.js's source.
+console.log('deployment report');
+r = (await one('service', 'select public.deployment_report() r')).r;
+ok('report: runs without Supabase-only schemas', r.appliedMigrations === null && r.vaultSecrets === null && r.cronJobs === null);
+ok('report: counts plans, admins and the bucket', r.plans.includes('basic') && Number(r.admins) >= 1 && r.storageBucket === true, JSON.stringify(r));
+ok('report: counts approved sellers without a current subscription', Number.isInteger(Number(r.activeSellersWithoutSubscription)));
+ok('report: clients cannot read it', await throws(() => as(admin, 'select public.deployment_report()')));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

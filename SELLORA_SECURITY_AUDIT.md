@@ -184,9 +184,9 @@ exists, cached.
 | Admin role | `auth.users.app_metadata.role` | Service-role only |
 | Buyer/seller role | `profiles.role` | Written only by `handle_new_user`; guarded |
 | Seller standing | `profiles.seller_status` + `subscriptions` | Enforced server-side (`seller_can_sell`, `seller_order_gate`) |
-| Plan terms and limits | `subscription_plans` | Enforced server-side (H6, §6) |
+| Plan terms and limits | `subscription_plans` | Enforced server-side (H6, §6); usage read from `my_plan_usage()` (§7) |
 | Retail price | `products.sell_price` (seller), validated by `createOrder` | Floor enforced at checkout (H2, §6) |
-| Supplier cost / freight | CJ live API at checkout, snapshotted on the order | `catalog_products` is a browse mirror, not authoritative |
+| Supplier cost / freight | CJ live API at checkout, snapshotted on the order | `catalog_products` is a browse mirror, not authoritative. Listing costs are refreshed hourly by `syncListings` (§7), which is advisory only |
 | Order total / fees | `orders` row written by `createOrder` | Flat 7% (`SERVICE_FEE_RATE`) |
 | Payment status | IntaSend, re-verified → `orders.payment_status` | Client never writes it |
 | Fulfilment / tracking | CJ → `orders.cj_*`, `orders.tracking` | |
@@ -216,11 +216,13 @@ exists, cached.
 | Seller revenue / fee correctness (H1, H2, M6) | **READY** (in code, §6) |
 | Order state integrity (H7, M7) | **READY** (in code, §6) |
 | Audit log, ledger, webhook store (M3–M5) | **READY** (in code, §6) |
-| Public endpoint rate limiting (M2) | **READY** (in code, §6) |
+| Public endpoint rate limiting (M2) | **READY** (in code; CJ routes sellers-only since §7, N1) |
+| Plan downgrades, usage display, listing sync, web account deletion | **READY** (in code, §7) |
 | The fixes above applied to the real project | **REQUIRES MANUAL CONFIGURATION** (TODO.md rollout order) |
 | Migrations applied, function deployed, secrets set, Vault, webhook URL, plans seeded | **REQUIRES MANUAL CONFIGURATION** |
 | IntaSend/CJ response shapes confirmed against real accounts | **REQUIRES MANUAL CONFIGURATION** |
 | Staging environment, backups (Supabase PITR), hosting decision | **REQUIRES MANUAL CONFIGURATION** |
+| Rollout state of a real project | Checkable: `node supabase/scripts/preflight.js` (§7) |
 
 **Sellora is not production-ready.** Every finding in §2 is now closed in code (§6), but none of it
 has run against the real project, CJ or IntaSend. The remaining items are the manual rows above.
@@ -249,7 +251,7 @@ Two product decisions were taken with the owner. H1: Sellora keeps the freight m
 | H6 | A trigger enforces `listing_limit` on publish (listed rows only, serialized per seller). The stores insert policy enforces `store_limit`. `seller_order_gate` enforces `order_limit` over paid orders in a rolling billing period. |
 | H7 | The `orders_guard_status` trigger allows clients only processing→shipped→delivered, and only on a paid order. An admin may also cancel an unpaid order. Paid orders are cancelled only by the refund path. `fulfillOrder` parks a paid-but-cancelled order for reconciliation instead of shipping it. The seller UI no longer offers "Start processing" on an unpaid order. |
 | M1 | `verifyAmount` fails closed. An unreadable amount raises the new `payment_amount_unverified` alert and holds the payment for a human. |
-| M2 | Per-IP budgets (`publicCatalog`, `webhook`) keyed on `x-forwarded-for`. Browsing still calls CJ live. Serving it from `catalog_products` remains a worthwhile optimisation, not a security gap. |
+| M2 | Per-IP budgets (`publicCatalog`, `webhook`) keyed on `x-forwarded-for`. Browsing still calls CJ live. **Superseded by §7 (N1):** that key can be spoofed, so the CJ routes are now sellers-only with a per-account budget. |
 | M3 | `audit_logs` (admin-read, append-only even for the owner) is written by triggers on profiles, plans, stores (non-owner edits), orders and billing, and by the refund and account-deletion paths with their actor. |
 | M4 | `ledger_entries` (append-only, idempotent unique keys) is written by triggers in the same transaction as the state change: `ORDER_PAYMENT`, `PLATFORM_FEE`, `SUPPLIER_COST` and `SELLER_EARNING` on payment, `REFUND` per refund, and `SUBSCRIPTION_PAYMENT`. Refunds are booked but seller earnings are not reversed. A payout job must net them. |
 | M5 | `webhook_events`, unique `(provider, invoice_id, state)`. It is written before handling, and the outcome is written after. |
@@ -258,7 +260,7 @@ Two product decisions were taken with the owner. H1: Sellora keeps the freight m
 | M8 | `products` is readable only by its owner and admin. Buyers read `storefront_products`, which has no `cost_price` and strips each variant's `costPrice`. It is read-only (auto-update revoked). `sold_count`/`rating` are server-owned. `productDetail` now reads CJ directly rather than another store's listing. |
 | M9 | `createOrder` checks CJ variant stock (`getProductStock`) and refuses a known shortfall. Unknown stock is not treated as zero. |
 | L1 | `storeProducts`/`storefrontFeed` page with `.range()`, 60 at a time, with "Load more" on the storefront. |
-| L2 | `POST /deleteAccount` calls `delete_account_data()`, which scrubs the profile, membership and delivery addresses, deletes notifications, and unlists a seller and suspends them. It then soft-deletes the Auth user. It is refused while a paid order is in fulfilment. Orders, billing and ledger rows are kept. There is a "Delete account" button on both profile screens. Google Play also wants a web link for deletion, which is not done. |
+| L2 | `POST /deleteAccount` calls `delete_account_data()`, which scrubs the profile, membership and delivery addresses, deletes notifications, and unlists a seller and suspends them. It then soft-deletes the Auth user. It is refused while a paid order is in fulfilment. Orders, billing and ledger rows are kept. There is a "Delete account" button on both profile screens. The web link Google Play also wants is `/#/delete-account` (§7). |
 | L3 | Length `CHECK`s (NOT VALID, so they bind new writes only) on notifications, profile, store, customer and product free text. |
 | L4 | A trigger on `auth.users` email changes updates `profiles.email` and `store_customers.email`. |
 | L5 | `TRUNCATE`/`TRIGGER`/`REFERENCES` revoked from `anon`/`authenticated` on all public tables. |
@@ -267,3 +269,57 @@ Two product decisions were taken with the owner. H1: Sellora keeps the freight m
 
 Still to settle when real accounts exist: IntaSend's status-response amount path (M1 now blocks
 fulfilment if it's wrong), and CJ's stock field names (M9 falls back to "unknown").
+
+---
+
+## 7. Follow-up pass (26 September 2026)
+
+Scope: re-verify §4's Batch C, close the two items §6 left open, and do the implementation plan's
+PHASE 3 (billing) and PHASE 4 (catalog) gaps, plus tooling for §4's owner steps. There are three new
+migrations: `20260929000000_billing_usage.sql`, `20260930000000_listing_sync.sql` and
+`20260930000100_deployment_report.sql`, each checked at the end of `supabase/tests/rls.test.mjs`.
+Suite at hand-off: 191 PGlite checks, 74 Deno tests (305 steps), 12 script tests, `flutter analyze`
+with no new issues, and `flutter test` 56 passing plus the known `seller_shell_controller_test` failure.
+
+**Re-verification.** Every Batch C fix is in the code, and the suites matched §6's figures before
+any change. Two of the fixes didn't hold up under review (N1, N3), and two more gaps turned up
+(N2, N4):
+
+| # | Finding | Severity | Fix |
+|---|---|---|---|
+| N1 | M2's per-IP budget keys on the first `x-forwarded-for` hop. If Supabase's edge appends to a client-sent header rather than replacing it (not confirmed either way), a script can put a new value in on every call and never hit the limit, spending the single CJ quota. | Medium | `searchProducts`, `getProductDetail` and `getCategories` now require a signed-in seller or admin and are limited per account (`sellerCatalog`, 200 per 10 min). Only the seller catalog and import screens call them; buyers browse `storefront_products`. The webhook keeps its IP budget as a flood cap only. `INTASEND_WEBHOOK_CHALLENGE` is what rejects a forged payload, so TODO.md now makes setting it required. |
+| N2 | A plan downgrade kept every listing. The H6 trigger blocks only new publishes, so a seller could buy the top plan for one period, list everything, then drop to the cheapest plan for good. | Medium | `subscribeSeller` refuses a plan whose listing cap is below what the seller has listed, with a 409 that says how many to unlist. A trigger on a `subscriptions` plan change (`subscriptions_enforce_listing_cap`) catches a race past that check: it unlists the newest excess and writes an audit row. |
+| N3 | The seller dashboard's order usage counted every order, unpaid ones included, over a calendar window, against the plan's current limit. Checkout counts paid orders over a rolling period, against the subscription's snapshot. The two could disagree. | Low | `my_plan_usage()` counts listings, paid orders and stores exactly the way enforcement does. The dashboard and the subscription screen both read it. A PGlite check asserts it agrees with `seller_order_gate` at the limit. |
+| N4 | The import screen's "profit" subtracted shipping, which the buyer pays on top, and ignored the 7% fee. The margin presets priced against the same wrong base. | Low (money display) | Earnings = price × (1 − 7%) − CJ cost, mirroring `splitServiceFee`. The presets solve for that. Shipping is shown as "buyer pays". |
+
+**Left open in §6, now closed:**
+- **L2 web link.** `/#/delete-account` on the web build takes an email and password (never a session
+  already in the browser) and calls the same `POST /deleteAccount`. It says what is removed and what
+  is kept. That URL goes in the Play Console's data-safety form.
+- **M2 optimisation.** Not done as a mirror: N1 closes the quota exposure, and seller import needs
+  CJ's full catalog, not the configured subset. Serving browse from `catalog_products` remains optional.
+
+**PHASE 3, billing.** The subscription screen shows usage for listings, paid orders and stores. Its
+status line reads "Paid through" or "Ended … Renew to keep selling" instead of "Renews" (nothing
+renews on its own). It has a Renew action on the current plan, each plan's limits for comparison,
+billing history (pending and failed attempts included), and the server's reason when a switch is
+refused. Not built: cancel/resume. There is no auto-renewal (each period is an M-Pesa payment), so
+an unpaid plan simply lapses. The activation behaviour below is unchanged and is an owner call: a
+mid-period switch takes effect at once and adds a period after the time left, so an upgrade gets
+the remaining days at the higher tier without proration.
+
+**PHASE 4, catalog.** Product synchronization: the hourly `syncListings` job (`_shared/listingSync.js`)
+re-reads CJ for 40 listed products per run, never-checked first. It refreshes `cost_price` and each
+variant's `costPrice`, sets the server-owned `products.supplier_alert` (`below_cost` using checkout's
+own `lineRefusal` floor, or `unavailable`), and notifies the seller once per new alert. It never
+unlists: that stays the seller's call, and a misread CJ response mustn't be able to empty a store.
+My Listings shows the alert until the price clears the refreshed cost. Listing ids needed no work:
+`products` is keyed `(store_id, id)`, so the plan's `${sellerId}_${id}` concern is gone.
+
+**Owner steps (§4 item 4).** These are now a checked list. `node supabase/scripts/preflight.js` reads
+`deployment_report()` (service role only; it reports whether a secret exists, never its value) and
+the function's `/health`. It checks that every migration is applied, pg_cron/pg_net are enabled,
+both Vault secrets and all seven cron jobs exist, no job failed in 24 h, plans are seeded, the
+bucket exists, an admin exists, and no approved seller is without a current subscription. The
+function's own secrets and the IntaSend webhook URL can't be checked from there and stay manual.
+The rollout order is in TODO.md.

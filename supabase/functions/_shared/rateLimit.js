@@ -1,12 +1,12 @@
 /**
  * Rate limits: per user for the signed-in endpoints, per client IP for the
- * public ones.
+ * one public route that has a limit (the IntaSend webhook).
  *
  * Accounts are free, so without a per-user limit one script could spend our
  * CJ quota on freight quotes or (worst) use payOrderMpesa to fire STK
- * payment prompts at someone's phone on a loop. The public catalog routes
- * spend the same single CJ quota with no account at all, so they're keyed
- * on the caller's IP instead (`ip:<address>`).
+ * payment prompts at someone's phone on a loop. The CJ catalog routes are
+ * sellers-only for the same reason: an IP key can be spoofed (see
+ * clientKey), so nothing that spends the CJ quota is left on one.
  *
  * Counters live in Postgres (`public.rate_limits`, service role only)
  * rather than in memory, because a warm isolate's memory isn't shared with
@@ -33,19 +33,21 @@ const POLICIES = Object.freeze({
   orderTracking: { limit: 30, windowMs: 10 * MINUTE },
   subscribe: { limit: 10, windowMs: 60 * MINUTE },
   deleteAccount: { limit: 5, windowMs: 60 * MINUTE },
-  // Per IP. Generous, because Kenyan mobile carriers put many shoppers
-  // behind one carrier-grade NAT address; still far below what it takes to
-  // exhaust the CJ quota.
-  publicCatalog: { limit: 300, windowMs: 10 * MINUTE },
+  // Seller catalog search/detail/categories, which call CJ live. Room for
+  // a seller paging through results and opening products while importing.
+  sellerCatalog: { limit: 200, windowMs: 10 * MINUTE },
   // Per IP. IntaSend's own retries fit easily; a flood of forged payloads
-  // doesn't.
+  // doesn't. Only a flood cap: INTASEND_WEBHOOK_CHALLENGE is what rejects
+  // a forged payload, before it costs a verification call.
   webhook: { limit: 600, windowMs: 10 * MINUTE },
 });
 
 /**
  * The address to key a public route's budget on: the first hop of
- * x-forwarded-for, which Supabase's edge sets. Capped in length because it
- * becomes part of a database key.
+ * x-forwarded-for. Capped in length because it becomes part of a database
+ * key. If the edge appends to a client-sent x-forwarded-for rather than
+ * replacing it, this hop is whatever the caller wrote, so an IP budget only
+ * slows a naive flood. Don't guard anything costly with it alone.
  * @param {Request} req Incoming request.
  * @return {string} `ip:<address>`, or `ip:unknown`.
  */

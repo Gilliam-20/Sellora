@@ -6,6 +6,52 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-26 — Audit follow-up: Batch C re-verified, billing (PHASE 3), listing sync (PHASE 4), rollout preflight
+
+**Status:** done in code and tested. **Not applied or deployed**, like the entry below. The rollout
+order in TODO.md now covers both entries and ends with `scripts/preflight.js`.
+
+**Why:** user request: "go to the sellora security audit and work on phase 3 and 4". The audit has
+no phases as such. Asked; the user chose all four readings: re-verify Batch C (§4 item 3), close its
+leftovers, prepare the owner steps (§4 item 4), and do PHASE 3/4 of SELLORA_IMPLEMENTATION_PLAN.md.
+
+**What changed:** `SELLORA_SECURITY_AUDIT.md` §7 has the detail. In short:
+- **N1 (Medium):** the public CJ routes' per-IP key was the first `x-forwarded-for` hop, which a caller
+  may control. `searchProducts`/`getProductDetail`/`getCategories` are now signed-in seller or admin
+  only, limited per account (`sellerCatalog`). The app needed no change, since only seller screens
+  call them. `INTASEND_WEBHOOK_CHALLENGE` moved from optional to required in TODO.md.
+- **N2 (Medium):** a downgrade kept every listing. Now `subscribeSeller` refuses it (409, with how many
+  to unlist), and the `subscriptions_enforce_listing_cap` trigger unlists the newest excess on a race.
+- **Billing:** `my_plan_usage()` (new migration `20260929000000_billing_usage.sql`) counts usage the
+  way enforcement does. The dashboard's own order count was wrong (N3). The subscription screen has
+  Renew, billing history, plan limits, "Paid through"/"Ended" instead of "Renews", and the server's
+  refusal reason. New `SubscriptionRepository.billingHistory` (fakes updated).
+- **Listing sync:** migration `20260930000000_listing_sync.sql` adds server-owned
+  `products.supplier_alert`/`supplier_checked_at` (the guard keeps them from clients) and schedules
+  `syncListings` hourly. `_shared/listingSync.js` plus `cjApi.getVariantPrices`. It is advisory only
+  and never unlists. My Listings shows the alert.
+- **Import pricing (N4):** earnings = price × 0.93 − CJ cost. Shipping was wrongly subtracted
+  (the buyer pays it) and the fee was ignored.
+- **Account deletion web link:** `/#/delete-account` (`DeleteAccountView`/`DeleteAccountController`),
+  email + password, then the same `POST /deleteAccount`. `AuthController.friendlyError` is now
+  static and shared.
+- **Owner tooling:** `deployment_report()` (migration `20260930000100_deployment_report.sql`,
+  service role only) and `supabase/scripts/preflight.js` (+ test, which also pins the cron job list
+  to the migrations).
+
+**Tests:** 191 PGlite checks, 74 Deno tests / 305 steps, 12 script tests. `flutter analyze`: no new
+issues (the 2 pre-existing `curly_braces` infos remain). `flutter test`: 56 pass plus the known
+`seller_shell_controller_test` failure.
+
+**Decisions left to the owner:** proration on a mid-period upgrade (today an upgrade takes effect at
+once and the new period is added after the remaining days). Whether browse should move to
+`catalog_products`. Whether a server-side `marginPricingService` quote is wanted.
+
+**Not done:** cancel/resume (there's no auto-renewal to cancel). No controller test for the import
+screen's new pricing (it needs a `StoreScope` fake); the formula is documented where it lives.
+
+---
+
 ## 2026-09-26 — Security audit remediation: every finding closed in code
 
 **Status:** done in code and tested. **Not applied or deployed.** The remote project is still on
@@ -82,8 +128,9 @@ displayed but not charged (audit M6).
 configured). `/health` returns 200, and an unauthenticated `createOrder` returns 401. All four
 migrations were already applied remotely. Later that day the `CRON_SECRET` function secret and the
 Vault secrets `sellora_cron_secret`/`sellora_api_url` were set, and all five pg_cron jobs are
-active. A manual `invoke_scheduled_job('refreshFxRate')` got a 202 from the function. The project also has an unrelated `websocket-server` function that nothing in this repo
-references.
+active. A manual `invoke_scheduled_job('refreshFxRate')` got a 202 from the function. The project also had an unrelated `websocket-server` function (Supabase's stock echo
+template) that nothing in this repo referenced; it was deleted on 2026-09-27, when `api` was also
+redeployed with per-item diagnostics behind the `SELLORA_DEBUG_LOGS` secret (off by default).
 
 ---
 

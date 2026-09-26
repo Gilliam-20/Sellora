@@ -3,7 +3,7 @@
 // the profile fields they mirror onto), while api/index.ts orchestrates the
 // actual payment-provider calls.
 import { db, must } from "./db.js";
-import { badRequest, forbidden, notFound } from "./errors.js";
+import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import { fromRow } from "./rows.js";
 
 /**
@@ -22,6 +22,24 @@ function subscribeRefusal(profile) {
     return "This seller account is suspended. Contact Sellora support.";
   }
   return null;
+}
+
+/**
+ * Why the seller may not move to `plan` yet, or null when they may: a plan
+ * whose listing cap is below what they have listed now. Refused before any
+ * money moves, so the seller chooses what to unlist. (If they list more
+ * after this check but before paying, the subscriptions_enforce_listing_cap
+ * trigger unlists the newest excess on activation.)
+ * @param {{name: string, listing_limit: number}} plan The plan being bought.
+ * @param {number} listedCount The seller's listed products, across stores.
+ * @return {string|null} The refusal message.
+ */
+function downgradeRefusal(plan, listedCount) {
+  const cap = Number(plan.listing_limit);
+  if (!Number.isFinite(cap) || cap < 0 || listedCount <= cap) return null;
+  const excess = listedCount - cap;
+  return `${plan.name} allows ${cap} listed products and you have ${listedCount}. ` +
+    `Unlist ${excess} ${excess === 1 ? "product" : "products"} first, then switch.`;
 }
 
 /**
@@ -44,11 +62,17 @@ async function createBillingEntry({ sellerId, planId }) {
   if (refusal) throw forbidden(refusal);
 
   const plan = must(await db().from("subscription_plans")
-      .select("id, name, price_kes, price_usd, billing_period_days")
+      .select("id, name, price_kes, price_usd, billing_period_days, listing_limit")
       .eq("id", planId).maybeSingle());
   if (!plan) {
     throw notFound(`Plan ${planId} not found`);
   }
+  const listed = await db().from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("seller_id", sellerId).eq("is_listed", true);
+  must(listed);
+  const tooMany = downgradeRefusal(plan, listed.count ?? 0);
+  if (tooMany) throw conflict(tooMany);
 
   const row = must(await db().from("billing_history").insert({
     seller_id: sellerId,
@@ -158,6 +182,7 @@ async function activatePendingSubscription(entryId, { paymentReference } = {}) {
 
 export {
   subscribeRefusal,
+  downgradeRefusal,
   createBillingEntry,
   getBillingEntry,
   attachBillingPaymentAttempt,

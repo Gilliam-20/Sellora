@@ -1,5 +1,7 @@
 import 'package:get/get.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../data/models/billing_history_entry_model.dart';
 import '../../../data/models/subscription_plan_model.dart';
 import '../../../data/models/subscription_usage_model.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -13,6 +15,7 @@ class SellerSubscriptionController extends GetxController {
 
   final plans = <SubscriptionPlanModel>[].obs;
   final usage = Rxn<SubscriptionUsageModel>();
+  final history = <BillingHistoryEntryModel>[].obs;
   final isLoading = true.obs;
   final isPaying = false.obs;
   final isRefreshing = false.obs;
@@ -29,14 +32,25 @@ class SellerSubscriptionController extends GetxController {
 
   Future<void> load() async {
     isLoading.value = true;
-    plans.value = await _subscriptionRepo.fetchPlans();
-    final uid = authRepo.cachedUser?.uid;
-    if (uid != null) {
-      usage.value = await _subscriptionRepo.fetchUsage(uid);
+    try {
+      plans.value = await _subscriptionRepo.fetchPlans();
+      final uid = authRepo.cachedUser?.uid;
+      if (uid != null) {
+        final results = await Future.wait([
+          _subscriptionRepo.fetchUsage(uid),
+          _subscriptionRepo.billingHistory(uid),
+        ]);
+        usage.value = results[0] as SubscriptionUsageModel;
+        history.value = results[1] as List<BillingHistoryEntryModel>;
+      }
+    } finally {
+      isLoading.value = false;
     }
-    isLoading.value = false;
   }
 
+  /// Buys [plan] — a switch, or a renewal when it's the current plan. Paying
+  /// before the period ends adds a period to its end rather than restarting
+  /// it, so renewing early loses nothing.
   Future<void> switchPlan(SubscriptionPlanModel plan, String mpesaPhone) async {
     final user = authRepo.cachedUser;
     if (user == null) return;
@@ -55,6 +69,13 @@ class SellerSubscriptionController extends GetxController {
       Get.back();
       Get.snackbar('Almost there',
           'Complete the M-Pesa prompt on your phone, then tap "Refresh status" below.');
+    } on ApiException catch (e) {
+      // A 4xx carries the server's own caller-facing reason, e.g. a
+      // downgrade refused until the seller unlists some products.
+      final status = e.statusCode;
+      errorMessage.value = status != null && status >= 400 && status < 500
+          ? e.message
+          : 'Payment didn\'t go through. Check the number and try again.';
     } catch (e) {
       errorMessage.value =
           'Payment didn\'t go through. Check the number and try again.';

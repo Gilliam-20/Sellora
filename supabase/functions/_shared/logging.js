@@ -7,7 +7,14 @@
  * field, and the ones worth waking someone up for also carry `alert: true`
  * - search or alert on exactly those two fields, so renaming either, or an
  * ALERTS value, silently disables whatever watches it.
+ *
+ * Per-item diagnostics (one line per product or tracking number) go through
+ * `logDebug`, which writes nothing unless the SELLORA_DEBUG_LOGS function
+ * secret is "true" - they're for chasing a CJ shape mismatch, and would
+ * otherwise dominate log ingest. Run summaries stay at info.
  */
+
+import { env } from "./env.js";
 
 // Swappable for tests, which assert on what would have been written.
 let sink = {
@@ -89,6 +96,20 @@ function buildEntry(event, fields = {}, opts = {}) {
   return entry;
 }
 
+/**
+ * @return {boolean} Whether SELLORA_DEBUG_LOGS=true is set. Read per call so
+ *   setting the secret takes effect without a redeploy of the code.
+ */
+function debugLogsEnabled() {
+  return env("SELLORA_DEBUG_LOGS") === "true";
+}
+
+/** Per-item diagnostic. Dropped unless SELLORA_DEBUG_LOGS=true. */
+function logDebug(event, fields, error) {
+  if (!debugLogsEnabled()) return;
+  sink.info(line("debug", buildEntry(event, fields, { error })));
+}
+
 /** Routine event worth being able to search for later. */
 function logInfo(event, fields) {
   sink.info(line("info", buildEntry(event, fields)));
@@ -115,4 +136,7 @@ function logAlert(event, fields, error) {
   sink.error(line("error", buildEntry(event, fields, { alert: true, error })));
 }
 
-export { ALERTS, buildEntry, setLogSink, logInfo, logWarning, logError, logAlert };
+export {
+  ALERTS, buildEntry, setLogSink, debugLogsEnabled, logDebug, logInfo,
+  logWarning, logError, logAlert,
+};

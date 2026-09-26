@@ -5,7 +5,6 @@ import '../models/billing_history_entry_model.dart';
 import '../models/subscription_plan_model.dart';
 import '../models/subscription_usage_model.dart';
 import '../services/supabase_service.dart';
-import 'product_repository.dart';
 import 'subscription_repository.dart';
 
 class SupabaseSubscriptionRepository extends GetxService
@@ -36,28 +35,24 @@ class SupabaseSubscriptionRepository extends GetxService
     await _db.plans.upsert(toRow(plan.toMap()));
   }
 
+  /// Always the signed-in seller's own: `my_plan_usage()` reads `auth.uid()`.
   @override
   Future<SubscriptionUsageModel> fetchUsage(String sellerId) async {
-    final profile = await _db.profiles
-        .select('subscription_plan_id')
-        .eq('uid', sellerId)
-        .maybeSingle();
-    final planId = profile?['subscription_plan_id'] as String?;
-    final plans = await fetchPlans();
-    SubscriptionPlanModel? plan;
-    for (final p in plans) {
-      if (p.id == planId) {
-        plan = p;
-        break;
-      }
-    }
-    final listings =
-        await Get.find<ProductRepository>().sellerListings(sellerId);
-    // Published listings only — what the server's listing-limit trigger
-    // counts. Drafts are free.
-    return SubscriptionUsageModel(
-      listingCount: listings.where((p) => p.isListed).length,
-      listingLimit: plan?.listingLimit ?? -1,
-    );
+    final res = await _db.client.rpc('my_plan_usage');
+    return SubscriptionUsageModel.fromMap(
+        Map<String, dynamic>.from(res as Map));
+  }
+
+  @override
+  Future<List<BillingHistoryEntryModel>> billingHistory(String sellerId,
+      {int limit = 24}) async {
+    final rows = await _db.billingHistory
+        .select()
+        .eq('seller_id', sellerId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    return rows
+        .map((r) => BillingHistoryEntryModel.fromMap(fromRow(r)))
+        .toList();
   }
 }

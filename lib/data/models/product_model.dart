@@ -26,6 +26,7 @@ class ProductModel {
     this.rating = 0,
     this.stock = 0,
     this.discountPercent,
+    this.supplierAlert,
   });
 
   final String id;
@@ -58,6 +59,11 @@ class ProductModel {
   final int stock;
   final int? discountPercent;
 
+  /// What the hourly listing sync last found wrong with this listing against
+  /// CJ: `below_cost` or `unavailable` (supabase/functions/_shared/
+  /// listingSync.js). Server-owned, so [toMap] never sends it back.
+  final String? supplierAlert;
+
   double get margin => sellPrice - costPrice;
   double get marginPercent => costPrice == 0 ? 0 : (margin / costPrice) * 100;
 
@@ -89,6 +95,7 @@ class ProductModel {
       rating: rating,
       stock: stock ?? this.stock,
       discountPercent: discountPercent,
+      supplierAlert: supplierAlert,
     );
   }
 
@@ -124,6 +131,7 @@ class ProductModel {
       rating: (map['rating'] as num?)?.toDouble() ?? 0,
       stock: map['stock'] as int? ?? 0,
       discountPercent: map['discountPercent'] as int?,
+      supplierAlert: map['supplierAlert'] as String?,
     );
   }
 

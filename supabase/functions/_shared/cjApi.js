@@ -2,6 +2,7 @@ import { request } from "./http.js";
 import { getValidAccessToken, CJ_BASE_URL } from "./cjAuth.js";
 import { getPricing, retailProductPrice } from "./pricing.js";
 import { withCache } from "./cache.js";
+import { logDebug, logWarning } from "./logging.js";
 
 // Categories rarely change; search/detail carry live-ish prices so they get a
 // much shorter TTL - just long enough to absorb repeat browsing/pagination.
@@ -151,6 +152,22 @@ async function getProductDetail(pid, regionKey) {
 }
 
 /**
+ * Just the current supplier price of each of a product's variants - one CJ
+ * call, uncached, for the listing sync (listingSync.js). getProductDetail
+ * is three calls and cached, which is right for the import screen and wrong
+ * for checking whether a price has moved.
+ * @param {string} pid CJ product id.
+ * @return {Promise<Array<{vid: string, supplierPriceUsd: (number|null)}>>}
+ */
+async function getVariantPrices(pid) {
+  const variants = await cjRequest({ path: "/product/variant/query", params: { pid } });
+  return (Array.isArray(variants) ? variants : []).map((v) => ({
+    vid: v.vid,
+    supplierPriceUsd: toNumber(v.variantSellPrice),
+  }));
+}
+
+/**
  * Playable videos for a product (empty array if it has none). CJ's video
  * links require a `Referer: https://developers.cjdropshipping.com/` header
  * on the actual playback request - the Flutter client attaches that itself
@@ -169,7 +186,7 @@ async function getProductVideos(pid) {
       // Not every product has videos, and CJ returns an error rather than an
       // empty list in that case - treat any failure here as "no videos"
       // rather than failing the whole product detail response.
-      console.warn(`getProductVideos(${pid}) failed: ${err.message}`);
+      logDebug("cj_videos_unavailable", { pid }, err);
       return [];
     }
     return (videos || [])
@@ -203,13 +220,14 @@ async function getProductStock(pid) {
         params: { pid },
       });
     } catch (err) {
-      console.warn(`getProductStock(${pid}) failed: ${err.message}`);
+      logDebug("cj_stock_lookup_failed", { pid }, err);
       return null;
     }
     if (!Array.isArray(rows)) {
-      console.warn(
-          `getProductStock(${pid}): unexpected shape, not an array:`,
-          JSON.stringify(rows).slice(0, 400));
+      logDebug("cj_stock_shape_unexpected", {
+        pid,
+        sample: JSON.stringify(rows).slice(0, 400),
+      });
       return null;
     }
 
@@ -231,9 +249,8 @@ async function getProductStock(pid) {
     // listing. Treat it as unknown and let the caller's default stand.
     if (Object.keys(byVid).length === 0 ||
         Object.values(byVid).every((q) => q === 0)) {
-      console.warn(
-          `getProductStock(${pid}): parsed no positive stock; treating as ` +
-          "unknown. Confirm CJ's stock response field names.");
+      // Confirm CJ's stock response field names if this fires for everything.
+      logDebug("cj_stock_unknown", { pid });
       return null;
     }
     return byVid;
@@ -352,7 +369,7 @@ async function getTrackInfo(trackingNumber) {
       params: { trackNumber: trackingNumber },
     });
   } catch (err) {
-    console.warn(`getTrackInfo(${trackingNumber}) failed: ${err.message}`);
+    logWarning("cj_track_lookup_failed", { trackingNumber }, err);
     return [];
   }
   // CJ returns either the rows themselves or an object wrapping them; the
@@ -361,9 +378,11 @@ async function getTrackInfo(trackingNumber) {
   const rows = data?.trackInfoList ?? data?.trackInfo ?? data?.list;
   if (Array.isArray(rows)) return rows;
   if (data) {
-    console.warn(
-        `getTrackInfo(${trackingNumber}): unexpected shape:`,
-        JSON.stringify(data).slice(0, 400));
+    logWarning("cj_track_shape_unexpected", { trackingNumber });
+    logDebug("cj_track_shape_sample", {
+      trackingNumber,
+      sample: JSON.stringify(data).slice(0, 400),
+    });
   }
   return [];
 }
@@ -411,6 +430,7 @@ export {
   fetchCategories,
   searchProducts,
   getProductDetail,
+  getVariantPrices,
   getProductVideos,
   getProductStock,
   getVariant,

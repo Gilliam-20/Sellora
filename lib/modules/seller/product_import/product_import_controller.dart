@@ -105,12 +105,13 @@ class ProductImportController extends GetxController {
 
   double get shippingCost => shippingEstimate.value?.cost ?? 0;
 
-  /// CJ cost + estimated shipping to Kenya — the basis the quick-margin
-  /// presets and the live profit/margin readout price against (landed cost,
-  /// not bare CJ cost). Local to this screen only — doesn't touch
-  /// ProductModel.costPrice/marginPercent, which stay CJ-cost-only
-  /// elsewhere (e.g. the dashboard).
-  double get landedCost => costPrice + shippingCost;
+  /// What the seller keeps from one sale at [price]: the price less
+  /// Sellora's service fee, less CJ's cost of the goods. Shipping isn't in
+  /// it — the buyer pays that separately at checkout, and the freight margin
+  /// is Sellora's (the H1 decision, SELLORA_SECURITY_AUDIT.md §6). Mirrors
+  /// `splitServiceFee` in supabase/functions/_shared/orders.js.
+  double sellerEarning(double price) =>
+      price * (1 - AppConstants.platformServiceFeeRate) - costPrice;
 
   /// CJ's own suggested retail for the current selection — already
   /// margin-priced server-side (supabase/functions/_shared/marginPricingService.js), so
@@ -141,11 +142,15 @@ class ProductImportController extends GetxController {
         100;
   }
 
-  /// The price that yields [marginPercent] over [landedCost] (CJ cost +
-  /// estimated shipping), not just bare CJ cost — an accurate margin has to
-  /// account for what it actually costs to get the item to a buyer.
+  /// The price whose [sellerEarning] is [marginPercent] of CJ's cost, i.e.
+  /// after the service fee, rounded up to the cent.
   double priceForMargin(double marginPercent) =>
-      landedCost * (1 + marginPercent / 100);
+      (costPrice *
+                  (1 + marginPercent / 100) /
+                  (1 - AppConstants.platformServiceFeeRate) *
+                  100)
+              .ceil() /
+          100;
 
   /// Writes the listing. Returns false when it was blocked (no session, or
   /// the plan's listing limit is already reached — which snackbars its own

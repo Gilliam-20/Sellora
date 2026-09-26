@@ -209,16 +209,51 @@ const signedInAs = (respond: (c: any) => any) => {
   return db;
 };
 
-describe("public catalog", () => {
-  test("is limited per IP, keyed on the forwarded address", async () => {
-    const db = fakeDb(() => ({ data: [{ allowed: false, retry_after_ms: 2000 }], error: null }));
-    setDb(db);
-    const res = await call("searchProducts?keyword=lamp", {
-      headers: { "x-forwarded-for": "198.51.100.7, 10.0.0.1" },
+describe("seller catalog", () => {
+  // deno-lint-ignore no-explicit-any
+  const as = (user: any, role: string | null, allowed = false) => {
+    // deno-lint-ignore no-explicit-any
+    const db = fakeDb((c: any) => {
+      if (c.rpc) return { data: [{ allowed, retry_after_ms: 2000 }], error: null };
+      return { data: role ? { role } : null, error: null };
     });
+    setDb({
+      ...db,
+      auth: { getUser: () => Promise.resolve({ data: { user }, error: null }) },
+    });
+    return db;
+  };
+  const token = { headers: { Authorization: "Bearer token" } };
+
+  test("needs a signed-in caller - a forged forwarded address buys nothing", async () => {
+    const res = await call("searchProducts?keyword=lamp", {
+      headers: { "x-forwarded-for": "198.51.100.7" },
+    });
+    assert.equal(res.status, 401);
+  });
+
+  test("refuses a buyer, before spending any budget", async () => {
+    const db = as({ id: "buyer-1", app_metadata: {} }, "buyer");
+    for (const path of ["searchProducts?keyword=lamp", "getProductDetail?pid=p1", "getCategories"]) {
+      assert.equal((await call(path, token)).status, 403, path);
+    }
+    // deno-lint-ignore no-explicit-any
+    assert.equal(db.calls.filter((c: any) => c.rpc).length, 0);
+  });
+
+  test("limits a seller per account", async () => {
+    const db = as({ id: "seller-1", app_metadata: {} }, "seller");
+    const res = await call("searchProducts?keyword=lamp", token);
     assert.equal(res.status, 429);
     // deno-lint-ignore no-explicit-any
-    assert.equal((db.calls[0] as any).args.p_key, "publicCatalog:ip:198.51.100.7");
+    assert.equal((db.calls.find((c: any) => c.rpc) as any).args.p_key, "sellerCatalog:seller-1");
+  });
+
+  test("lets admin through without a seller profile", async () => {
+    const db = as({ id: "admin-1", app_metadata: { role: "admin" } }, null);
+    assert.equal((await call("getCategories", token)).status, 429);
+    // deno-lint-ignore no-explicit-any
+    assert.equal(db.calls.filter((c: any) => c.table === "profiles").length, 0);
   });
 });
 

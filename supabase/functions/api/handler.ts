@@ -16,6 +16,7 @@ import * as ordersModule from "../_shared/orders.js";
 import * as subscriptionsModule from "../_shared/subscriptions.js";
 import * as refundsModule from "../_shared/refunds.js";
 import * as catalogSyncModule from "../_shared/catalogSync.js";
+import { syncListings } from "../_shared/listingSync.js";
 import { refreshFxRates } from "../_shared/fx.js";
 import { db, must } from "../_shared/db.js";
 import { env } from "../_shared/env.js";
@@ -255,31 +256,48 @@ const REFUND_REFUSALS: Record<string, string> = {
 };
 
 // =============================================================================
-// Catalog (public)
+// Catalog (sellers and admin)
 // =============================================================================
 
+/**
+ * Wraps a live-CJ catalog route. These spend the one platform CJ quota, and
+ * only the seller catalog/import screens call them (buyers browse
+ * `storefront_products`), so they're for sellers and admin, limited per
+ * account. They used to be public and limited per IP, but that key came from
+ * the first x-forwarded-for hop, which a caller can set to anything.
+ */
+function sellerCatalog(
+  handler: (ctx: Context, user: Caller) => Promise<Response>,
+): Route {
+  return signedIn(async (ctx, user) => {
+    if (!user.admin) {
+      const profile = must(await db().from("profiles")
+        .select("role").eq("uid", user.uid).maybeSingle());
+      if (profile?.role !== "seller") return fail(403, "Forbidden");
+    }
+    const limited = await rateLimited("sellerCatalog", user.uid);
+    if (limited) return limited;
+    return handler(ctx, user);
+  });
+}
+
 /** GET /getCategories - CJ's full category tree. */
-const getCategories: Route = async ({ req }) => {
-  const limited = await rateLimited("publicCatalog", clientKey(req));
-  if (limited) return limited;
+const getCategories = sellerCatalog(async () => {
   try {
     return ok(await cjApi.fetchCategories());
   } catch (err) {
     return sendError(err, { endpoint: "getCategories" });
   }
-};
+});
 
 /**
  * GET /searchProducts?keyword=hoodie&categoryId=xxx&page=1&size=20
  *
- * Every parameter is clamped before it reaches CJ, and callers are limited
- * per IP: this endpoint is public and spends our one CJ API key, so an
- * unbounded `size`/`page`, or an unbounded number of calls, is a way to get
- * that key rate-limited and take the catalog offline for everyone.
+ * Every parameter is clamped before it reaches CJ: this endpoint spends our
+ * one CJ API key, so an unbounded `size`/`page` is a way to get that key
+ * rate-limited and take the catalog offline for everyone.
  */
-const searchProducts: Route = async ({ req, query }) => {
-  const limited = await rateLimited("publicCatalog", clientKey(req));
-  if (limited) return limited;
+const searchProducts = sellerCatalog(async ({ query }) => {
   try {
     return ok(await cjApi.searchProducts({
       keyword: sanitizeKeyword(query.get("keyword") ?? undefined),
@@ -291,12 +309,10 @@ const searchProducts: Route = async ({ req, query }) => {
   } catch (err) {
     return sendError(err, { endpoint: "searchProducts" });
   }
-};
+});
 
 /** GET /getProductDetail?pid=xxxxxxxx - product info + all its variants. */
-const getProductDetail: Route = async ({ req, query }) => {
-  const limited = await rateLimited("publicCatalog", clientKey(req));
-  if (limited) return limited;
+const getProductDetail = sellerCatalog(async ({ query }) => {
   try {
     const pid = sanitizeId(query.get("pid") ?? undefined);
     if (!pid) return fail(400, "A valid pid is required");
@@ -304,7 +320,7 @@ const getProductDetail: Route = async ({ req, query }) => {
   } catch (err) {
     return sendError(err, { endpoint: "getProductDetail" });
   }
-};
+});
 
 /**
  * POST /calculateFreight
@@ -967,6 +983,8 @@ const JOBS: Record<string, () => Promise<Json>> = {
     }
   },
   syncCatalog: () => catalogSync.runCatalogSync(),
+  // Flags listings CJ can no longer supply at their price (PHASE 4).
+  syncListings: () => syncListings(),
   // The recovery path for an empty CJ wallet or a CJ outage.
   retryFailedFulfillments: () => orders.retryFailedFulfillments(),
   refreshOrderTracking: () => orders.refreshTrackingBatch(),

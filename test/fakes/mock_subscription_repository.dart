@@ -15,6 +15,7 @@ class MockSubscriptionRepository extends GetxService
 
   final AuthRepository _authRepository;
   final List<SubscriptionPlanModel> _plans = MockSeedData.plans();
+  final List<BillingHistoryEntryModel> _history = [];
 
   @override
   Future<List<SubscriptionPlanModel>> fetchPlans() async {
@@ -44,6 +45,7 @@ class MockSubscriptionRepository extends GetxService
       createdAt: now,
       paidAt: now,
     );
+    _history.insert(0, entry);
 
     // Mock mode has no webhook to wait on, so this repository applies the
     // activation itself — the single place that does, instead of the
@@ -81,9 +83,23 @@ class MockSubscriptionRepository extends GetxService
     }
     final listings =
         await Get.find<ProductRepository>().sellerListings(sellerId);
+    final until = user?.subscriptionActiveUntil;
     return SubscriptionUsageModel(
       listingCount: listings.where((p) => p.isListed).length,
       listingLimit: plan?.listingLimit ?? -1,
+      orderLimit: plan?.orderLimit ?? -1,
+      storeLimit: plan?.storeLimit ?? 1,
+      subscriptionStatus: until == null
+          ? 'none'
+          : until.isAfter(DateTime.now())
+              ? 'active'
+              : 'lapsed',
+      currentPeriodEnd: until,
     );
   }
+
+  @override
+  Future<List<BillingHistoryEntryModel>> billingHistory(String sellerId,
+          {int limit = 24}) async =>
+      _history.where((e) => e.sellerId == sellerId).take(limit).toList();
 }

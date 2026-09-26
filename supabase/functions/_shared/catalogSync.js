@@ -1,6 +1,7 @@
 import { db, must } from "./db.js";
 import * as cjApi from "./cjApi.js";
 import { toRow } from "./rows.js";
+import { logDebug } from "./logging.js";
 
 // The shared browse catalog. Was the top-level Firestore `products` and
 // `categories` collections; the tenant-owned listings are `products`.
@@ -231,7 +232,9 @@ async function fetchDetailFields(pid, config) {
   try {
     detail = await cjApi.getProductDetail(pid);
   } catch (err) {
-    console.warn(`catalogSync: detail fetch failed for ${pid}:`, err.message);
+    // Counted in the run summary as `pending - enriched`; the per-product
+    // reason is only worth the log volume when debugging.
+    logDebug("catalog_detail_fetch_failed", { pid }, err);
     return null;
   }
   // null means CJ's inventory lookup failed or came back unreadable, which is

@@ -14,6 +14,10 @@ abstract class Routes {
   // Where an expired/used/wrong-device auth email link lands.
   static const authLinkError = '/auth-link-error';
 
+  // Public account deletion, for the Play Console's deletion-link field:
+  // https://<host>/#/delete-account
+  static const deleteAccount = '/delete-account';
+
   static const sellerOnboarding = '/seller/onboarding';
 
   // Public tenant storefront — also the buyer shell (shop/cart/orders/

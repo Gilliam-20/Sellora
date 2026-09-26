@@ -15,7 +15,7 @@ import '../models/product_model.dart';
 /// methods here can unwrap `data` directly once the call itself succeeds.
 ///
 /// Typical flow:
-///  1. Seller browses [searchProducts] (public CJ catalog search).
+///  1. Seller browses [searchProducts] (live CJ catalog search, sellers only).
 ///  2. Seller views [productDetail], picks a price -> ProductRepository
 ///     writes a `listings` doc referencing the CJ product id.
 ///  3. Admin calls [runCatalogSync] (pg_cron also runs it daily) to pull

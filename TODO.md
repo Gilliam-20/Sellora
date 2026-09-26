@@ -7,8 +7,8 @@
 | **0 — Audit** | Done (`SELLORA_ARCHITECTURE.md`) |
 | **1 — Foundation** | Done — theme, responsive shell, shared primitives, 0 analyzer issues |
 | **2 — Auth + seller onboarding** | In progress — signup creates a store, marketing page is the signed-out entry point, seller shell now guards on store resolution. 2026-09-25: onboarding gained a store-setup step (name/category/country/currency) ahead of plan selection, the shell's no-store dead end now routes to it and creates the store, and email-verification status/resend is surfaced (not enforced). Still missing: multi-store switcher (blocked on open decision #4), required email verification, Google sign-in |
-| **3 — Billing** | Security core done — server-side `subscribeSeller`, immutable billing ledger, locked-down subscription fields, configurable plan schema (orderLimit/storeLimit/features), listing usage tracked. Not done: order-limit enforcement/usage (blocked on PHASE 4's order-attribution gap), cancel/resume, invoices UI |
-| **4 — Catalog + CJ import** | Client plumbing (endpoints, response parsing, admin sync) reconciled with the real CJ backend 2026-09-14; `ProductVariant` carries CJ's real per-SKU `vid`/`sku`/price 2026-09-15; a real seller import screen (variant picker + margin-based smart pricing + draft/publish) shipped 2026-09-15, replacing the old flat-price bottom sheet. Category browsing (chip filter), a shipping-cost estimate feeding the import screen's landed-cost pricing, and a buyer-facing variant selector all shipped 2026-09-18. Still open: catalog-to-per-seller-listing mapping at scale (still `${sellerId}_${catalogProduct.id}` doc ids); CJ integration is still unverified against a real account |
+| **3 — Billing** | Security core done — server-side `subscribeSeller`, immutable billing ledger, locked-down subscription fields, configurable plan schema (orderLimit/storeLimit/features), listing usage tracked. 2026-09-26: order/store limits enforced server-side (audit §6, H6). Usage for listings, paid orders and stores comes from the server's `my_plan_usage()`. Renew action, billing history, plan limits shown side by side, and a downgrade that would exceed the new listing cap is refused, with a trigger backstop (audit §7). Not done: cancel/resume (no auto-renewal exists; unpaid plans lapse), proration on a mid-period upgrade (owner call) |
+| **4 — Catalog + CJ import** | Client plumbing (endpoints, response parsing, admin sync) reconciled with the real CJ backend 2026-09-14; `ProductVariant` carries CJ's real per-SKU `vid`/`sku`/price 2026-09-15; a real seller import screen (variant picker + margin-based smart pricing + draft/publish) shipped 2026-09-15, replacing the old flat-price bottom sheet. Category browsing (chip filter), a shipping-cost estimate feeding the import screen's landed-cost pricing, and a buyer-facing variant selector all shipped 2026-09-18. 2026-09-26: product synchronization. The hourly `syncListings` job refreshes listed products' CJ cost and flags (and notifies the seller about) a listing whose price no longer covers cost plus fee, or that CJ no longer offers. It never unlists. The import screen's earnings readout now matches the real split (price − 7% fee − CJ cost; the buyer pays shipping). Listing ids are keyed `(store_id, id)` since the Supabase move, so the old doc-id concern is gone (audit §7). Still open: CJ integration is unverified against a real account; a server-side full `marginPricingService` quote remains a product call |
 | **5 — Seller product management** | Write-path migration done 2026-09-18 (`listProduct`/`updateListing`/`unlistProduct` now target `stores/{storeId}/products`, flat `listings` is dead code). Variants management UI also done 2026-09-18 (per-variant enable/disable + seller SKU override, from My Listings) — see WORKLOG.md for both. Still not started: collections, real inventory tracking, SEO fields, bulk operations, pagination, server-authorized writes |
 | **6 — Store builder** | First slice shipped 2026-09-19: seller-facing "Customize store" screen editing `StoreModel`'s existing branding fields (name/tagline/logo/banner/accent color), storefront renders logo/banner/accent. 2026-09-20: logo/banner can now be picked from the seller's device (`image_picker`) instead of pasted as a URL, inlined as a `data:` URI (no `firebase_storage` yet). Not started: theme/section/block/setting models, renderer, preview flow, publish flow |
 | **7 — Customer storefront** | Core shopping flow shipped 2026-09-20: the buyer shell (shop/cart/orders/alerts/profile) now lives at `/s/:slug` itself, guest-reachable end to end for browsing/cart, gated to a signed-in buyer only at checkout's submit step and for order history/profile. The old flat `/buyer` shell and its duplicate marketplace-era feed (`BuyerHomeController`) are deleted. Still not started: collections (needs PHASE 5's model first), a dedicated `Customer` model, order-detail/tracking, multi-store switcher |
@@ -27,18 +27,28 @@ secrets (owner steps below).
 ### Supabase migration — to do
 
 **Owner (needs your Supabase dashboard / machine):**
-- [ ] **Roll out the security hardening (2026-09-26, `SELLORA_SECURITY_AUDIT.md` §6), in this order:**
-      1. `cd supabase && npx supabase db push` (applies `20260928000000_security_hardening.sql`).
-      2. `npm run deploy`: the new `createOrder` calls `seller_order_gate`, which step 1 creates.
+- [ ] **Roll out the security hardening and the follow-up pass (2026-09-26, `SELLORA_SECURITY_AUDIT.md`
+      §6 and §7), in this order:**
+      1. `cd supabase && npx supabase db push`. This applies `20260928000000_security_hardening.sql`,
+         `20260929000000_billing_usage.sql`, `20260930000000_listing_sync.sql` and
+         `20260930000100_deployment_report.sql`.
+      2. `npm run deploy`: the new function calls `seller_order_gate`, which step 1 creates, and
+         registers the `syncListings` job that step 1 schedules.
       3. `flutter build web` + `firebase deploy --only hosting`. The old build reads `products`
-         directly, which buyers can no longer do, so storefronts are empty until this ships.
-      Then check that every real seller who should be selling has an active `subscriptions` row.
-      Without one, their storefront shows nothing and checkout refuses their store.
+         directly, which buyers can no longer do, so storefronts are empty until this ships. It also
+         calls the CJ catalog routes, which now refuse anyone but a signed-in seller or admin, and
+         reads `my_plan_usage()`.
+      4. `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/preflight.js` (from
+         `supabase/`). It checks everything below that can be checked from outside and names the
+         fix for each failure, including approved sellers with no current subscription (their
+         storefront shows nothing and checkout refuses their store). Re-run it after any change.
+- [ ] Google Play Console → App content → Data safety: set the account-deletion URL to
+      `https://<hosting domain>/#/delete-account`.
 - [x] Put the project URL and **publishable** key (Settings → API) in
       `lib/core/config/supabase_config.dart`, or pass `--dart-define=SUPABASE_URL=...
       --dart-define=SUPABASE_PUBLISHABLE_KEY=...`. Never the service-role / secret key.
 - [ ] Apply the schema: `cd supabase && npx supabase link --project-ref <ref> && npx supabase db push`.
-      That applies all four files in `supabase/migrations/`. If you use the SQL editor instead, paste
+      That applies every file in `supabase/migrations/`. If you use the SQL editor instead, paste
       them in filename order.
 - [x] Authentication → Providers: make sure **Email** is enabled (confirmed 2026-09-26).
 - [ ] Authentication → Sign In / Providers → Email: decide on **"Confirm email"**. **Off** matches the
@@ -49,14 +59,20 @@ secrets (owner steps below).
       `sellora://auth-callback` for the Android app. Password-reset and confirmation links need them.
 - [ ] Set the Edge Function secrets, then deploy it:
       `npx supabase secrets set CJ_API_KEY=... INTASEND_SECRET_KEY=... CRON_SECRET=<long random string>`
-      then `cd supabase && npm run deploy`. Optional secrets: `INTASEND_WEBHOOK_CHALLENGE` (enforced
-      when set) and `ALLOWED_REDIRECT_ORIGINS` (comma-separated). Without it, payment redirects may
-      only go to the `sellora-20.web.app`/`sellora.app` origins.
+      then `cd supabase && npm run deploy`. Also set `INTASEND_WEBHOOK_CHALLENGE` to the challenge
+      value you enter in IntaSend's webhook settings. It's technically optional, but it's what
+      rejects a forged webhook before it costs a verification call; the webhook's per-IP limit can
+      be spoofed (audit §7, N1). Optional: `ALLOWED_REDIRECT_ORIGINS` (comma-separated). Without it,
+      payment redirects may only go to the `sellora-20.web.app`/`sellora.app` origins.
 - [ ] Scheduled jobs: in the SQL editor, run
       `select vault.create_secret('https://<ref>.supabase.co/functions/v1/api', 'sellora_api_url');` and
       `select vault.create_secret('<the same CRON_SECRET>', 'sellora_cron_secret');`. pg_cron then runs
-      FX refresh, catalog sync, fulfilment retry and tracking refresh. Check them under
-      Integrations → Cron.
+      FX refresh, catalog sync, fulfilment retry, tracking refresh, order expiry and the hourly
+      listing sync (seven `sellora-*` jobs; `preflight.js` checks they all exist). Check them under
+      Integrations → Cron. If pg_cron/pg_net weren't enabled when the migrations ran, enable them
+      and re-run `20260927000100_scheduled_jobs.sql`, the `do $$` block at the end of
+      `20260928000000_security_hardening.sql`, and the one at the end of
+      `20260930000000_listing_sync.sql`.
 - [ ] IntaSend dashboard: point the webhook at `https://<ref>.supabase.co/functions/v1/api/intasendWebhook`.
 - [ ] Re-create the admin:
       `cd supabase && SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/grant-admin.js <admin email>`

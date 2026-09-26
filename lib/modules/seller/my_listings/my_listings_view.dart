@@ -5,13 +5,33 @@ import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../data/models/product_model.dart';
 import 'my_listings_controller.dart';
 
 enum _ListingAction { publish, pause }
+
+/// The listing sync's flag, in words, while it still applies. The sync
+/// refreshes `costPrice` from CJ, so a price the seller has since raised
+/// past the floor clears the warning here without waiting for the next run.
+String? _supplierIssue(ProductModel product) {
+  switch (product.supplierAlert) {
+    case 'unavailable':
+      return 'CJ no longer offers this product. Buyers can\'t check it out.';
+    case 'below_cost':
+      final floor =
+          product.sellPrice * (1 - AppConstants.platformServiceFeeRate);
+      if (floor >= product.costPrice) return null;
+      return 'Below CJ\'s cost of ${Formatters.currency(product.costPrice)} '
+          'plus the fee. Checkout refuses it until you raise the price.';
+    default:
+      return null;
+  }
+}
 
 class MyListingsView extends GetView<MyListingsController> {
   const MyListingsView({super.key});
@@ -103,6 +123,17 @@ class MyListingsView extends GetView<MyListingsController> {
                                     ),
                                   ],
                                 ),
+                                if (_supplierIssue(product)
+                                    case final issue?) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    issue,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(color: AppColors.danger),
+                                  ),
+                                ],
                                 if (product.variants.length > 1) ...[
                                   const SizedBox(height: 2),
                                   Text(

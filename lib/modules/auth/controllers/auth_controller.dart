@@ -68,7 +68,7 @@ class AuthController extends GetxController {
       _storage.lastRole = user.role.name;
       await _goToHome(user);
     } catch (e) {
-      errorMessage.value = _friendlyError(e);
+      errorMessage.value = friendlyError(e);
     } finally {
       isLoading.value = false;
     }
@@ -96,7 +96,7 @@ class AuthController extends GetxController {
       _storage.lastRole = user.role.name;
       await _goToHome(user);
     } catch (e) {
-      errorMessage.value = _friendlyError(e);
+      errorMessage.value = friendlyError(e);
     } finally {
       isLoading.value = false;
     }
@@ -116,7 +116,7 @@ class AuthController extends GetxController {
       _storage.lastRole = user.role.name;
       await _goToHome(user);
     } catch (e) {
-      errorMessage.value = _friendlyError(e);
+      errorMessage.value = friendlyError(e);
     } finally {
       isLoading.value = false;
     }
@@ -149,7 +149,7 @@ class AuthController extends GetxController {
       _storage.lastRole = user.role.name;
       Get.offAllNamed(Routes.sellerOnboarding);
     } catch (e) {
-      errorMessage.value = _friendlyError(e);
+      errorMessage.value = friendlyError(e);
     } finally {
       isLoading.value = false;
     }
@@ -185,7 +185,7 @@ class AuthController extends GetxController {
           'Password updated', 'You\'re signed in with your new password.');
       await _goToHome(user);
     } catch (e) {
-      errorMessage.value = _friendlyError(e);
+      errorMessage.value = friendlyError(e);
     } finally {
       isLoading.value = false;
     }
@@ -236,7 +236,9 @@ class AuthController extends GetxController {
     Get.offAllNamed(slug != null ? '/s/$slug' : Routes.marketing);
   }
 
-  String _friendlyError(Object e) {
+  /// The message to show for a sign-in/sign-up failure. Also used by
+  /// DeleteAccountController, which signs in before deleting.
+  static String friendlyError(Object e) {
     debugPrint('AuthController: $e');
     if (e is ArgumentError) {
       return 'Please accept the Seller Terms & Conditions to continue.';

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
-import '../../../app/theme/app_typography.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
@@ -164,7 +164,7 @@ class _ProductImportViewState extends State<ProductImportView> {
                   _PricingCard(
                     costPrice: controller.costPrice,
                     shippingCost: controller.shippingCost,
-                    landedCost: controller.landedCost,
+                    earningFor: controller.sellerEarning,
                     isLoadingShipping: controller.isLoadingShipping.value,
                     shippingError: controller.shippingError.value,
                     currency: controller.currencyCode,
@@ -397,7 +397,7 @@ class _PricingCard extends StatelessWidget {
   const _PricingCard({
     required this.costPrice,
     required this.shippingCost,
-    required this.landedCost,
+    required this.earningFor,
     required this.isLoadingShipping,
     required this.shippingError,
     required this.currency,
@@ -409,7 +409,8 @@ class _PricingCard extends StatelessWidget {
 
   final double costPrice;
   final double shippingCost;
-  final double landedCost;
+  /// See [ProductImportController.sellerEarning].
+  final double Function(double price) earningFor;
   final bool isLoadingShipping;
   final String? shippingError;
   final String currency;
@@ -423,8 +424,8 @@ class _PricingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
-    final profit = price - landedCost;
-    final marginPercent = landedCost == 0 ? 0.0 : (profit / landedCost) * 100;
+    final profit = earningFor(price);
+    final marginPercent = costPrice == 0 ? 0.0 : (profit / costPrice) * 100;
     final isHealthy = profit > 0;
 
     return Container(
@@ -452,7 +453,7 @@ class _PricingCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Est. shipping to Kenya',
+              Text('Shipping to Kenya (buyer pays)',
                   style: Theme.of(context).textTheme.bodyMedium),
               if (isLoadingShipping)
                 const SizedBox(
@@ -468,14 +469,11 @@ class _PricingCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           const Divider(height: AppSpacing.md),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Landed cost',
-                  style: Theme.of(context).textTheme.titleSmall),
-              Text(Formatters.currency(landedCost, code: currency),
-                  style: AppTypography.price(size: 16)),
-            ],
+          Text(
+            'You keep your price less Sellora\'s '
+            '${(AppConstants.platformServiceFeeRate * 100).round()}% fee, '
+            'less CJ\'s cost. Shipping is charged to the buyer on top.',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: AppSpacing.sm),
           Text('Quick margin', style: Theme.of(context).textTheme.bodySmall),
@@ -515,7 +513,7 @@ class _PricingCard extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                'Profit ${Formatters.currency(profit, code: currency)} · Margin ${marginPercent.toStringAsFixed(0)}%',
+                'You earn ${Formatters.currency(profit, code: currency)} · ${marginPercent.toStringAsFixed(0)}% on cost',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: isHealthy
                         ? AppColors.horizonTealDeep

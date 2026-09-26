@@ -1,6 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { isPayable, billingRefMatches, subscribeRefusal } from "../_shared/subscriptions.js";
+import {
+  isPayable, billingRefMatches, subscribeRefusal, downgradeRefusal,
+} from "../_shared/subscriptions.js";
 
 describe("subscribeRefusal", () => {
   test("an approved or pending seller may subscribe", () => {
@@ -18,6 +20,29 @@ describe("subscribeRefusal", () => {
 
   test("a missing profile may not", () => {
     assert.ok(subscribeRefusal(null));
+  });
+});
+
+describe("downgradeRefusal", () => {
+  const starter = { name: "Starter", listing_limit: 25 };
+
+  test("a plan with room for every listing is fine", () => {
+    assert.equal(downgradeRefusal(starter, 25), null);
+    assert.equal(downgradeRefusal(starter, 0), null);
+  });
+
+  test("an unlimited plan is always fine", () => {
+    assert.equal(downgradeRefusal({ name: "Scale", listing_limit: -1 }, 5000), null);
+  });
+
+  test("a plan below what's listed says how many to unlist", () => {
+    assert.equal(downgradeRefusal(starter, 26),
+        "Starter allows 25 listed products and you have 26. Unlist 1 product first, then switch.");
+    assert.match(downgradeRefusal(starter, 40), /Unlist 15 products first/);
+  });
+
+  test("a numeric limit sent as a string still counts", () => {
+    assert.match(downgradeRefusal({ name: "Starter", listing_limit: "25" }, 30), /Unlist 5/);
   });
 });
 
