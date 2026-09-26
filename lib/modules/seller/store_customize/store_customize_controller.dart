@@ -82,12 +82,17 @@ class StoreCustomizeController extends GetxController {
     colorHex.value = value.trim().isEmpty ? null : value.trim();
   }
 
-  Future<void> pickLogo() => _pickImage(logoUrlCtrl, isPickingLogo);
+  Future<void> pickLogo() => _pickImage(logoUrlCtrl, isPickingLogo, 'logo');
 
-  Future<void> pickBanner() => _pickImage(bannerUrlCtrl, isPickingBanner);
+  Future<void> pickBanner() =>
+      _pickImage(bannerUrlCtrl, isPickingBanner, 'banner');
 
+  /// Uploads the picked photo to Supabase Storage and puts its public URL
+  /// in [target]; Save then writes that URL onto the store like a pasted one.
   Future<void> _pickImage(
-      TextEditingController target, RxBool isPicking) async {
+      TextEditingController target, RxBool isPicking, String kind) async {
+    final store = scope.current.value;
+    if (store == null) return;
     isPicking.value = true;
     try {
       final picked = await _picker.pickImage(
@@ -99,11 +104,20 @@ class StoreCustomizeController extends GetxController {
       final bytes = await picked.readAsBytes();
       if (bytes.lengthInBytes > maxPickedImageBytes) {
         Get.snackbar('Image too large',
-            'Choose a photo under ${maxPickedImageBytes ~/ 1024}KB, or a smaller/more compressed one.');
+            'Choose a photo under ${maxPickedImageBytes ~/ (1024 * 1024)}MB.');
         return;
       }
       final mimeType = picked.mimeType ?? mimeTypeForPath(picked.path);
-      target.text = bytesToDataUrl(bytes, mimeType);
+      target.text = await _storeRepository.uploadStoreImage(
+        store.id,
+        bytes,
+        contentType: mimeType,
+        kind: kind,
+      );
+    } catch (e) {
+      debugPrint('StoreCustomizeController: upload failed: $e');
+      Get.snackbar('Upload failed',
+          'The photo could not be uploaded. Check your connection and try again.');
     } finally {
       isPicking.value = false;
     }

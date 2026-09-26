@@ -6,6 +6,183 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-27 — Firebase → Supabase, phase 2: backend on Edge Functions; auth links; Storage
+
+**Status:** done in code. **Nothing is applied to or deployed on the real Supabase project yet** —
+TODO.md's owner checklist has the steps. `cd supabase && npm test`: 89/89 SQL/RLS checks in PGlite,
+7/7 grant-admin tests, and 63 Deno tests (261 steps). `deno check` and `deno lint` are clean.
+`flutter analyze`: 0 errors/warnings (the same 2 pre-existing infos). `flutter test`: 51/52, and
+the one failure is the same pre-existing `seller_shell_controller_test.dart` `NotificationCenter`
+failure. The backend has never talked to a live CJ or IntaSend account, same as the Firebase version.
+
+**Why:** user request: "finish up with the supabase migration in the todo.md". That covers every
+open code item in the checklist: phase 2, the Android deep link, the expired-link landing, and
+Storage uploads. Hosting is still the owner's decision.
+
+**Decisions:**
+- **One Edge Function, `api`, routed by path** (`/functions/v1/api/<endpoint>`). It keeps the
+  Cloud Functions' endpoint names, request bodies and `{success, data}` envelope, so the app changed
+  only `ApiEndpoints.baseFunctionsUrl`. Gateway JWT verification is off (`supabase/config.toml`),
+  because catalog browsing and the IntaSend webhook are public. Each signed-in route checks the token
+  with Supabase Auth itself (`verifyAuth`: refuses deleted and banned users). Admin comes from
+  `app_metadata.role`.
+- **Logic ported as plain-JS ES modules** in `supabase/functions/_shared/`, close to verbatim from
+  `functions/lib`. That keeps the review diff small and the 250 existing tests reusable: they
+  run under Deno's `node:test`, and only 5 needed changes for intended behaviour differences. axios
+  became a small `fetch` helper (`http.js`). The Firebase logger became JSON lines on stdout, and
+  the `event`/`alert` fields are unchanged.
+- **Server-only order data stays on `orders`, hidden by a column-level grant.** Supplier cost,
+  provider refs, and the CJ push/refund state machines are server-only columns. A client `select *`
+  is refused outright, so `SupabaseOrderRepository.columns` names the readable ones. That also means
+  a future server column can't leak by default. The old orders/{id}/items subcollection is the
+  `lines` jsonb column. The client-visible fee columns are now in the order's own currency (the
+  Firestore version wrote USD figures next to a KES/GBP/EUR total), and the USD originals are kept
+  server-side.
+- **Firestore transactions → compare-and-set or SQL functions.** Fulfilment's claim is
+  `UPDATE ... WHERE cj_order_status = <seen> AND cj_push_attempts = <seen>`. Every claim bumps the
+  attempt count, so only one of two racers can match. Refunds claim the same way on
+  `(refund_status, refunded_amount)`. Multi-row writes are SQL functions callable only by the service
+  role: `activate_subscription` (billing entry + subscription + profile mirror, idempotent on
+  `status = 'pending'`), `attach_order_payment_attempt` (appends to the history in one statement,
+  and won't reopen a paid order), and `consume_rate_limit` (row-locked fixed window, which replaces
+  the Firestore counters and their TTL).
+- **Payment states:** `payment_status` now allows `awaiting_confirmation`, `partially_refunded`
+  and `refunded`. The Firestore version wrote `AWAITING_CONFIRMATION`, and the phase 1 check
+  constraint would have rejected it. Dart's `OrderPaymentStatus` gained `partiallyRefunded` and
+  `refunded`, and `awaiting_confirmation` reads as `pending`. Order `status` now goes
+  `pending` → `processing` on payment (it used to be `pendingPayment`/`paid`, which the app's
+  enum couldn't read).
+- **Scheduled jobs:** pg_cron + pg_net POST to `/cron/<job>` with an `x-cron-secret` header read
+  from Vault. The function answers 202 and finishes the job in `EdgeRuntime.waitUntil`. Jobs: FX
+  daily, catalog sync daily, fulfilment retry every 30 min, tracking hourly, and rate-limit cleanup
+  hourly (plain SQL). `maxDetailCallsPerRun` dropped from 60 to 20 to stay inside an Edge Function's
+  wall-clock limit.
+- **Not ported:** PayPal (the app never called it), product reviews (nothing reads them), and App
+  Check (Firebase-only, and it was report-only). `refunds.chargedAmount` now returns null for a
+  PayPal order.
+- **Fixed on the way:** `placeOrder` read `res['id']` from the `{success, data}` envelope, so it
+  would have thrown on the first real order. It now unwraps `data` and uses the server's short
+  `code` (`SLR-XXXXXXXX`). `fulfillOrder` now refuses to re-mark a refunded order paid (a late
+  webhook retry), and it no longer walks a seller-advanced status back to processing.
+- **Auth links:** `AuthService.authRedirectUrl` is the current page on web and
+  `sellora://auth-callback` on Android. The intent filter is in AndroidManifest.xml, and
+  `flutter_deeplinking_enabled` is off so Flutter doesn't also push the URL as a route. Reset,
+  sign-up and resend all pass it. A bad link (`#error=...&error_code=otp_expired`, or a PKCE link
+  opened on another device) lands on `/auth-link-error`. On web, `main()` reads it from the launch
+  URL and replaces the URL before the router starts, since supabase_flutter only cleans the URL on
+  success. Elsewhere, `AuthService.linkErrors` carries it, including one that arrived before
+  `onReady` subscribed.
+- **Storage:** a public `store-media` bucket (2MB, images only). Owners write under `{store_id}/`,
+  and `owns_store()` checks the first path segment. Customize store uploads the photo and saves its
+  public URL. Existing `data:` logos still render.
+
+**Changed:**
+- New: `supabase/functions/` (`api/index.ts`, `_shared/*.js`, `tests/`, `deno.json`),
+  `supabase/config.toml`, and migrations `20260927000000_backend.sql`,
+  `20260927000100_scheduled_jobs.sql` and `20260927000200_storage.sql`. `supabase/package.json` now
+  has Deno as a devDependency and test/check/serve/deploy scripts. `rls.test.mjs` has stubs for the
+  storage schema and 38 new checks.
+- `ApiEndpoints`, `SupabaseOrderRepository` (columns + envelope), `OrderModel`,
+  `StoreRepository.uploadStoreImage` (plus the three fakes), `StoreCustomizeController`,
+  `AuthService`, `main.dart`, routes, the new `AuthLinkError`/`AuthLinkErrorView` with 7 tests,
+  AndroidManifest.xml, and comments across `lib/` that pointed at `functions/lib`.
+- `test/countries_test.dart` now syncs against `supabase/functions/_shared/regions.js`.
+- `functions/` is **left in place**, retired. It holds an untracked `functions/.env` with live keys,
+  which can't be recovered once deleted, so deleting it is an owner step (TODO.md).
+
+**Still open:**
+1. Everything in TODO.md's owner list: `db push`, function secrets + deploy, Vault secrets for cron,
+   the IntaSend webhook URL, redirect URLs, admin, plan seed, catalog sources, and a smoke test.
+2. Unverified against real accounts (unchanged from Firebase): CJ auth/response shapes, IntaSend
+   status/refund shapes, and the webhook payload. `shippingAddress` is still `{countryCode, line}`,
+   not the full address CJ needs to fulfil.
+3. The web link-error path relies on `SystemNavigator.routeInformationUpdated` replacing the URL before
+   the router reads its initial route. That's reasoned from the engine source, not run in a browser.
+4. Hosting decision (Supabase has none).
+
+---
+
+## 2026-09-26 — Mock data removed from the app
+
+**Status:** done. `flutter analyze`: 0 errors/warnings (the same 2 infos, one of which now sits in
+`test/fakes/mock_admin_repository.dart`). `flutter test`: 44/45. The one failure is the same
+pre-existing `seller_shell_controller_test.dart` `NotificationCenter` failure.
+
+**Why:** user request: "remove all the mockdata in the app". This came right after confirming that the
+app fetches nothing real from CJ. The user was told that the real backend path doesn't work until
+phase 2.
+
+**Changed:**
+- Removed `AppConstants.useMockData`. `InitialBinding` now always binds the `Supabase*` repositories
+  and always registers `CjDropshippingService`/`IntasendService`.
+- Removed the demo branches in `CheckoutController` (an instant fake "paid" order),
+  `SellerOnboardingController.payWithMpesa`, and `SellerSubscriptionController.switchPlan` (both
+  relied on the mock activating the subscription synchronously).
+- Deleted `mock_product_repository.dart`, `mock_notification_repository.dart`, and
+  `mock_fx_rate_repository.dart`. Moved `mock_{auth,store,order,subscription,admin}_repository.dart`
+  and `mock_seed_data.dart` to `test/fakes/`, because the admin dashboard and onboarding controller
+  tests use them as in-memory doubles. `lib/data/mock/` and `lib/data/repositories/mock/` no longer
+  exist.
+- Deleted `test/auth_repository_test.dart` and `test/mock_subscription_repository_test.dart`. They
+  only tested the mocks' own behaviour. The real sign-up/store creation is covered by
+  `supabase/tests/rls.test.mjs`.
+- Updated comments, `CLAUDE.md`, `README.md`, and `TODO.md`. `SELLORA_IMPLEMENTATION_PLAN.md` still
+  describes "mock + Firebase" implementations as history and was left alone.
+
+**Consequence:** with the mocks gone, the running app has no fallback. Sign-in/sign-up and store
+lookup work against Supabase once the migration is applied. The CJ catalog/import, checkout, and
+subscription payments go through `ApiEndpoints` and fail until phase 2 ports `functions/` to Edge
+Functions with real CJ/IntaSend credentials. Plans come from the `subscription_plans` table, which
+is empty until seeded.
+
+---
+
+## 2026-09-26 — Supabase: password-reset landing screen
+
+**Status:** implemented, not yet exercised against the real project (the migration isn't applied
+there yet). `flutter analyze`: 0 errors/warnings (the same 2 pre-existing infos). `flutter test`:
+50/51, and the one failure is the same pre-existing `seller_shell_controller_test.dart`
+`NotificationCenter` failure. Nothing new is covered by tests, because the flow depends on
+`Supabase.instance`.
+
+**Why:** item 2 of phase 1's "Still open" list, and the first code item in TODO.md's Supabase
+checklist. Without it, reset emails and `grant-admin.js`'s first-login link led nowhere.
+
+**Findings from the gotrue 2.25 / supabase_flutter 2.15 source:**
+- A recovery link emits **only** `passwordRecovery`, never `signedIn`. That holds for both the PKCE
+  `?code=` link from `resetPasswordForEmail` and the implicit `#access_token=…&type=recovery` link
+  that `admin/generate_link` produces. `SupabaseAuthRepository.userChanges` skips that event.
+  Before this change, a recovery link left the app signed in, with no screen and no cached profile.
+- `Supabase.initialize()` consumes the launch URL before `runApp`, so the event fires before any
+  widget exists. `onAuthStateChange` is a BehaviorSubject, though, so a late listener still receives
+  it as the latest event.
+
+**Changed:**
+- `AuthService`: tracks `isRecoveringPassword`. It is set by `passwordRecovery` and cleared by
+  `signedIn`/`signedOut`/`userUpdated`. It also exposes `passwordRecoveries` and
+  `updatePassword()`. `sendPasswordReset` passes `redirectTo` on web, which is the current
+  origin + path, so a dev server gets the link back. That URL must be in the redirect allow-list.
+- `AuthRepository`: adds `passwordRecoveries`, `isRecoveringPassword`, and `updatePassword()`,
+  which returns the profile loaded with a token refresh and caches it. There are implementations in
+  the Supabase repo, the mock, and both test fakes. `same_password` maps to `same-password`.
+- `SelloraApp.onReady` (in `main.dart`) listens for `passwordRecoveries` and routes to the new
+  `/reset-password` route (`ResetPasswordView`: new password + confirm, using
+  `Validators.newPassword`). On success, `AuthController.completePasswordReset` routes the user
+  home the way sign-in does, and the suspended-seller check applies there too. If the screen is
+  opened without a recovery session, it shows "This link has expired" instead.
+- `AuthController.checkSession` returns early during recovery. Otherwise the mobile splash's 3-second
+  fallback would call `offAllNamed(roleSelect)` over the reset screen.
+
+**Still open:**
+- **Android has no deep-link intent filter**, so a reset requested on the app goes to the web Site
+  URL. The PKCE code verifier lives on the device that asked for the reset, so the code exchange
+  there will fail. Either add an app link (and pass it as `redirectTo` off-web) or set
+  `flowType: AuthFlowType.implicit`. Web-to-web works.
+- An expired or used link arrives as a stream error (`#error=access_denied&error_code=otp_expired`).
+  Nothing routes on it, and with hash routing GetX reads that fragment as a route.
+
+---
+
 ## 2026-09-26 — Firebase → Supabase, phase 1: Auth + database
 
 **Status:** implemented this session, **not yet applied to the Supabase project**. `flutter analyze`:

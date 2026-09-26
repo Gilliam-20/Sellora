@@ -19,11 +19,17 @@ class AuthController extends GetxController {
   /// Called once from the splash screen. Waits briefly for Supabase to
   /// report whether a session already exists, then routes accordingly.
   Future<void> checkSession() async {
+    // A recovery link routes to the reset screen on its own (see
+    // SelloraApp's onReady); routing from here too would pull the user off it.
+    if (_authRepo.isRecoveringPassword) return;
     try {
       final user = await _authRepo.userChanges.first.timeout(
         const Duration(seconds: 3),
         onTimeout: () => null,
       );
+      if (_authRepo.isRecoveringPassword) return;
+      // Same for a bad auth link: its screen replaced the splash already.
+      if (Get.currentRoute == Routes.authLinkError) return;
       if (user != null && _isSuspended(user)) {
         await _authRepo.signOut();
       } else if (user != null) {
@@ -157,6 +163,34 @@ class AuthController extends GetxController {
     }
   }
 
+  /// Whether a recovery link has signed this session in and is waiting on
+  /// a new password — false when the reset screen is opened directly or
+  /// the link had expired.
+  bool get canResetPassword => _authRepo.isRecoveringPassword;
+
+  /// Saves the new password on the recovery session, then continues to
+  /// the account's home exactly as a sign-in would.
+  Future<void> completePasswordReset(String newPassword) async {
+    isLoading.value = true;
+    errorMessage.value = null;
+    try {
+      final user = await _authRepo.updatePassword(newPassword);
+      if (_isSuspended(user)) {
+        await _authRepo.signOut();
+        errorMessage.value = _suspendedMessage;
+        return;
+      }
+      _storage.lastRole = user.role.name;
+      Get.snackbar(
+          'Password updated', 'You\'re signed in with your new password.');
+      await _goToHome(user);
+    } catch (e) {
+      errorMessage.value = _friendlyError(e);
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   Future<void> signOut() async {
     await _authRepo.signOut();
     _cartRepo.setStore(null);
@@ -230,6 +264,8 @@ class AuthController extends GetxController {
       case 'weak-password':
       case 'password-does-not-meet-requirements':
         return 'Choose a stronger password (at least 8 characters, with letters and numbers).';
+      case 'same-password':
+        return 'Choose a password different from your current one.';
       case 'operation-not-allowed':
         return 'Email sign-in isn\'t available right now. Please try again later.';
       // Only when "Confirm email" is enabled on the Supabase project.

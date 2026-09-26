@@ -7,23 +7,16 @@ through **IntaSend** and **M-Pesa**. One Flutter codebase targets Web,
 Android and iOS, with three role-based portals — Buyer, Seller, Admin —
 behind a single sign-in.
 
-## Try it in 60 seconds — catalog/orders need no backend, sign-in does
+## Running it — there is no demo mode
 
-The app ships with `AppConstants.useMockData = true`
-(`lib/core/constants/app_constants.dart`), which swaps the catalog,
-orders, notifications, subscriptions and admin repositories for
-in-memory mock implementations with sample CJ-style products and
-plans. No IntaSend account or CJ Dropshipping key needed for those.
-
-**Sign-in/sign-up is not covered by that flag.** `InitialBinding`
-always wires `AuthRepository`/`StoreRepository` to their real Firebase
-implementations, so you need a reachable Firebase project — the
-`sellora-20` project's config already ships in this repo
-(`lib/firebase_options.dart`, `android/app/google-services.json`) with
-Email/Password auth enabled and `firestore.rules` deployed. Register a
-real account from the app's own sign-up screen (seller) or a store's
-`/s/{slug}/login` page (buyer) — there is no email-content shortcut
-into a role anymore.
+Every repository talks to the real backend; the in-memory mock mode
+(`AppConstants.useMockData`) was removed on 2026-09-26. You need a
+reachable Supabase project (`lib/core/config/supabase_config.dart`) with
+`supabase/migrations` applied. Sign-in/sign-up work against that alone.
+The catalog, CJ import, checkout and subscription payments also need the
+`api` Supabase Edge Function deployed with real CJ Dropshipping and
+IntaSend credentials; until then those screens show errors or empty
+states. See WORKLOG.md and TODO.md's Supabase checklist.
 
 This zip contains the Dart source (`lib/`) and `pubspec.yaml` only —
 platform runner folders (`android/`, `ios/`, `web/`, etc.) aren't
@@ -56,19 +49,16 @@ lib/
   data/
     models/         plain Dart models, no Firestore/UI leakage
     services/       thin wrappers: Firebase Auth, Firestore, CJ proxy, IntaSend proxy
-    repositories/   ONE abstract interface per domain, with both a
-                    Firebase-backed impl and a mock impl (data/repositories/mock/)
-    mock/           sample seed data used by the mock repositories
+    repositories/   ONE abstract interface per domain, with a
+                    Supabase-backed impl (in-memory test fakes live in test/fakes/)
   modules/
     auth/ onboarding/ buyer/ seller/ admin/
       views/  controllers/  bindings/   (per-route, lazyPut)
 ```
 
 - **InitialBinding** (`lib/app/bindings/initial_binding.dart`) registers
-  every service and repository once, as permanent singletons.
-  `AuthRepository`/`StoreRepository` always bind to their real Firebase
-  implementations; every other repository's implementation — mock or
-  Firebase — is decided by `AppConstants.useMockData`.
+  every service and repository once, as permanent singletons, always
+  the real Supabase-backed implementations.
 - Every route's own `Bindings` class `Get.lazyPut`s its controller(s),
   so a controller is created when its page is pushed and disposed when
   popped.
@@ -99,80 +89,66 @@ Named, not default-Material:
 Everything below is scaffolded and ready — you're filling in
 credentials and endpoints, not writing new architecture.
 
-### 1. Firebase
+### 1. Supabase
 
-`lib/main.dart` already calls `Firebase.initializeApp()` unconditionally, and `AuthRepository`/
-`StoreRepository` are already wired to their real implementations regardless of `useMockData` (see
-Architecture above) — sign-in/sign-up talk to Firebase from a fresh checkout. If you're pointing this
-at your own project rather than the `sellora-20` one this repo ships config for:
-
-```bash
-npm install -g firebase-tools
-firebase login
-flutterfire configure   # regenerates lib/firebase_options.dart
-```
-
-Deploy Firestore rules/indexes:
+Everything runs on one Supabase project: Auth, Postgres (schema and RLS in
+`supabase/migrations/`), Storage (store images) and the `api` Edge
+Function. From `supabase/`:
 
 ```bash
-firebase deploy --only firestore:rules,firestore:indexes
+npm install
+npm test                                   # schema/RLS checks + function tests, no Docker needed
+npx supabase link --project-ref <ref>      # once
+npx supabase db push                       # apply the migrations
 ```
 
-Set `AppConstants.useMockData = false` once you also want the catalog, orders, notifications,
-subscriptions and admin views to run for real — that additionally requires the CJ Dropshipping and
-IntaSend setup in step 2 below:
+Put the project URL and publishable key in
+`lib/core/config/supabase_config.dart` (or pass them with `--dart-define`).
+In the dashboard, set the Site URL and add the redirect URLs auth emails
+need: the web app's URL(s), `http://localhost:*` for development, and
+`sellora://auth-callback` for Android.
 
-```dart
-static const bool useMockData = false;
-```
-
-### 2. Cloud Functions (CJ Dropshipping + IntaSend proxies)
+### 2. The `api` Edge Function (CJ Dropshipping + IntaSend proxies)
 
 The Flutter app **never** talks to CJ Dropshipping or IntaSend
-directly — it calls your own Cloud Functions
-(`functions/src/cj.ts`, `functions/src/intasend.ts`), which hold the
-real secret keys server-side. This is the difference between "a secret
+directly — it calls `supabase/functions/api` (`ApiEndpoints`), which holds
+the real secret keys server-side. This is the difference between "a secret
 key baked into an APK anyone can decompile" and "a secret key that
 never leaves your server."
 
-Credentials are Cloud Secret Manager secrets (not `functions:config:set`,
-which is deprecated), set once per environment:
-
 ```bash
-cd functions
-npm install
-firebase functions:secrets:set CJ_EMAIL
-firebase functions:secrets:set CJ_PASSWORD
-firebase functions:secrets:set INTASEND_SECRET_KEY
-firebase functions:secrets:set INTASEND_WEBHOOK_CHALLENGE   # any random string; you'll enter the same value in IntaSend's dashboard below
+npx supabase secrets set CJ_API_KEY=... INTASEND_SECRET_KEY=... CRON_SECRET=<long random string>
+# optional: INTASEND_WEBHOOK_CHALLENGE=... (enforced when set), ALLOWED_REDIRECT_ORIGINS=https://a,https://b
 npm run deploy
 ```
 
-`INTASEND_ENV` (`"sandbox"` or `"live"`) is a plain runtime env var, not a
-secret — set it in `functions/.env` (`INTASEND_ENV=sandbox`) rather than
-via `secrets:set`.
+Then register the scheduled jobs' target in Vault (SQL editor):
 
-Update `lib/core/constants/app_constants.dart`'s
-`ApiEndpoints.baseFunctionsUrl` with your deployed functions URL.
+```sql
+select vault.create_secret('https://<ref>.supabase.co/functions/v1/api', 'sellora_api_url');
+select vault.create_secret('<the same CRON_SECRET>', 'sellora_cron_secret');
+```
 
-Configure IntaSend's webhook (dashboard → Webhooks) to point at your
-deployed `intasendWebhook` function, with the same challenge string you
-set as `INTASEND_WEBHOOK_CHALLENGE` above — `intasendWebhook` verifies it
-before confirming any payment, and reconfirm the exact webhook payload
-shape against IntaSend's current docs before going live; it's implemented
-from their published docs, not tested against a real account.
+Point IntaSend's webhook (dashboard → Webhooks) at
+`https://<ref>.supabase.co/functions/v1/api/intasendWebhook`. The webhook is
+implemented from IntaSend's published docs, not tested against a real
+account, so reconfirm the payload shape before going live.
+
+Create the admin with `node scripts/grant-admin.js <email>` (needs
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`; run it on a trusted
+machine).
 
 ### 3. Subscription plans
 
-Seed `subscription_plans` in Firestore with your real pricing (the
-mock `Starter` / `Growth` / `Scale` tiers in
-`lib/data/mock/mock_seed_data.dart` are placeholders) — or sign in as
-admin and use the **Plans** tab, which edits Firestore directly.
+Seed the `subscription_plans` table with your real pricing — or sign in
+as admin and use the **Plans** tab. Onboarding's plan step is empty
+until at least one plan exists.
 
 ## Platforms
 
-Flutter Web + Android + iOS from one codebase. For Web, `firebase.json`
-already points hosting at `build/web`:
+Flutter Web + Android + iOS from one codebase. Supabase has no static
+hosting, so the web build still deploys to Firebase Hosting until that's
+decided — `firebase.json` points hosting at `build/web`:
 
 ```bash
 flutter build web
@@ -188,24 +164,22 @@ seller subscription management, buyer storefront/cart/checkout/order
 history, and the full admin panel (sellers, catalog sync, orders,
 plans).
 
-As of 2026-09-11, order pricing/creation and payment confirmation are
-server-side (`functions/src/orders.ts`'s `createOrder`, `functions/src/
-intasend.ts`'s `intasendWebhook`), and `firestore.rules` no longer lets a
-client write an order directly or grant themselves a role. Still worth
-hardening before real money moves through it:
+Order pricing/creation and payment confirmation are server-side
+(`createOrder` and `intasendWebhook` in `supabase/functions/api/handler.ts`),
+and RLS doesn't let a client write an order or grant themselves a role.
+Still worth hardening before real money moves through it:
 - IntaSend's webhook "challenge" verification is implemented from their
   published docs, not tested against a real account — reconfirm the exact
   payload shape before going live.
 - The current checkout flow assumes one seller per cart; a real
   multi-seller cart is rejected rather than split into one order per
   seller.
-- Custom claims (Firebase Auth) for `role`/`admin` — the Firestore rules
-  no longer let a user grant themselves a role, but `role` still lives on
-  a plain Firestore document rather than a signed auth token.
+- Admin is an `app_metadata` claim, but `seller`/`buyer` still live on the
+  `profiles.role` column rather than a signed auth token (guard triggers
+  stop a user changing it).
 - CJ Dropshipping's real API auth handshake and response shapes vary by
-  account type — `functions/src/cj.ts` sketches the flow; confirm field
-  names against your CJ developer account before going live.
-- Subscription billing (`FirebaseSubscriptionRepository.subscribeSeller`)
-  still writes `billing_history` directly from the client, which
-  `firestore.rules` already silently blocks against real Firestore — the
-  same class of fix `createOrder` just got, not yet done for billing.
+  account type — `supabase/functions/_shared/cjApi.js` sketches the flow;
+  confirm field names against your CJ developer account before going live.
+- Subscription billing goes through the server (`subscribeSeller`), and
+  only a confirmed payment activates a plan — but, like checkout, it has
+  never run against a live IntaSend account.

@@ -9,13 +9,25 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   final SupabaseService _db = Get.find<SupabaseService>();
   final DioClient _dio = Get.find<DioClient>();
 
+  /// Every column a client may read. `orders` also carries server-only
+  /// bookkeeping (supplier cost, provider refs, CJ state), and a
+  /// column-level grant refuses `select *` outright — so reads must name
+  /// these. A column added here must be granted in a new migration too
+  /// (see supabase/migrations/20260927000000_backend.sql).
+  static const columns = 'id, code, buyer_id, seller_id, store_id, items, '
+      'status, total, currency, shipping_address, payment_method, '
+      'payment_reference, tracking_number, payment_status, service_fee_rate, '
+      'service_fee_amount, seller_revenue, payment_fee, shipping_fee, '
+      'logistic_name, created_at, updated_at, payment_provider, tracking, '
+      'refunded_amount';
+
   @override
   Future<OrderModel> placeOrder(OrderModel order) async {
     // The order row is never written directly from the client — the
     // backend re-prices every item from CJ's own live price and the store's
     // own listed price itself, so a tampered `order.total`/fee field here is
-    // simply ignored. See functions/lib/orders.js's createOrder, and the
-    // `orders` table having no insert policy (supabase/migrations).
+    // simply ignored. See supabase/functions/_shared/orders.js's
+    // createOrder, and the `orders` table having no insert policy.
     //
     // `pid`/`vid` per item is correct — [OrderItem.cjProductId] and
     // [OrderItem.variantId] carry CJ's own ids all the way from the
@@ -43,29 +55,29 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       if (order.logisticName != null) 'logisticName': order.logisticName,
     });
 
-    // The real response is `{id, totalAmount, currency, serviceFeeRate,
-    // serviceFeeAmount, sellerRevenue, items, ...}` — no `orderId`/`code`,
-    // so the order id doubles as one. The response's own `items` lack
-    // imageUrl/variantLabel, so this keeps the richer client-built list
+    // The response is `{success, data: {id, code, totalAmount, currency,
+    // serviceFeeRate, serviceFeeAmount, sellerRevenue, items, ...}}`. Its
+    // `items` lack variantLabel, so this keeps the richer client-built list
     // rather than overwriting it — only the fields the server actually
     // recomputed are trusted here.
+    final data = Map<String, dynamic>.from(res['data'] as Map);
     return order.copyWith(
-      id: res['id'] as String,
-      code: res['id'] as String,
-      total: (res['totalAmount'] as num).toDouble(),
-      currency: res['currency'] as String?,
+      id: data['id'] as String,
+      code: data['code'] as String? ?? data['id'] as String,
+      total: (data['totalAmount'] as num).toDouble(),
+      currency: data['currency'] as String?,
       paymentStatus: OrderPaymentStatus.pending,
-      logisticName: res['logisticName'] as String?,
-      serviceFeeRate: (res['serviceFeeRate'] as num?)?.toDouble(),
-      serviceFeeAmount: (res['serviceFeeAmount'] as num?)?.toDouble(),
-      sellerRevenue: (res['sellerRevenue'] as num?)?.toDouble(),
+      logisticName: data['logisticName'] as String?,
+      serviceFeeRate: (data['serviceFeeRate'] as num?)?.toDouble(),
+      serviceFeeAmount: (data['serviceFeeAmount'] as num?)?.toDouble(),
+      sellerRevenue: (data['sellerRevenue'] as num?)?.toDouble(),
     );
   }
 
   @override
   Future<List<OrderModel>> buyerOrders(String buyerId) async {
     final rows = await _db.orders
-        .select()
+        .select(columns)
         .eq('buyer_id', buyerId)
         .order('created_at', ascending: false);
     return _models(rows);
@@ -75,7 +87,7 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   Future<List<OrderModel>> buyerStoreOrders(
       String buyerId, String storeId) async {
     final rows = await _db.orders
-        .select()
+        .select(columns)
         .eq('buyer_id', buyerId)
         .eq('store_id', storeId)
         .order('created_at', ascending: false);
@@ -85,7 +97,7 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   @override
   Future<List<OrderModel>> storeOrders(String storeId) async {
     final rows = await _db.orders
-        .select()
+        .select(columns)
         .eq('store_id', storeId)
         .order('created_at', ascending: false);
     return _models(rows);
@@ -94,7 +106,7 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   @override
   Future<List<OrderModel>> sellerOrders(String sellerId) async {
     final rows = await _db.orders
-        .select()
+        .select(columns)
         .eq('seller_id', sellerId)
         .order('created_at', ascending: false);
     return _models(rows);
@@ -103,7 +115,7 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   @override
   Future<List<OrderModel>> allOrders() async {
     final rows = await _db.orders
-        .select()
+        .select(columns)
         .order('created_at', ascending: false)
         .limit(200);
     return _models(rows);

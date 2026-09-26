@@ -53,7 +53,7 @@ class AdminDashboardController extends GetxController {
   /// Sellora's 2% cut, snapshotted per order at creation time
   /// (`OrderModel.serviceFeeAmount`). Real against mock data; against the
   /// live backend this is still 0 for every order because the adopted
-  /// `createOrder` Cloud Function has no seller/fee concept yet and never
+  /// `createOrder` Edge Function has no seller/fee concept yet and never
   /// populates the field (see WORKLOG.md, PHASE 8) — this is not a bug in
   /// this dashboard, it's an accurate read of a known upstream gap.
   double get serviceFeeRevenue =>

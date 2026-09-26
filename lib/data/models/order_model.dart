@@ -13,28 +13,41 @@ extension OrderStatusX on OrderStatus {
 /// Whether the buyer's payment has actually cleared — separate from
 /// [OrderStatus], which tracks fulfillment. An order can be `pending`
 /// fulfillment while its payment is still `pending` confirmation from the
-/// IntaSend webhook (see functions/src/intasend.ts). Named distinctly from
-/// IntasendService's own `PaymentStatus` (a single collection call's
+/// IntaSend webhook (see supabase/functions/api/index.ts). Named distinctly
+/// from IntasendService's own `PaymentStatus` (a single collection call's
 /// immediate result) to avoid an import collision — this one is the
-/// order's persisted state.
-enum OrderPaymentStatus { pending, paid, failed }
+/// order's persisted state, written only by the backend.
+enum OrderPaymentStatus { pending, paid, failed, partiallyRefunded, refunded }
 
 extension OrderPaymentStatusX on OrderPaymentStatus {
   String get label => switch (this) {
         OrderPaymentStatus.pending => 'Pending',
         OrderPaymentStatus.paid => 'Paid',
         OrderPaymentStatus.failed => 'Failed',
+        OrderPaymentStatus.partiallyRefunded => 'Partially refunded',
+        OrderPaymentStatus.refunded => 'Refunded',
+      };
+
+  /// Parses the `orders.payment_status` column. `awaiting_confirmation`
+  /// (a payment prompt is out, not yet confirmed) reads as [pending], and
+  /// so does anything unrecognised.
+  static OrderPaymentStatus parse(Object? value) => switch (value) {
+        'paid' => OrderPaymentStatus.paid,
+        'failed' => OrderPaymentStatus.failed,
+        'partially_refunded' => OrderPaymentStatus.partiallyRefunded,
+        'refunded' => OrderPaymentStatus.refunded,
+        _ => OrderPaymentStatus.pending,
       };
 }
 
 /// Where an order ships. `countryCode` is the only field
-/// `functions/lib/orders.js`'s `createOrder` validates — it derives the
-/// order's region/currency from it (see `functions/lib/regions.js`) and
+/// `supabase/functions/_shared/orders.js`'s `createOrder` validates — it derives the
+/// order's region/currency from it (see `supabase/functions/_shared/regions.js`) and
 /// rejects a request without one. `line` is the free-text street/city
 /// address collected before this class existed.
 ///
 /// NOT yet the full `{fullName, phone, email, line1, line2, city, province,
-/// zip}` shape `functions/lib/cjApi.js` needs to actually push a fulfillment
+/// zip}` shape `supabase/functions/_shared/cjApi.js` needs to actually push a fulfillment
 /// to CJ — that's a separate, still-open gap (see WORKLOG.md 2026-09-15).
 class ShippingAddress {
   ShippingAddress({required this.countryCode, required this.line});
@@ -65,7 +78,7 @@ class OrderItem {
   final String productId;
 
   /// CJ's own product id (`pid`) — the value `createOrder`'s
-  /// `{pid, vid, quantity}` line-item shape needs (functions/lib/orders.js).
+  /// `{pid, vid, quantity}` line-item shape needs (supabase/functions/_shared/orders.js).
   /// Null for a listing with no CJ origin.
   final String? cjProductId;
   final String title;
@@ -192,12 +205,12 @@ class OrderModel {
   final DateTime createdAt;
 
   /// Whether the buyer's payment has actually cleared (set by
-  /// functions/src/intasend.ts's webhook, never by the client).
+  /// supabase/functions/api/index.ts's webhook, never by the client).
   final OrderPaymentStatus paymentStatus;
 
   // ---- Fee snapshot ---------------------------------------------------
   // Computed once, server-side, at order-creation time (see
-  // functions/src/orders.ts createOrder) and never recomputed — changing
+  // supabase/functions/_shared/orders.js createOrder) and never recomputed — changing
   // AppConstants.platformServiceFeeRate later must not alter historical
   // orders.
   final double serviceFeeRate;
@@ -212,7 +225,7 @@ class OrderModel {
 
   /// The CJ shipping line this order ships on (e.g. "CJPacket Ordinary") —
   /// either the buyer's checkout pick or, if none was sent, whatever
-  /// `createOrder` auto-picked as cheapest (see functions/lib/orders.js).
+  /// `createOrder` auto-picked as cheapest (see supabase/functions/_shared/orders.js).
   /// Also what `fulfillOrder` tells CJ to use when pushing the order.
   final String? logisticName;
 
@@ -239,9 +252,7 @@ class OrderModel {
       trackingNumber: map['trackingNumber'] as String?,
       createdAt: DateTime.tryParse(map['createdAt'] as String? ?? '') ??
           DateTime.now(),
-      paymentStatus: OrderPaymentStatus.values.firstWhere(
-          (s) => s.name == map['paymentStatus'],
-          orElse: () => OrderPaymentStatus.pending),
+      paymentStatus: OrderPaymentStatusX.parse(map['paymentStatus']),
       serviceFeeRate: (map['serviceFeeRate'] as num?)?.toDouble() ?? 0,
       serviceFeeAmount: (map['serviceFeeAmount'] as num?)?.toDouble() ?? 0,
       sellerRevenue: (map['sellerRevenue'] as num?)?.toDouble() ?? 0,

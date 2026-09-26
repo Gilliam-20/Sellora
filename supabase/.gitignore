@@ -1,2 +1,5 @@
 node_modules/
 .temp/
+.branches/
+# Local secrets for `npm run serve` (CJ_API_KEY, INTASEND_SECRET_KEY, CRON_SECRET, ...).
+functions/.env

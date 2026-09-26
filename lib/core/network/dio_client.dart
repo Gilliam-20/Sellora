@@ -4,16 +4,14 @@ import 'package:get/get.dart';
 import 'api_exception.dart';
 
 /// Thin wrapper around Dio, registered once in InitialBinding and
-/// injected wherever a service needs to reach the Cloud Functions
-/// backend (CJ Dropshipping proxy, IntaSend proxy).
+/// injected wherever a service needs to reach the `api` Edge Function
+/// (CJ Dropshipping proxy, IntaSend proxy) — see [ApiEndpoints].
 ///
 /// Every request automatically attaches the signed-in user's Supabase
 /// access token (a JWT), so the backend can verify the caller before
-/// touching CJ Dropshipping or IntaSend on their behalf. NOTE: until
-/// Phase 2 ports functions/ to Edge Functions, the deployed Cloud
-/// Functions still verify *Firebase* ID tokens and will reject these —
-/// harmless while AppConstants.useMockData is true, since nothing calls
-/// them. See WORKLOG.md, 2026-09-26.
+/// touching CJ Dropshipping or IntaSend on their behalf. Signed-out
+/// requests (catalog browsing) go without one; the function has gateway
+/// JWT checks off and authenticates each signed-in route itself.
 class DioClient extends GetxService {
   late final Dio dio;
 

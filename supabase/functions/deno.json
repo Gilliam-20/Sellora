@@ -1,0 +1,9 @@
+{
+  "nodeModulesDir": "none",
+  "lock": false,
+  "lint": {
+    "rules": {
+      "exclude": ["require-await", "no-import-prefix"]
+    }
+  }
+}

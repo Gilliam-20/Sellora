@@ -1,0 +1,9 @@
+# Supabase CLI config. Only what differs from the CLI's defaults is set here;
+# `npx supabase link` / `db push` / `functions deploy` fill in the rest.
+project_id = "sellora"
+
+[functions.api]
+# The gateway's JWT check would reject the public routes (catalog browsing,
+# the IntaSend webhook, pg_cron's /cron calls), so it's off and the function
+# authenticates each signed-in route itself - see verifyAuth in api/handler.ts.
+verify_jwt = false

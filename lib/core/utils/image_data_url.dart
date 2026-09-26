@@ -1,16 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// Encodes picked image bytes as a `data:` URI so a locally-picked photo can
-/// be stored in the same `String` fields (`StoreModel.logoUrl`/`bannerUrl`)
-/// that already hold hosted URLs — no Supabase Storage upload step exists
-/// yet (see pubspec.yaml's "common next additions"), so this is what makes
-/// picking an on-device photo actually work today, against both the mock and
-/// Supabase-backed `StoreRepository`.
-///
-/// Kept small because `updateStore` writes the whole `StoreModel` in one
-/// `.update()` call, and every storefront read ships these inline images.
-const maxPickedImageBytes = 350 * 1024;
+/// Helpers for store branding images. A picked photo is uploaded to the
+/// `store-media` Storage bucket (`StoreRepository.uploadStoreImage`) and the
+/// store keeps its public URL. Stores branded before that (2026-09-20 to
+/// 2026-09-27) still hold inline `data:` URIs in `logoUrl`/`bannerUrl`,
+/// which [isDataUrl]/[decodeDataUrl] keep rendering until re-uploaded.
+
+/// Matches the bucket's `file_size_limit`
+/// (supabase/migrations/20260927000200_storage.sql).
+const maxPickedImageBytes = 2 * 1024 * 1024;
 
 const _extensionMimeTypes = {
   'jpg': 'image/jpeg',
@@ -24,10 +23,6 @@ String mimeTypeForPath(String path) {
   final dot = path.lastIndexOf('.');
   final ext = dot == -1 ? '' : path.substring(dot + 1).toLowerCase();
   return _extensionMimeTypes[ext] ?? 'image/jpeg';
-}
-
-String bytesToDataUrl(Uint8List bytes, String mimeType) {
-  return 'data:$mimeType;base64,${base64Encode(bytes)}';
 }
 
 bool isDataUrl(String value) => value.startsWith('data:');

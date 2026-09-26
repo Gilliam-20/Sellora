@@ -20,6 +20,18 @@ await db.exec(`
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(auth.jwt() ->> 'sub', '')::uuid $$;
   create publication supabase_realtime;
+  -- Just enough of Supabase Storage for the store-media policies.
+  create schema storage;
+  create table storage.buckets (id text primary key, name text not null, public boolean default false,
+    file_size_limit bigint, allowed_mime_types text[]);
+  create table storage.objects (id uuid primary key default gen_random_uuid(),
+    bucket_id text references storage.buckets (id), name text not null, owner uuid default auth.uid());
+  alter table storage.objects enable row level security;
+  create function storage.foldername(name text) returns text[] language sql immutable as $$
+    select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1] $$;
+  grant usage on schema storage to anon, authenticated, service_role;
+  grant all on storage.objects to anon, authenticated, service_role;
+  grant select on storage.buckets to anon, authenticated, service_role;
   grant usage on schema public, auth to anon, authenticated, service_role;
   grant execute on all functions in schema auth to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
@@ -122,6 +134,11 @@ ok('seller lists in own store', r.rows.length === 1);
 ok('seller cannot list in another store', await throws(() => as(seller1, "insert into products (store_id, id, seller_id) values ($1, 'p2', $2)", ['store-' + S2, S1])));
 r = await as('anon', 'select id from products');
 ok('anon reads products', r.rows.length === 1);
+await as(seller1, "insert into products (store_id, id, seller_id, title, is_listed) values ($1, 'draft1', $2, 'Draft', false)", ['store-' + S1, S1]);
+ok('anon cannot read a draft', (await as('anon', "select id from products where id = 'draft1'")).rows.length === 0);
+ok('another seller cannot read a draft', (await as(seller2, "select id from products where id = 'draft1'")).rows.length === 0);
+ok('owner reads own draft', (await as(seller1, "select id from products where id = 'draft1'")).rows.length === 1);
+ok('admin reads a draft', (await as(admin, "select id from products where id = 'draft1'")).rows.length === 1);
 r = await as(seller2, "update products set sell_price = 1 where id = 'p1' returning id");
 ok('seller cannot edit another store listing', r.rows.length === 0);
 
@@ -157,12 +174,111 @@ ok('anon reads plans', r.rows.length === 1);
 ok('seller cannot edit plans', (await as(seller1, "update subscription_plans set price_usd = 0 returning id")).rows.length === 0);
 r = await as(admin, "insert into subscription_plans (id, name) values ('pro', 'Pro') on conflict (id) do update set name = excluded.name returning id");
 ok('admin upserts plans', r.rows.length === 1);
+ok('seller cannot add plans', await throws(() => as(seller1, "insert into subscription_plans (id, name) values ('free', 'Free')")));
+ok('seller cannot delete plans', (await as(seller1, "delete from subscription_plans where id = 'pro' returning id")).rows.length === 0);
+ok('admin deletes plans', (await as(admin, "delete from subscription_plans where id = 'pro' returning id")).rows.length === 1);
 ok('client cannot write billing history', await throws(() => as(seller1, "insert into billing_history (seller_id, plan_id) values ($1, 'basic')", [S1])));
 r = await as('anon', "select rates from fx_rates where id = 'current'");
 ok('anon reads fx', r.rows[0]?.rates?.KES === 129);
 
 console.log('session revocation');
 ok('client cannot revoke sessions', await throws(() => as(seller1, 'select public.revoke_user_sessions($1)', [S2])));
+
+// ---- Phase 2 (20260927000000_backend.sql): what the api Edge Function uses.
+// It connects as the service role, so that's who calls the SQL functions.
+const asService = async (sql, params) => {
+  await db.exec('reset role');
+  await db.query(`select set_config('request.jwt.claims', $1, false)`, [JSON.stringify({ role: 'service_role' })]);
+  await db.exec('set role service_role');
+  try { return await db.query(sql, params); } finally { await db.exec('reset role'); }
+};
+
+console.log('orders: server-only columns');
+ok('client select * on orders refused', await throws(() => as(buyer, 'select * from orders')));
+r = await as(buyer, 'select id, total, payment_status, tracking, refunded_amount, payment_provider from orders');
+ok('buyer reads the client columns', r.rows.length === 1);
+ok('buyer cannot read the supplier cost', await throws(() => as(buyer, 'select supplier_subtotal_usd from orders')));
+ok('seller cannot read payment refs', await throws(() => as(seller1, 'select payment_ref from orders')));
+ok('seller cannot touch CJ state', await throws(() => as(seller1, "update orders set cj_order_status = 'PUSHED' where id = 'o1'")));
+r = await asService("select cj_order_status, cj_push_attempts, refund_status from orders where id = 'o1'");
+ok('service role reads everything, with state-machine defaults',
+  r.rows[0]?.cj_order_status === 'NOT_PUSHED' && r.rows[0]?.cj_push_attempts === 0 && r.rows[0]?.refund_status === 'NONE');
+ok('unknown CJ state rejected', await throws(() => asService("update orders set cj_order_status = 'SHIPPED' where id = 'o1'")));
+
+console.log('orders: payment attempts');
+ok('client cannot record a payment attempt', await throws(() => as(buyer, `select public.attach_order_payment_attempt('o1', 'MPESA', 'INTASEND', '{}')`)));
+r = await asService(`select public.attach_order_payment_attempt('o1', 'MPESA', 'INTASEND', '{"invoiceId":"I1"}') a`);
+ok('service records an attempt', r.rows[0].a === true);
+await asService(`select public.attach_order_payment_attempt('o1', 'CARD', 'INTASEND', '{"checkoutId":"C1"}')`);
+r = await as('postgres', "select payment_status, payment_ref, payment_attempts from orders where id = 'o1'");
+ok('latest attempt on payment_ref, every attempt kept',
+  r.rows[0].payment_status === 'awaiting_confirmation' && r.rows[0].payment_ref.checkoutId === 'C1' &&
+  r.rows[0].payment_attempts.length === 2 && r.rows[0].payment_attempts[0].paymentRef.invoiceId === 'I1');
+await as('postgres', "update orders set payment_status = 'paid' where id = 'o1'");
+r = await asService(`select public.attach_order_payment_attempt('o1', 'MPESA', 'INTASEND', '{"invoiceId":"I2"}') a`);
+const afterPaid = await as('postgres', "select payment_status from orders where id = 'o1'");
+ok('a paid order is not reopened by a late attempt', r.rows[0].a === false && afterPaid.rows[0].payment_status === 'paid');
+
+console.log('subscriptions: activation');
+await as('postgres', "insert into billing_history (id, seller_id, plan_id, amount_kes, billing_period_days) values ('bh1', $1, 'basic', 999, 30)", [S2]);
+ok('client cannot activate a subscription', await throws(() => as(seller2, "select public.activate_subscription('bh1', 'x')")));
+r = await asService("select public.activate_subscription('bh1', 'INV-1') r");
+ok('first confirmation activates', r.rows[0].r.alreadyHandled === false && r.rows[0].r.planId === 'basic');
+r = await as('postgres', "select s.plan_id, s.status, p.subscription_plan_id, p.seller_status, p.subscription_active_until > now() + interval '29 days' as ahead from subscriptions s join profiles p on p.uid = s.seller_id where s.seller_id = $1", [S2]);
+ok('subscription row + profile mirror written together',
+  r.rows[0]?.plan_id === 'basic' && r.rows[0].status === 'active' &&
+  r.rows[0].subscription_plan_id === 'basic' && r.rows[0].seller_status === 'active' && r.rows[0].ahead);
+r = await as('postgres', "select status, payment_reference from billing_history where id = 'bh1'");
+ok('entry marked paid with its reference', r.rows[0].status === 'paid' && r.rows[0].payment_reference === 'INV-1');
+r = await asService("select public.activate_subscription('bh1', 'INV-1') r");
+ok('a retried confirmation is a no-op', r.rows[0].r.alreadyHandled === true);
+ok('an unknown entry raises', await throws(() => asService("select public.activate_subscription('nope', null)")));
+
+console.log('rate limits');
+ok('client cannot spend a budget', await throws(() => as(buyer, "select * from public.consume_rate_limit('k', 1, 1000)")));
+const consume = (key, limit, windowMs) =>
+  asService('select * from public.consume_rate_limit($1, $2, $3)', [key, limit, windowMs]).then((x) => x.rows[0]);
+const first = await consume('createOrder:u1', 2, 60000);
+const second = await consume('createOrder:u1', 2, 60000);
+const third = await consume('createOrder:u1', 2, 60000);
+ok('allows up to the limit, then refuses', first.allowed && second.allowed && !third.allowed);
+ok('refusal carries a retry-after inside the window', Number(third.retry_after_ms) > 0 && Number(third.retry_after_ms) <= 60000);
+ok('budgets are per key', (await consume('createOrder:u2', 2, 60000)).allowed);
+await consume('mpesaPush:u1', 1, 1);
+await new Promise((done) => setTimeout(done, 20));
+ok('a new window opens once the old one has passed', (await consume('mpesaPush:u1', 1, 1)).allowed);
+r = await as('anon', 'select key from rate_limits');
+ok('clients cannot read counters', r.rows.length === 0);
+
+console.log('backend tables');
+await as('postgres', "insert into catalog_products (id, title) values ('cj1', 'Lamp')");
+await as('postgres', "insert into catalog_categories (id, name) values ('c1', 'Home')");
+ok('anon reads the catalog', (await as('anon', 'select id from catalog_products')).rows.length === 1 &&
+  (await as('anon', 'select id from catalog_categories')).rows.length === 1);
+ok('seller cannot write the catalog', await throws(() => as(seller1, "insert into catalog_products (id) values ('cj2')")));
+await as('postgres', `insert into app_config (key, value) values ('pricing', '{"targetNetMargin":0.25}')`);
+ok('non-admin cannot read app config', (await as(seller1, 'select key from app_config')).rows.length === 0);
+r = await as(admin, `insert into app_config (key, value) values ('catalog', '{"sources":[]}') returning key`);
+ok('admin writes app config', r.rows.length === 1);
+ok('unknown config key rejected', await throws(() => as(admin, "insert into app_config (key) values ('secrets')")));
+await as('postgres', "insert into cj_auth_tokens (access_token) values ('live-token')");
+ok('CJ tokens are invisible even to admin', (await as(admin, 'select access_token from cj_auth_tokens')).rows.length === 0);
+const jobErr = await throws(() => as(admin, "select public.invoke_scheduled_job('syncCatalog')"));
+console.log('storage: store-media');
+r = await as('postgres', "select public, file_size_limit from storage.buckets where id = 'store-media'");
+ok('store-media bucket is public with a 2MB cap', r.rows[0]?.public === true && Number(r.rows[0]?.file_size_limit) === 2097152);
+r = await as(seller1, "insert into storage.objects (bucket_id, name) values ('store-media', $1) returning name", ['store-' + S1 + '/logo-1.png']);
+ok('owner uploads into own store folder (and reads it back)', r.rows.length === 1);
+ok('seller cannot upload into another store', await throws(() => as(seller1, "insert into storage.objects (bucket_id, name) values ('store-media', $1)", ['store-' + S2 + '/logo-1.png'])));
+ok('buyer cannot upload', await throws(() => as(buyer, "insert into storage.objects (bucket_id, name) values ('store-media', $1)", ['store-' + S1 + '/x.png'])));
+ok('anon cannot upload', await throws(() => as('anon', "insert into storage.objects (bucket_id, name) values ('store-media', $1)", ['store-' + S1 + '/x.png'])));
+ok('a file outside any store folder is refused', await throws(() => as(seller1, "insert into storage.objects (bucket_id, name) values ('store-media', 'logo.png')")));
+r = await as(seller2, 'delete from storage.objects returning name');
+ok("seller cannot delete another store's images", r.rows.length === 0);
+
+ok('client cannot invoke scheduled jobs', /permission denied/.test(jobErr?.message ?? ''), jobErr?.message);
+const serviceJobErr = await throws(() => asService("select public.activate_subscription('bh1', 'x')"));
+ok('service role may call its functions', serviceJobErr === null, serviceJobErr?.message);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

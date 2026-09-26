@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../app/routes/app_routes.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/i18n/countries.dart';
 import '../../../core/i18n/money.dart';
 import '../../../core/utils/formatters.dart';
@@ -41,7 +40,7 @@ class CheckoutController extends GetxController {
   /// Display-only in mock mode (charged as quoted); in real mode
   /// `createOrder` re-validates [selectedShippingOption]'s name and
   /// re-derives the price itself from CJ's own quote (see
-  /// functions/lib/orders.js) — this never trusts its own [cost] value.
+  /// supabase/functions/_shared/orders.js) — this never trusts its own [cost] value.
   double get shippingFee => shippingFeeMoney.toMajor();
 
   /// CJ quotes freight in its own currency (USD) while the cart is priced in
@@ -141,7 +140,7 @@ class CheckoutController extends GetxController {
           ShippingAddress(countryCode: countryCode, line: address);
       // A real multi-seller cart would split into one order per seller.
       // Simplified here to a single order against the first item's
-      // seller — matches functions/src/orders.ts's createOrder, which
+      // seller — matches supabase/functions/_shared/orders.js's createOrder, which
       // rejects a cart mixing sellers rather than silently misattributing
       // it.
       final sellerId =
@@ -159,51 +158,17 @@ class CheckoutController extends GetxController {
               ))
           .toList();
 
-      if (AppConstants.useMockData) {
-        // Demo mode fakes an instant successful payment — there's no
-        // server to re-price against and no webhook to confirm it later,
-        // so the order is written already "paid" for a smooth demo.
-        await Future.delayed(const Duration(seconds: 2));
-        final order = OrderModel(
-          id: 'order-${DateTime.now().millisecondsSinceEpoch}',
-          code: 'SLR-${1000 + (DateTime.now().millisecondsSinceEpoch % 9000)}',
-          buyerId: user.uid,
-          sellerId: sellerId,
-          storeId: cartRepo.storeId,
-          items: items,
-          status: OrderStatus.pending,
-          total: total,
-          currency: cartRepo.currency,
-          shippingAddress: shippingAddress,
-          paymentMethod: method.orderLabel,
-          paymentReference: 'MOCK-PAY-${DateTime.now().millisecondsSinceEpoch}',
-          paymentStatus: OrderPaymentStatus.paid,
-          createdAt: DateTime.now(),
-          shippingFee: shippingFee,
-          logisticName: selectedShippingOption.value?.logisticName,
-        );
-        await _orderRepo.placeOrder(order);
-        await _notificationRepo.notifyOrderPlaced(order);
-        _onOrderPlaced(order.code,
-            'Your order ${order.code} is on its way to processing.');
-        return;
-      }
-
-      // Real mode: create the order server-side — re-priced from
-      // listings, ignoring whatever total this draft carries — *before*
-      // contacting IntaSend, so the server-assigned order id can be the
-      // payment's orderId. See SupabaseOrderRepository.placeOrder and
-      // functions/index.js's intasendWebhook, which is what actually
-      // confirms payment and starts CJ fulfillment; this controller does
-      // neither itself anymore.
+      // Create the order server-side — re-priced from listings, ignoring
+      // whatever total this draft carries — *before* contacting IntaSend,
+      // so the server-assigned order id can be the payment's orderId. See
+      // SupabaseOrderRepository.placeOrder and supabase/functions/api/index.ts's
+      // intasendWebhook, which is what actually confirms payment and
+      // starts CJ fulfillment; this controller does neither itself.
       //
-      // NOTE: this whole branch is unreachable today (useMockData is always
-      // true), but should now actually work against the real backend once
-      // it is: the CJ variant id gap, the shippingAddress shape, and
-      // placeOrder's response parsing are all closed (see
-      // ApiEndpoints.createOrder's doc comment for what's still open —
-      // shippingAddress.line stays one free-text string, not CJ's full
-      // fulfillment-address shape).
+      // NOTE: never yet run against a real backend, and fails until
+      // functions/ is ported to Edge Functions. See ApiEndpoints.createOrder's
+      // doc comment for what's still open (shippingAddress.line stays one
+      // free-text string, not CJ's full fulfillment-address shape).
       final draft = OrderModel(
         id: '',
         code: '',

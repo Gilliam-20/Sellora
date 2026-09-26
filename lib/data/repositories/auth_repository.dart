@@ -36,9 +36,9 @@ abstract class AuthRepository {
   UserModel? get cachedUser;
 
   /// [storeId] is only meaningful for a store-scoped buyer sign-in (see
-  /// AuthController.signInToStore) — MockAuthRepository uses it to attach a
-  /// store to a freshly-minted mock buyer; SupabaseAuthRepository ignores
-  /// it, since a real buyer's profile already carries their true storeId.
+  /// AuthController.signInToStore). SupabaseAuthRepository ignores it,
+  /// since a real buyer's profile already carries their true storeId; the
+  /// in-memory test fake uses it to attach a store to a new buyer.
   Future<UserModel> signIn(
       {required String email, required String password, String? storeId});
 
@@ -59,6 +59,20 @@ abstract class AuthRepository {
     required bool hasAcceptedTerms,
   });
   Future<void> sendPasswordReset(String email);
+
+  /// Emits each time a password-recovery link (a reset email, or
+  /// supabase/scripts/grant-admin.js's first-login link) opens the app with
+  /// a recovery session — including the link the app was launched with,
+  /// for a listener that subscribes after startup.
+  Stream<void> get passwordRecoveries;
+
+  /// Whether the current session came from a recovery link and is still
+  /// waiting for [updatePassword].
+  bool get isRecoveringPassword;
+
+  /// Sets a new password on the recovery session's account, then loads and
+  /// caches its profile — the user is signed in once this returns.
+  Future<UserModel> updatePassword(String newPassword);
 
   /// Re-fetches the signed-in account from the identity provider and
   /// reports whether its email address has been verified. Verification is
@@ -256,6 +270,8 @@ class SupabaseAuthRepository extends GetxService implements AuthRepository {
         return 'email-already-in-use';
       case 'weak_password':
         return 'weak-password';
+      case 'same_password':
+        return 'same-password';
       case 'email_address_invalid':
         return 'invalid-email';
       case 'user_banned':
@@ -296,6 +312,24 @@ class SupabaseAuthRepository extends GetxService implements AuthRepository {
   @override
   Future<void> sendPasswordReset(String email) =>
       _guard(() => _auth.sendPasswordReset(normalizeEmail(email)));
+
+  @override
+  Stream<void> get passwordRecoveries => _auth.passwordRecoveries;
+
+  @override
+  bool get isRecoveringPassword => _auth.isRecoveringPassword;
+
+  /// A recovery link arrives as its own `passwordRecovery` event, which
+  /// [userChanges] skips, so nothing has loaded the profile yet — this does,
+  /// with a token refresh so an admin's grant is read fresh.
+  @override
+  Future<UserModel> updatePassword(String newPassword) => _guard(() async {
+        final res = await _auth.updatePassword(newPassword);
+        final user = await _loadProfile(res.user!, forceTokenRefresh: true);
+        if (user == null) throw const AuthFailure('profile-missing');
+        _cached = user;
+        return user;
+      });
 
   @override
   Future<void> signOut() async {

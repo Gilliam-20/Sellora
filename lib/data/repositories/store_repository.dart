@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../core/utils/slug.dart';
 import '../models/store_model.dart';
 
@@ -17,6 +19,17 @@ abstract class StoreRepository {
   Future<StoreModel> createStore(StoreModel store);
 
   Future<void> updateStore(StoreModel store);
+
+  /// Uploads a branding image ([kind] is `logo` or `banner`) for
+  /// [storeId] and returns its public URL, to store in
+  /// `StoreModel.logoUrl`/`bannerUrl`. Only the store's owner may upload
+  /// (storage RLS in supabase/migrations/20260927000200_storage.sql).
+  Future<String> uploadStoreImage(
+    String storeId,
+    Uint8List bytes, {
+    required String contentType,
+    required String kind,
+  });
 }
 
 /// Creates a seller's store under the first free slug derived from

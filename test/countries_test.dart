@@ -6,11 +6,11 @@ import 'package:sellora/core/i18n/currencies.dart';
 import 'package:sellora/data/models/store_model.dart';
 
 void main() {
-  group('Countries mirrors functions/lib/regions.js', () {
+  group('Countries mirrors supabase/functions/_shared/regions.js', () {
     // The server derives an order's currency from the shipping country via
     // regions.js — if the app's country list disagrees, checkout would show
     // one currency and the server would charge in another.
-    final source = File('functions/lib/regions.js').readAsStringSync();
+    final source = File('supabase/functions/_shared/regions.js').readAsStringSync();
 
     test('every EU member code is configured in the eu zone', () {
       final array = RegExp(r'EU_MEMBER_COUNTRY_CODES = \[([^\]]*)\]')

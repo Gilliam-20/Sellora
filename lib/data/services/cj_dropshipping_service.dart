@@ -5,8 +5,8 @@ import '../models/cj_category.dart';
 import '../models/freight_estimate.dart';
 import '../models/product_model.dart';
 
-/// Talks to CJ Dropshipping ONLY through Sellora's own Cloud Functions
-/// (see /functions/index.js) — the CJ API key/secret never ships inside
+/// Talks to CJ Dropshipping ONLY through Sellora's own Edge Function
+/// (see supabase/functions/api/index.ts) — the CJ API key/secret never ships inside
 /// the Flutter app, mobile or web.
 ///
 /// Every response from these endpoints is wrapped `{success, data,
@@ -18,13 +18,13 @@ import '../models/product_model.dart';
 ///  1. Seller browses [searchProducts] (public CJ catalog search).
 ///  2. Seller views [productDetail], picks a price -> ProductRepository
 ///     writes a `listings` doc referencing the CJ product id.
-///  3. Admin periodically calls [runCatalogSync] to pull the shared
-///     catalog/categories into Firestore for the backend's own use.
+///  3. Admin calls [runCatalogSync] (pg_cron also runs it daily) to pull
+///     the shared catalog/categories into `catalog_products`.
 ///
 /// NOTE: fulfillment (placing the real order with CJ once a buyer pays)
 /// and shipment tracking are order/checkout concerns living on the
 /// backend's `createOrder`/`getOrderTracking` endpoints, not this
-/// catalog-browsing service — see functions/index.js. There is no
+/// catalog-browsing service — see supabase/functions/api/index.ts. There is no
 /// standalone "create a CJ order for one product" or "track by CJ order
 /// id" endpoint to call from here.
 class CjDropshippingService extends GetxService {
@@ -98,7 +98,7 @@ class CjDropshippingService extends GetxService {
 
   /// Cheapest freight option for [products] (`{vid, quantity}` each)
   /// shipping to [endCountryCode]. Mirrors the cheapest-of-`logisticPrice`
-  /// selection functions/lib/orders.js falls back to server-side when the
+  /// selection supabase/functions/_shared/orders.js falls back to server-side when the
   /// buyer hasn't picked a method — this client-side call feeds the seller
   /// import screen's landed-cost pricing card, a separate concern from what
   /// checkout actually charges.
@@ -116,7 +116,7 @@ class CjDropshippingService extends GetxService {
   }
 
   /// Admin-only. Triggers the full CJ catalog/category sync pipeline
-  /// server-side (functions/lib/catalogSync.js) — can take up to several
+  /// server-side (supabase/functions/_shared/catalogSync.js) — can take up to several
   /// minutes, hence the extended receive timeout. Returns how many
   /// products were written this run.
   Future<int> runCatalogSync() async {
@@ -130,7 +130,7 @@ class CjDropshippingService extends GetxService {
     return (products['written'] as num?)?.toInt() ?? 0;
   }
 
-  /// Maps `searchProducts`' summary shape (functions/lib/cjApi.js) onto
+  /// Maps `searchProducts`' summary shape (supabase/functions/_shared/cjApi.js) onto
   /// [ProductModel]. The live endpoint carries no stock/rating/sold-count/
   /// discount data, so those stay at their model defaults rather than
   /// being fabricated.
@@ -149,7 +149,7 @@ class CjDropshippingService extends GetxService {
     );
   }
 
-  /// Maps `getProductDetail`'s shape (functions/lib/cjApi.js) onto
+  /// Maps `getProductDetail`'s shape (supabase/functions/_shared/cjApi.js) onto
   /// [ProductModel]. The detail endpoint carries no top-level price or
   /// stock at all — pricing lives per-variant, so this uses the first
   /// variant's price as the product's default (a seller still sets their
@@ -179,7 +179,7 @@ class CjDropshippingService extends GetxService {
   }
 
   /// Maps CJ's real per-SKU variant list (each already carrying its own
-  /// `vid`/`sku`/`attributes`/price — see functions/lib/cjApi.js's
+  /// `vid`/`sku`/`attributes`/price — see supabase/functions/_shared/cjApi.js's
   /// `getProductDetail`) directly onto [ProductVariant], one purchasable
   /// SKU per entry.
   List<ProductVariant> _mapVariants(List<Map<String, dynamic>> variants) {

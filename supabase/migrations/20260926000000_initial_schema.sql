@@ -28,6 +28,7 @@ create or replace function public.is_admin()
 returns boolean
 language sql
 stable
+set search_path = ''
 as $$
   select coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin', false)
 $$;
@@ -39,6 +40,7 @@ create or replace function public.is_privileged()
 returns boolean
 language sql
 stable
+set search_path = ''
 as $$
   select current_user not in ('authenticated', 'anon')
 $$;
@@ -97,7 +99,7 @@ alter table public.profiles enable row level security;
 
 create policy "profiles: read own, admin reads all"
   on public.profiles for select
-  using (uid = auth.uid() or public.is_admin());
+  using (uid = (select auth.uid()) or (select public.is_admin()));
 
 -- No insert policy: profiles are created only by handle_new_user() below,
 -- in the same transaction as the auth.users row. That closes the hole the
@@ -107,8 +109,8 @@ create policy "profiles: read own, admin reads all"
 
 create policy "profiles: update own, admin updates any"
   on public.profiles for update
-  using (uid = auth.uid() or public.is_admin())
-  with check (uid = auth.uid() or public.is_admin());
+  using (uid = (select auth.uid()) or (select public.is_admin()))
+  with check (uid = (select auth.uid()) or (select public.is_admin()));
 
 -- Replaces the `users` update rule's touchesAny() list. A user may never
 -- change their own role, subscription state, approval status, terms record
@@ -116,6 +118,7 @@ create policy "profiles: update own, admin updates any"
 create or replace function public.profiles_guard_update()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   if public.is_privileged() then
@@ -126,7 +129,7 @@ begin
      or new.created_at is distinct from old.created_at then
     raise exception 'profile identity fields are immutable' using errcode = '42501';
   end if;
-  if public.is_admin() then
+  if (select public.is_admin()) then
     if new.role is distinct from old.role and new.role = 'admin' then
       raise exception 'admin is provisioned server-side only' using errcode = '42501';
     end if;
@@ -179,6 +182,8 @@ alter table public.profiles
   add constraint profiles_store_id_fkey
   foreign key (store_id) references public.stores (id);
 
+create index profiles_store_id_idx on public.profiles (store_id);
+
 alter table public.stores enable row level security;
 
 -- Public, like before: a prospective buyer browses a store before they
@@ -193,17 +198,17 @@ create policy "stores: public read"
 create policy "stores: sellers create their own"
   on public.stores for insert
   with check (
-    seller_id = auth.uid()
+    seller_id = (select auth.uid())
     and exists (
       select 1 from public.profiles p
-      where p.uid = auth.uid() and p.role = 'seller'
+      where p.uid = (select auth.uid()) and p.role = 'seller'
     )
   );
 
 create policy "stores: owner or admin updates"
   on public.stores for update
-  using (seller_id = auth.uid() or public.is_admin())
-  with check (seller_id = auth.uid() or public.is_admin());
+  using (seller_id = (select auth.uid()) or (select public.is_admin()))
+  with check (seller_id = (select auth.uid()) or (select public.is_admin()));
 
 -- The slug is a public address and the owner is the tenant boundary:
 -- neither may move, or one seller could serve a look-alike storefront at
@@ -211,6 +216,7 @@ create policy "stores: owner or admin updates"
 create or replace function public.stores_guard_update()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   if public.is_privileged() then
@@ -234,10 +240,11 @@ create or replace function public.owns_store(target_store_id text)
 returns boolean
 language sql
 stable
+set search_path = ''
 as $$
   select exists (
     select 1 from public.stores s
-    where s.id = target_store_id and s.seller_id = auth.uid()
+    where s.id = target_store_id and s.seller_id = (select auth.uid())
   )
 $$;
 
@@ -262,7 +269,7 @@ alter table public.store_customers enable row level security;
 
 create policy "store_customers: self, store owner, admin read"
   on public.store_customers for select
-  using (uid = auth.uid() or public.owns_store(store_id) or public.is_admin());
+  using (uid = (select auth.uid()) or public.owns_store(store_id) or (select public.is_admin()));
 
 -- Rows are created by handle_new_user() only.
 
@@ -303,20 +310,22 @@ create index products_listed_category_idx on public.products (is_listed, categor
 
 alter table public.products enable row level security;
 
-create policy "products: public read"
+-- Listed products are public; a draft (is_listed false) is the owner's
+-- alone, so its cost price and unfinished copy don't leak.
+create policy "products: listed public, drafts owner-only"
   on public.products for select
-  using (true);
+  using (is_listed or public.owns_store(store_id) or (select public.is_admin()));
 
 -- Checked against the store's own owner, not a bare role, so one seller
 -- can't write into another's store (same as the old per-store rule).
 create policy "products: store owner creates"
   on public.products for insert
-  with check (seller_id = auth.uid() and public.owns_store(store_id));
+  with check (seller_id = (select auth.uid()) and public.owns_store(store_id));
 
 create policy "products: store owner updates"
   on public.products for update
   using (public.owns_store(store_id))
-  with check (seller_id = auth.uid() and public.owns_store(store_id));
+  with check (seller_id = (select auth.uid()) and public.owns_store(store_id));
 
 -- ---------------------------------------------------------------------------
 -- orders (was flat orders/{id} AND stores/{storeId}/orders/{id})
@@ -364,10 +373,10 @@ alter table public.orders enable row level security;
 create policy "orders: buyer, seller, store owner, admin read"
   on public.orders for select
   using (
-    buyer_id = auth.uid()
-    or seller_id = auth.uid()
+    buyer_id = (select auth.uid())
+    or seller_id = (select auth.uid())
     or public.owns_store(store_id)
-    or public.is_admin()
+    or (select public.is_admin())
   );
 
 -- No insert policy: orders are created server-side only (createOrder
@@ -375,8 +384,8 @@ create policy "orders: buyer, seller, store owner, admin read"
 
 create policy "orders: seller or admin updates"
   on public.orders for update
-  using (seller_id = auth.uid() or public.owns_store(store_id) or public.is_admin())
-  with check (seller_id = auth.uid() or public.owns_store(store_id) or public.is_admin());
+  using (seller_id = (select auth.uid()) or public.owns_store(store_id) or (select public.is_admin()))
+  with check (seller_id = (select auth.uid()) or public.owns_store(store_id) or (select public.is_admin()));
 
 -- Replaces serverOwnedOrderFields(): clients can change fulfilment status
 -- and nothing else — not ownership, money, or payment state. Refunds and
@@ -400,33 +409,34 @@ create table public.notifications (
 
 create index notifications_recipient_idx
   on public.notifications (recipient_id, created_at desc);
+create index notifications_order_id_idx on public.notifications (order_id);
 
 alter table public.notifications enable row level security;
 
 create policy "notifications: recipient reads"
   on public.notifications for select
-  using (recipient_id = auth.uid());
+  using (recipient_id = (select auth.uid()));
 
 -- A user may write to their own inbox, or alert the other party of an
 -- order they're both on — the order itself proves the relationship.
 create policy "notifications: self or order counterparty creates"
   on public.notifications for insert
   with check (
-    recipient_id = auth.uid()
+    recipient_id = (select auth.uid())
     or exists (
       select 1 from public.orders o
       where o.id = order_id
         and (
-          (o.buyer_id = auth.uid() and o.seller_id = recipient_id)
-          or (o.seller_id = auth.uid() and o.buyer_id = recipient_id)
+          (o.buyer_id = (select auth.uid()) and o.seller_id = recipient_id)
+          or (o.seller_id = (select auth.uid()) and o.buyer_id = recipient_id)
         )
     )
   );
 
 create policy "notifications: recipient marks read"
   on public.notifications for update
-  using (recipient_id = auth.uid())
-  with check (recipient_id = auth.uid());
+  using (recipient_id = (select auth.uid()))
+  with check (recipient_id = (select auth.uid()));
 
 revoke update on public.notifications from anon, authenticated;
 grant update (read_at) on public.notifications to authenticated;
@@ -459,10 +469,20 @@ create policy "subscription_plans: public read"
   on public.subscription_plans for select
   using (true);
 
-create policy "subscription_plans: admin writes"
-  on public.subscription_plans for all
-  using (public.is_admin())
-  with check (public.is_admin());
+-- Per-command rather than `for all`, which would add a second permissive
+-- SELECT policy alongside public read.
+create policy "subscription_plans: admin inserts"
+  on public.subscription_plans for insert
+  with check ((select public.is_admin()));
+
+create policy "subscription_plans: admin updates"
+  on public.subscription_plans for update
+  using ((select public.is_admin()))
+  with check ((select public.is_admin()));
+
+create policy "subscription_plans: admin deletes"
+  on public.subscription_plans for delete
+  using ((select public.is_admin()));
 
 -- Server-written only (subscribeSeller / the IntaSend webhook).
 create table public.billing_history (
@@ -481,12 +501,13 @@ create table public.billing_history (
 );
 
 create index billing_history_seller_idx on public.billing_history (seller_id, created_at desc);
+create index billing_history_plan_id_idx on public.billing_history (plan_id);
 
 alter table public.billing_history enable row level security;
 
 create policy "billing_history: seller or admin reads"
   on public.billing_history for select
-  using (seller_id = auth.uid() or public.is_admin());
+  using (seller_id = (select auth.uid()) or (select public.is_admin()));
 
 -- One row per seller, upserted only on payment confirmation. Never
 -- client-writable: an order-limit check will read it.
@@ -501,11 +522,15 @@ create table public.subscriptions (
   updated_at timestamptz
 );
 
+create index subscriptions_plan_id_idx on public.subscriptions (plan_id);
+create index subscriptions_last_billing_history_id_idx
+  on public.subscriptions (last_billing_history_id);
+
 alter table public.subscriptions enable row level security;
 
 create policy "subscriptions: seller or admin reads"
   on public.subscriptions for select
-  using (seller_id = auth.uid() or public.is_admin());
+  using (seller_id = (select auth.uid()) or (select public.is_admin()));
 
 -- ---------------------------------------------------------------------------
 -- fx_rates (was config/fx)

@@ -1,5 +1,4 @@
 import 'package:get/get.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/subscription_plan_model.dart';
 import '../../../data/models/subscription_usage_model.dart';
@@ -46,14 +45,6 @@ class SellerSubscriptionController extends GetxController {
     try {
       final entry = await _subscriptionRepo.subscribeSeller(
           sellerId: user.uid, planId: plan.id);
-
-      if (AppConstants.useMockData) {
-        // Mock mode's repository already activated the switch synchronously.
-        Get.back();
-        Get.snackbar('Plan updated', 'You\'re now on the ${plan.name} plan.');
-        await load();
-        return;
-      }
 
       await Get.find<IntasendService>().payBillingMpesa(
         billingEntryId: entry.id,

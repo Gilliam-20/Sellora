@@ -1,6 +1,6 @@
 /// An append-only ledger entry for a seller's subscription payment, mirrored
 /// from `billing_history/{id}`. The doc id doubles as the payment provider's
-/// `api_ref`/reference — see `functions/lib/subscriptions.js`.
+/// `api_ref`/reference — see `supabase/functions/_shared/subscriptions.js`.
 ///
 /// Every field but `status`/`paymentReference`/`paidAt` is snapshotted at
 /// creation time and never rewritten, even if an admin edits the plan's

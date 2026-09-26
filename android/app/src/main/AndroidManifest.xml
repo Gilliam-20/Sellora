@@ -24,6 +24,21 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Supabase auth email links (password reset, sign-up
+                 confirmation) come back here: AuthService.authRedirectUrl
+                 sends sellora://auth-callback as their redirect, and
+                 supabase_flutter picks the link up and finishes sign-in.
+                 The URL must also be in the Supabase project's redirect
+                 allow-list. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="sellora" android:host="auth-callback"/>
+            </intent-filter>
+            <!-- supabase_flutter handles the link above itself; Flutter's own
+                 deep linking would also push it as a route no page matches. -->
+            <meta-data android:name="flutter_deeplinking_enabled" android:value="false"/>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

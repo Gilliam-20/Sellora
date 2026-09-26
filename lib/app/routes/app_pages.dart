@@ -4,6 +4,8 @@ import '../../modules/admin/admin_binding.dart';
 import '../../modules/admin/shell/admin_shell_view.dart';
 import '../../modules/auth/bindings/auth_binding.dart';
 import '../../modules/auth/views/login_view.dart';
+import '../../modules/auth/views/reset_password_view.dart';
+import '../../modules/auth/views/auth_link_error_view.dart';
 import '../../modules/auth/views/register_seller_view.dart';
 import '../../modules/auth/views/seller_terms_view.dart';
 import '../../modules/auth/views/role_select_view.dart';
@@ -40,9 +42,7 @@ class AppPages {
         name: Routes.marketing,
         page: () => MarketingView(),
         binding: MarketingBinding()),
-    GetPage(
-        name: Routes.roleSelect,
-        page: () => const RoleSelectView()),
+    GetPage(name: Routes.roleSelect, page: () => const RoleSelectView()),
     GetPage(
         name: Routes.login,
         page: () => const LoginView(),
@@ -52,6 +52,12 @@ class AppPages {
         page: () => const RegisterSellerView(),
         binding: AuthBinding()),
     GetPage(name: Routes.sellerTerms, page: () => const SellerTermsView()),
+    GetPage(
+        name: Routes.resetPassword,
+        page: () => const ResetPasswordView(),
+        binding: AuthBinding()),
+    GetPage(
+        name: Routes.authLinkError, page: () => const AuthLinkErrorView()),
     GetPage(
       name: Routes.storefront,
       page: () => const BuyerShellView(),

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sellora/data/models/store_model.dart';
 import 'package:sellora/data/repositories/store_repository.dart';
@@ -88,6 +90,15 @@ class _FakeStoreRepository implements StoreRepository {
 
   @override
   Future<void> updateStore(StoreModel store) async {}
+
+  @override
+  Future<String> uploadStoreImage(
+    String storeId,
+    Uint8List bytes, {
+    required String contentType,
+    required String kind,
+  }) async =>
+      'https://example.test/$storeId/$kind';
 
   StoreModel? _find(bool Function(StoreModel store) predicate) {
     for (final store in _stores) {

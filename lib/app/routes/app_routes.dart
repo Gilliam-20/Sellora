@@ -8,6 +8,12 @@ abstract class Routes {
   static const registerSeller = '/register/seller';
   static const sellerTerms = '/seller-terms';
 
+  // Where a password-recovery link lands — see SelloraApp's onReady.
+  static const resetPassword = '/reset-password';
+
+  // Where an expired/used/wrong-device auth email link lands.
+  static const authLinkError = '/auth-link-error';
+
   static const sellerOnboarding = '/seller/onboarding';
 
   // Public tenant storefront — also the buyer shell (shop/cart/orders/

@@ -5,8 +5,8 @@ import '../../core/network/dio_client.dart';
 enum PaymentStatus { pending, completed, failed }
 
 /// Wraps IntaSend for both seller subscription billing and buyer
-/// order checkout. The IntaSend secret key lives only in Cloud Functions
-/// (see /functions/index.js); the app just triggers a collection request
+/// order checkout. The IntaSend secret key lives only in the Edge Function
+/// (see supabase/functions/api/index.ts); the app just triggers a collection request
 /// and polls/observes the resulting status.
 ///
 /// Order-checkout payment (this section) always acts on an order id that
@@ -65,7 +65,7 @@ class IntasendService extends GetxService {
   /// Starts an M-Pesa STK push for a pending subscription billing entry
   /// (see `SubscriptionRepository.subscribeSeller`) — the entry's id is the
   /// payment's reference, the same way an order id is for [collectMpesa].
-  /// Calls the new billing-specific Cloud Functions (`{success,data}`
+  /// Calls the new billing-specific Edge Function endpoints (`{success,data}`
   /// envelope), not [collectMpesa]'s endpoint.
   Future<String> payBillingMpesa({
     required String billingEntryId,

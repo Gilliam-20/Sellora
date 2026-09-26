@@ -30,8 +30,8 @@ class SupabaseAdminRepository extends GetxService implements AdminRepository {
   Future<int> syncCjCatalog() async {
     // The real sync pipeline (categories + products + detail/variant
     // enrichment + stale-deactivation) runs entirely server-side, admin-
-    // gated — see functions/index.js's runCatalogSync and
-    // functions/lib/catalogSync.js — so there is nothing left for the
+    // gated — see supabase/functions/api/index.ts's runCatalogSync and
+    // supabase/functions/_shared/catalogSync.js — so there is nothing left for the
     // client to batch-write itself.
     final count = await _cj.runCatalogSync();
     _lastSyncedAt = DateTime.now();

@@ -50,7 +50,7 @@ class Money implements Comparable<Money> {
       Money(_roundDouble(minorUnits * factor), currency);
 
   /// Converts into [target] at [rate] (`amountIn(currency) * rate ==
-  /// amountIn(target)`, the same convention as `functions/lib/fx.js`'s
+  /// amountIn(target)`, the same convention as `supabase/functions/_shared/fx.js`'s
   /// `getRate`), rounding once to [target]'s minor unit.
   Money convertTo(String target, double rate) {
     if (target == currency) return this;

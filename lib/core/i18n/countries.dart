@@ -2,7 +2,7 @@
 /// zone (pricing region) each belongs to, what currency that zone prices in,
 /// and which payment methods a buyer there can actually use.
 ///
-/// The country→zone→currency mapping mirrors `functions/lib/regions.js`'s
+/// The country→zone→currency mapping mirrors `supabase/functions/_shared/regions.js`'s
 /// `REGION_CONFIG` exactly (zone ids are its `region` keys), because the
 /// server derives an order's currency from the shipping country itself and
 /// never trusts the client's. `test/countries_test.dart` reads regions.js
@@ -45,7 +45,7 @@ enum ShippingZone {
 }
 
 /// A way to pay at checkout. [intasendMethod] is the value
-/// `functions/index.js`'s `payOrderCard` expects for hosted-checkout
+/// `supabase/functions/api/index.ts`'s `payOrderCard` expects for hosted-checkout
 /// methods; M-Pesa has its own STK-push endpoint instead.
 enum PaymentMethodType {
   mpesa('M-Pesa', 'IntaSend M-Pesa', null),

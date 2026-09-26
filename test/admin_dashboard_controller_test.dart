@@ -4,10 +4,10 @@ import 'package:sellora/data/models/order_model.dart';
 import 'package:sellora/data/models/user_model.dart';
 import 'package:sellora/data/repositories/admin_repository.dart';
 import 'package:sellora/data/repositories/auth_repository.dart';
-import 'package:sellora/data/repositories/mock/mock_admin_repository.dart';
-import 'package:sellora/data/repositories/mock/mock_order_repository.dart';
-import 'package:sellora/data/repositories/mock/mock_store_repository.dart';
-import 'package:sellora/data/repositories/mock/mock_subscription_repository.dart';
+import 'fakes/mock_admin_repository.dart';
+import 'fakes/mock_order_repository.dart';
+import 'fakes/mock_store_repository.dart';
+import 'fakes/mock_subscription_repository.dart';
 import 'package:sellora/data/repositories/order_repository.dart';
 import 'package:sellora/data/repositories/store_repository.dart';
 import 'package:sellora/data/repositories/subscription_repository.dart';
@@ -95,6 +95,16 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> sendPasswordReset(String email) => throw UnimplementedError();
+
+  @override
+  Stream<void> get passwordRecoveries => throw UnimplementedError();
+
+  @override
+  bool get isRecoveringPassword => throw UnimplementedError();
+
+  @override
+  Future<UserModel> updatePassword(String newPassword) =>
+      throw UnimplementedError();
 
   @override
   Future<bool> checkEmailVerified() => throw UnimplementedError();

@@ -2,7 +2,7 @@
 ///
 /// CJ's raw category tree names its id/name keys differently at each depth
 /// (`categoryFirstId`/`categoryFirstName`, `categorySecondId`/..., down to a
-/// leaf `categoryId`/`categoryName`) — see functions/lib/catalogSync.js's
+/// leaf `categoryId`/`categoryName`) — see supabase/functions/_shared/catalogSync.js's
 /// `normalizeCategoryNode`, which this mirrors. Only the top level is parsed
 /// here: the catalog screen shows a single filter chip row, not a 3-level
 /// drill-down browser.

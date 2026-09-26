@@ -1,6 +1,6 @@
 /// The currencies Sellora prices, displays and settles in (build spec §36):
-/// KES, USD, GBP, EUR. Mirrors the currencies `functions/lib/regions.js`
-/// resolves a shipping country to and `functions/lib/fx.js` caches rates
+/// KES, USD, GBP, EUR. Mirrors the currencies `supabase/functions/_shared/regions.js`
+/// resolves a shipping country to and `supabase/functions/_shared/fx.js` caches rates
 /// for — add a currency in all three places, not just here.
 class CurrencyInfo {
   const CurrencyInfo({

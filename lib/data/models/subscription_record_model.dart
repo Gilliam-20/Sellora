@@ -1,6 +1,6 @@
 /// A seller's current subscription state, mirrored from `subscriptions/{sellerId}`.
 ///
-/// Read-only from Dart — only the `intasendWebhook` Cloud Function writes this
+/// Read-only from Dart — only the `intasendWebhook` Edge Function writes this
 /// doc, on confirmed payment. There is no client write path and no producer
 /// of a `cancelled` status yet; both are future work.
 class SubscriptionRecordModel {
@@ -18,7 +18,7 @@ class SubscriptionRecordModel {
   final String sellerId;
   final String planId;
 
-  /// 'active' is the only status any Cloud Function produces today.
+  /// 'active' is the only status any Edge Function produces today.
   final String status;
 
   /// Snapshotted from the plan at confirmation time.

@@ -31,12 +31,15 @@ class SupabaseService extends GetxService {
   /// The single-row USD-base rate table, refreshed server-side and publicly
   /// readable.
   SupabaseQueryBuilder get fxRates => client.from('fx_rates');
+
+  /// Public bucket for store branding images, one folder per store id.
+  StorageFileApi get storeMedia => client.storage.from('store-media');
 }
 
 // ---- Model <-> row translation ------------------------------------------
 //
 // Models keep their camelCase fromMap/toMap keys (shared with the mocks and
-// the Cloud Functions' JSON); Postgres columns are snake_case. Only the top
+// the Edge Function's JSON); Postgres columns are snake_case. Only the top
 // level is translated — jsonb columns (items, variants, ...) keep their
 // camelCase keys untouched.
 //

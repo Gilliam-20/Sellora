@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/i18n/countries.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/store_model.dart';
@@ -211,15 +210,6 @@ class SellerOnboardingController extends GetxController {
     try {
       final entry = await _subscriptionRepo.subscribeSeller(
           sellerId: user.uid, planId: plan.id);
-
-      if (AppConstants.useMockData) {
-        // Mock mode's repository already activated the subscription
-        // synchronously — nothing left to wait on.
-        Get.offAllNamed(Routes.sellerShell);
-        Get.snackbar('You\'re live',
-            'Your ${plan.name} subscription is active — start listing products.');
-        return;
-      }
 
       await Get.find<IntasendService>().payBillingMpesa(
         billingEntryId: entry.id,

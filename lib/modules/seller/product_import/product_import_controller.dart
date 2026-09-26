@@ -11,7 +11,7 @@ import '../my_listings/my_listings_controller.dart';
 /// Drives the CJ product detail + import screen.
 ///
 /// The catalog list only ever has the search-result *summary* of a product
-/// (functions/lib/cjApi.js's `searchProducts` carries no description and no
+/// (supabase/functions/_shared/cjApi.js's `searchProducts` carries no description and no
 /// variants at all), so this re-fetches the full detail before a seller
 /// prices anything — that detail call is the only place CJ's real per-SKU
 /// `vid`s come from, and they have to reach the listing for checkout to be
@@ -110,7 +110,7 @@ class ProductImportController extends GetxController {
   double get landedCost => costPrice + shippingCost;
 
   /// CJ's own suggested retail for the current selection — already
-  /// margin-priced server-side (functions/lib/marginPricingService.js), so
+  /// margin-priced server-side (supabase/functions/_shared/marginPricingService.js), so
   /// it's the most sensible default to pre-fill rather than a made-up
   /// multiple of cost.
   double get suggestedRetailPrice {

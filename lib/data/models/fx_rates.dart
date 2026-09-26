@@ -1,5 +1,5 @@
 /// A USD-base exchange-rate table — the client-side mirror of the
-/// `config/fx` document `functions/lib/fx.js` refreshes once a day
+/// `fx_rates` row `supabase/functions/_shared/fx.js` refreshes once a day
 /// (`{base: 'USD', rates: {KES, EUR, GBP}, fetchedAt}`).
 ///
 /// Display-only. The server prices every order from its own copy of these

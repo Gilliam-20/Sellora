@@ -154,7 +154,7 @@ class ProductModel {
 
 /// One purchasable CJ SKU. `vid` is CJ's own per-variant id — the exact
 /// value `createOrder`'s `{pid, vid, quantity}` line-item shape requires
-/// (functions/lib/orders.js), so it has to survive from catalog import all
+/// (supabase/functions/_shared/orders.js), so it has to survive from catalog import all
 /// the way to checkout, not just describe the option for display.
 ///
 /// `price`/`costPrice` are CJ's own per-SKU retail/supplier price, kept for

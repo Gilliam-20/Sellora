@@ -1,5 +1,5 @@
 /// The cheapest CJ freight option for a destination, picked the same way
-/// functions/lib/orders.js already does server-side (lowest `logisticPrice`
+/// supabase/functions/_shared/orders.js already does server-side (lowest `logisticPrice`
 /// among the options `calculateFreight` returns).
 ///
 /// Only `logisticPrice`/`logisticName` are contract-confirmed anywhere in
@@ -20,7 +20,7 @@ class FreightEstimate {
 /// `calculateFreight` — unlike [FreightEstimate], which collapses CJ's
 /// options down to the cheapest, this carries every option CJ offered so the
 /// buyer can pick a shipment type at checkout. `logisticName` is the only
-/// field `functions/lib/orders.js`'s `createOrder` accepts back from the
+/// field `supabase/functions/_shared/orders.js`'s `createOrder` accepts back from the
 /// client — it re-derives the price itself from CJ's own quote rather than
 /// trusting [cost].
 class FreightOption {

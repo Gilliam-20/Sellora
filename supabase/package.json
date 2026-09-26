@@ -1,12 +1,17 @@
 {
   "name": "sellora-supabase",
   "private": true,
-  "description": "Schema tests and admin scripts for Sellora's Supabase project.",
+  "description": "Sellora's Supabase project: schema, Edge Functions, their tests, and admin scripts.",
   "scripts": {
-    "test": "node tests/rls.test.mjs && node --test scripts/"
+    "test": "node tests/rls.test.mjs && node --test scripts/ && npm run test:functions",
+    "test:functions": "cd functions && deno test --config deno.json --allow-env --allow-read tests/",
+    "check:functions": "cd functions && deno check --config deno.json api/index.ts",
+    "serve": "npx supabase functions serve api --env-file functions/.env",
+    "deploy": "npx supabase functions deploy api"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.3.0"
+    "@electric-sql/pglite": "^0.3.0",
+    "deno": "^2.9.6"
   },
   "engines": {
     "node": ">=18"
