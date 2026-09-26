@@ -21,6 +21,11 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       'logistic_name, created_at, updated_at, payment_provider, tracking, '
       'refunded_amount';
 
+  /// [columns] plus `seller_revenue` — what Sellora owes the seller, i.e.
+  /// their margin. Buyers can't read it; sellers and admin read it through
+  /// the `seller_orders` view.
+  static const sellerColumns = '$columns, seller_revenue';
+
   @override
   Future<OrderModel> placeOrder(OrderModel order) async {
     // The order row is never written directly from the client — the
@@ -56,7 +61,7 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
     });
 
     // The response is `{success, data: {id, code, totalAmount, currency,
-    // serviceFeeRate, serviceFeeAmount, sellerRevenue, items, ...}}`. Its
+    // serviceFeeRate, serviceFeeAmount, expiresAt, items, ...}}`. Its
     // `items` lack variantLabel, so this keeps the richer client-built list
     // rather than overwriting it — only the fields the server actually
     // recomputed are trusted here.
@@ -70,7 +75,6 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       logisticName: data['logisticName'] as String?,
       serviceFeeRate: (data['serviceFeeRate'] as num?)?.toDouble(),
       serviceFeeAmount: (data['serviceFeeAmount'] as num?)?.toDouble(),
-      sellerRevenue: (data['sellerRevenue'] as num?)?.toDouble(),
     );
   }
 
@@ -96,8 +100,8 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
 
   @override
   Future<List<OrderModel>> storeOrders(String storeId) async {
-    final rows = await _db.orders
-        .select(columns)
+    final rows = await _db.sellerOrders
+        .select(sellerColumns)
         .eq('store_id', storeId)
         .order('created_at', ascending: false);
     return _models(rows);
@@ -105,8 +109,8 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
 
   @override
   Future<List<OrderModel>> sellerOrders(String sellerId) async {
-    final rows = await _db.orders
-        .select(columns)
+    final rows = await _db.sellerOrders
+        .select(sellerColumns)
         .eq('seller_id', sellerId)
         .order('created_at', ascending: false);
     return _models(rows);
@@ -114,15 +118,17 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
 
   @override
   Future<List<OrderModel>> allOrders() async {
-    final rows = await _db.orders
-        .select(columns)
+    final rows = await _db.sellerOrders
+        .select(sellerColumns)
         .order('created_at', ascending: false)
         .limit(200);
     return _models(rows);
   }
 
   /// `status`/`updated_at` are the only order columns a client may update
-  /// (column-level grant in supabase/migrations).
+  /// (column-level grant in supabase/migrations), and only forward through
+  /// fulfilment on a paid order (processing → shipped → delivered; the
+  /// `orders_guard_status` trigger).
   @override
   Future<void> updateStatus(String orderId, OrderStatus status) async {
     await _db.orders.update({

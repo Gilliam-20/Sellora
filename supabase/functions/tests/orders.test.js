@@ -8,7 +8,10 @@ import {
   PUSH_CLAIM_STALE_MS,
   DUPLICATE_ATTEMPT_WINDOW_MS,
   SERVICE_FEE_RATE,
+  ORDER_TTL_MS,
   splitServiceFee,
+  lineRefusal,
+  isExpired,
   validateOrderRequest,
 } from "../_shared/orders.js";
 
@@ -165,23 +168,27 @@ describe("hasPendingAttempt", () => {
 });
 
 describe("splitServiceFee", () => {
-  test("takes exactly the platform's 2% rate, seller keeps the rest", () => {
-    assert.equal(SERVICE_FEE_RATE, 0.02);
-    const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(100);
-    assert.equal(serviceFeeAmountUsd, 2);
-    assert.equal(sellerRevenueUsd, 98);
+  test("takes exactly the platform's 7% rate, and the seller is owed retail less CJ's cost and the fee", () => {
+    assert.equal(SERVICE_FEE_RATE, 0.07);
+    const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(100, 40);
+    assert.equal(serviceFeeAmountUsd, 7);
+    assert.equal(sellerRevenueUsd, 53);
   });
 
-  test("fee + seller revenue always reconstitute the subtotal exactly", () => {
+  test("fee + supplier cost + seller revenue always reconstitute the subtotal exactly", () => {
     // Cents that don't divide evenly by the rate are the case most likely to
-    // drift under naive rounding - assert the two pieces still sum to the
+    // drift under naive rounding - assert the pieces still sum to the
     // original subtotal to the cent.
-    for (const subtotal of [0.01, 1, 9.99, 33.33, 1234.56]) {
-      const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(subtotal);
+    for (const [subtotal, supplier] of [[0.01, 0], [1, 0.5], [9.99, 4.37], [33.33, 11.11], [1234.56, 600]]) {
+      const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(subtotal, supplier);
       assert.equal(
-          Math.round((serviceFeeAmountUsd + sellerRevenueUsd) * 100) / 100,
+          Math.round((serviceFeeAmountUsd + supplier + sellerRevenueUsd) * 100) / 100,
           subtotal);
     }
+  });
+
+  test("the fee is on the retail subtotal, not on the seller's margin", () => {
+    assert.equal(splitServiceFee(100, 90).serviceFeeAmountUsd, 7);
   });
 
   test("a zero subtotal splits to zero, not NaN or a negative fee", () => {
@@ -196,6 +203,59 @@ describe("splitServiceFee", () => {
         splitServiceFee(NaN), { serviceFeeAmountUsd: 0, sellerRevenueUsd: 0 });
     assert.deepEqual(
         splitServiceFee(undefined), { serviceFeeAmountUsd: 0, sellerRevenueUsd: 0 });
+  });
+});
+
+describe("lineRefusal", () => {
+  const line = (overrides) => ({
+    supplierUnitPriceUsd: 10,
+    retailUnitPriceUsd: 20,
+    quantity: 1,
+    available: undefined,
+    ...overrides,
+  });
+
+  test("a priced, in-stock line is fine", () => {
+    assert.equal(lineRefusal(line({ available: 5 })), null);
+  });
+
+  test("refuses a listing with no usable price", () => {
+    assert.equal(lineRefusal(line({ retailUnitPriceUsd: 0 })), "no_price");
+    assert.equal(lineRefusal(line({ retailUnitPriceUsd: NaN })), "no_price");
+  });
+
+  test("refuses a price that doesn't cover CJ's cost - the $1 listing of a $20 item", () => {
+    assert.equal(lineRefusal(line({ retailUnitPriceUsd: 1, supplierUnitPriceUsd: 20 })), "below_cost");
+  });
+
+  test("the floor includes the fee: at cost, the fee would come out of Sellora's pocket", () => {
+    assert.equal(lineRefusal(line({ retailUnitPriceUsd: 10, supplierUnitPriceUsd: 10 })), "below_cost");
+    // 10.76 * 0.93 = 10.0068, which covers a $10 cost.
+    assert.equal(lineRefusal(line({ retailUnitPriceUsd: 10.76, supplierUnitPriceUsd: 10 })), null);
+  });
+
+  test("refuses a variant CJ reports out of stock, or short of the quantity", () => {
+    assert.equal(lineRefusal(line({ available: 0 })), "out_of_stock");
+    assert.equal(lineRefusal(line({ available: 2, quantity: 3 })), "insufficient_stock");
+  });
+
+  test("unknown stock is not treated as none - getProductStock's contract", () => {
+    assert.equal(lineRefusal(line({ available: undefined })), null);
+    assert.equal(lineRefusal(line({ available: null })), null);
+  });
+});
+
+describe("isExpired", () => {
+  test("an order past expires_at is expired", () => {
+    assert.equal(isExpired({ expiresAt: timestamp(NOW - 1) }, NOW), true);
+  });
+
+  test("an order inside its window is not", () => {
+    assert.equal(isExpired({ expiresAt: timestamp(NOW + ORDER_TTL_MS) }, NOW), false);
+  });
+
+  test("an order from before expiry existed never expires", () => {
+    assert.equal(isExpired({}, NOW), false);
   });
 });
 

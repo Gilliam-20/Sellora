@@ -77,16 +77,8 @@ class _PlanEditCardState extends State<_PlanEditCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(widget.plan.name,
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                  '${widget.plan.commissionPercent.toStringAsFixed(0)}% commission',
-                  style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ),
+          Text(widget.plan.name,
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [

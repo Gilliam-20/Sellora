@@ -1,6 +1,25 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { isPayable, billingRefMatches } from "../_shared/subscriptions.js";
+import { isPayable, billingRefMatches, subscribeRefusal } from "../_shared/subscriptions.js";
+
+describe("subscribeRefusal", () => {
+  test("an approved or pending seller may subscribe", () => {
+    assert.equal(subscribeRefusal({ role: "seller", seller_status: "active" }), null);
+    assert.equal(subscribeRefusal({ role: "seller", seller_status: "pendingApproval" }), null);
+  });
+
+  test("a buyer may not - paying would otherwise make them a seller", () => {
+    assert.match(subscribeRefusal({ role: "buyer" }), /Only seller/);
+  });
+
+  test("a suspended seller may not pay their way out", () => {
+    assert.match(subscribeRefusal({ role: "seller", seller_status: "suspended" }), /suspended/);
+  });
+
+  test("a missing profile may not", () => {
+    assert.ok(subscribeRefusal(null));
+  });
+});
 
 describe("isPayable", () => {
   test("a freshly-created pending entry is payable", () => {

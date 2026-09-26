@@ -41,6 +41,9 @@ const ALERTS = Object.freeze({
   ORDER_NEEDS_RECONCILIATION: "order_needs_reconciliation",
   WEBHOOK_SIGNATURE_INVALID: "webhook_signature_invalid",
   PAYMENT_AMOUNT_MISMATCH: "payment_amount_mismatch",
+  // IntaSend's status response had no amount we could read. The payment is
+  // held, not fulfilled - most likely the response shape, not fraud.
+  PAYMENT_AMOUNT_UNVERIFIED: "payment_amount_unverified",
   FX_FALLBACK: "fx_fallback",
   FX_STALE: "fx_stale",
   DELIVERY_EXCEPTION: "delivery_exception",

@@ -27,6 +27,13 @@ secrets (owner steps below).
 ### Supabase migration — to do
 
 **Owner (needs your Supabase dashboard / machine):**
+- [ ] **Roll out the security hardening (2026-09-26, `SELLORA_SECURITY_AUDIT.md` §6), in this order:**
+      1. `cd supabase && npx supabase db push` (applies `20260928000000_security_hardening.sql`).
+      2. `npm run deploy`: the new `createOrder` calls `seller_order_gate`, which step 1 creates.
+      3. `flutter build web` + `firebase deploy --only hosting`. The old build reads `products`
+         directly, which buyers can no longer do, so storefronts are empty until this ships.
+      Then check that every real seller who should be selling has an active `subscriptions` row.
+      Without one, their storefront shows nothing and checkout refuses their store.
 - [x] Put the project URL and **publishable** key (Settings → API) in
       `lib/core/config/supabase_config.dart`, or pass `--dart-define=SUPABASE_URL=...
       --dart-define=SUPABASE_PUBLISHABLE_KEY=...`. Never the service-role / secret key.
@@ -102,7 +109,7 @@ The business model is:
 7. Customers purchase products from seller stores.
 8. Sellora processes the order.
 9. CJ Dropshipping is used for product sourcing/fulfillment.
-10. Sellora charges the seller a **2% service fee on successful product sales**.
+10. Sellora charges the seller a **7% service fee on successful product sales**.
 11. Sellora also earns recurring subscription revenue.
 12. Sellora should be designed for Kenya first but architected for international expansion.
 
@@ -771,7 +778,7 @@ Sellora charges:
 
 Apply this to the product/order subtotal.
 
-Do NOT automatically charge the 2% on:
+Do NOT automatically charge the 7% on:
 
 * shipping
 * taxes
@@ -787,7 +794,7 @@ Sellora service fee:
 7%
 
 Sellora fee:
-KSh 800
+KSh 2,800
 
 Record this transaction separately.
 
@@ -1378,9 +1385,9 @@ GMV:
 
 KSh 38,000,000
 
-2% Sellora service fee:
+7% Sellora service fee:
 
-KSh 760,000
+KSh 2,660,000
 
 Subscription revenue using current plans:
 

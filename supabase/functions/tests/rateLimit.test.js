@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { checkRateLimit, POLICIES } from "../_shared/rateLimit.js";
+import { checkRateLimit, clientKey, POLICIES } from "../_shared/rateLimit.js";
 import { setLogSink } from "../_shared/logging.js";
 import { fakeDb } from "./fakeDb.js";
 
@@ -46,5 +46,22 @@ describe("checkRateLimit", () => {
 
   test("rejects an unknown policy - a typo must not silently mean unlimited", async () => {
     await assert.rejects(checkRateLimit("nope", "user-1", { client: fakeDb(() => ({})) }));
+  });
+});
+
+describe("clientKey", () => {
+  const request = (headers) => new Request("http://localhost/", { headers });
+
+  test("keys a public caller on the first x-forwarded-for hop", () => {
+    assert.equal(clientKey(request({ "x-forwarded-for": "41.90.1.2, 10.0.0.1" })), "ip:41.90.1.2");
+  });
+
+  test("falls back to x-real-ip, then to a shared unknown bucket", () => {
+    assert.equal(clientKey(request({ "x-real-ip": "41.90.1.3" })), "ip:41.90.1.3");
+    assert.equal(clientKey(request({})), "ip:unknown");
+  });
+
+  test("caps a forged header's length - it becomes a database key", () => {
+    assert.equal(clientKey(request({ "x-forwarded-for": "x".repeat(500) })).length, "ip:".length + 64);
   });
 });

@@ -218,6 +218,32 @@ async function refundOrder({ orderId, amount, reason, comment, actorUid }) {
   if (state.status) update.status = state.status;
   must(await db().from("orders").update(update).eq("id", orderId));
 
+  // The orders audit trigger records the state change, but only this path
+  // knows which admin asked for it. The refund has already happened, so a
+  // failed audit write is logged loudly rather than reported as a failed
+  // refund.
+  try {
+    must(await db().from("audit_logs").insert({
+      actor_id: actorUid || null,
+      actor_role: "admin",
+      action: "order.refund",
+      entity_type: "order",
+      entity_id: orderId,
+      details: {
+        amount: decision.amount,
+        currency: decision.currency,
+        provider: decision.provider,
+        providerRefundId: result.refundId,
+        full: decision.full,
+        reason: reason || null,
+      },
+    }));
+  } catch (err) {
+    logAlert(ALERTS.ORDER_NEEDS_RECONCILIATION, {
+      orderId, actorUid, reason: "refund_audit_write_failed",
+    }, err);
+  }
+
   logInfo("order_refunded", {
     orderId,
     uid: order.uid,

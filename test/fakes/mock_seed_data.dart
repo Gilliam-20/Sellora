@@ -191,7 +191,6 @@ class MockSeedData {
           listingLimit: 25,
           orderLimit: 50,
           storeLimit: 1,
-          commissionPercent: 7,
           features: const {'customDomain': false, 'advancedAnalytics': false},
           perks: const [
             'List up to 25 products',
@@ -208,7 +207,6 @@ class MockSeedData {
           listingLimit: 200,
           orderLimit: 500,
           storeLimit: 1,
-          commissionPercent: 5,
           isPopular: true,
           features: const {'customDomain': false, 'advancedAnalytics': true},
           perks: const [
@@ -227,12 +225,11 @@ class MockSeedData {
           listingLimit: -1,
           orderLimit: -1,
           storeLimit: 1,
-          commissionPercent: 3,
           features: const {'customDomain': true, 'advancedAnalytics': true},
           perks: const [
             'Unlimited listings',
             'Full catalog access',
-            'Lowest commission rate',
+            'Priority support',
             'Dedicated support line',
           ],
         ),

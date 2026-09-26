@@ -47,6 +47,14 @@ class ManageVariantsController extends GetxController {
         Get.find<SellerDashboardController>().load();
       }
       return true;
+    } on ListingRejected {
+      // Only a listed product can be refused: a lapsed seller can't change
+      // a live listing (they can still unlist it).
+      Get.snackbar(
+        'Can\'t save',
+        'Changing a live listing needs an approved account with an active plan.',
+      );
+      return false;
     } finally {
       isSaving.value = false;
     }

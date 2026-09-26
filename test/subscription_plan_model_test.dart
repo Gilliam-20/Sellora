@@ -11,7 +11,6 @@ void main() {
       'priceKes': 1300,
       'billingPeriodDays': 30,
       'listingLimit': 25,
-      'commissionPercent': 7,
       'perks': ['Some perk'],
     });
 
@@ -28,7 +27,6 @@ void main() {
       priceKes: 3250,
       billingPeriodDays: 30,
       listingLimit: 200,
-      commissionPercent: 5,
       perks: const ['Perk A', 'Perk B'],
       isPopular: true,
       orderLimit: 500,
@@ -53,7 +51,6 @@ void main() {
       priceKes: 10300,
       billingPeriodDays: 30,
       listingLimit: -1,
-      commissionPercent: 3,
       perks: const [],
       orderLimit: -1,
       storeLimit: 1,

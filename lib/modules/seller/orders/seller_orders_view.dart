@@ -46,13 +46,7 @@ class SellerOrdersView extends GetView<SellerOrdersController> {
                   subtitle:
                       '${order.items.length} item${order.items.length == 1 ? '' : 's'} · ${order.status.label}',
                   accentColor: AppColors.statusColor(order.status.name),
-                  trailing: order.status == OrderStatus.delivered ||
-                          order.status == OrderStatus.cancelled
-                      ? null
-                      : TextButton(
-                          onPressed: () => controller.advanceStatus(order),
-                          child: Text(_nextLabel(order.status)),
-                        ),
+                  trailing: _trailing(context, controller, order),
                 );
               },
             ),
@@ -62,10 +56,20 @@ class SellerOrdersView extends GetView<SellerOrdersController> {
     );
   }
 
-  String _nextLabel(OrderStatus status) => switch (status) {
-        OrderStatus.pending => 'Start processing',
-        OrderStatus.processing => 'Mark shipped',
-        OrderStatus.shipped => 'Mark delivered',
-        _ => '',
-      };
+  Widget? _trailing(BuildContext context, SellerOrdersController controller,
+      OrderModel order) {
+    final next = SellerOrdersController.nextStatus(order);
+    if (next != null) {
+      return TextButton(
+        onPressed: () => controller.advanceStatus(order),
+        child: Text(
+            next == OrderStatus.shipped ? 'Mark shipped' : 'Mark delivered'),
+      );
+    }
+    if (order.status == OrderStatus.pending) {
+      return Text('Awaiting payment',
+          style: Theme.of(context).textTheme.bodySmall);
+    }
+    return null;
+  }
 }

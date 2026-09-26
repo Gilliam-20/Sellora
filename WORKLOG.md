@@ -6,6 +6,87 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-09-26 — Security audit remediation: every finding closed in code
+
+**Status:** done in code and tested. **Not applied or deployed.** The remote project is still on
+the four earlier migrations and `api` v4. The rollout order is in TODO.md: `db push`, then
+`npm run deploy`, then a web build.
+
+**Why:** user request: "finish up with the phase 2 of the security audit, finish all". That means
+every finding in `SELLORA_SECURITY_AUDIT.md` §2 (H1–H7, M1–M9, L1–L7).
+
+**Decisions (owner, this session):** the freight margin (buyer's shipping charge minus CJ freight)
+is Sellora's, so seller revenue = retail − CJ goods cost − 7% fee. `commission_percent` is dropped,
+leaving the flat 7% as the only fee.
+
+**What changed:** the audit's new §6 has a row per finding. In short:
+- New migration `20260928000000_security_hardening.sql`: seller standing (`seller_can_sell`,
+  `seller_order_gate`), plan limits (listing trigger, store policy, order gate), a guarded
+  `activate_subscription`, an order-status transition trigger, `expires_at` plus a pg_cron sweep, and
+  the `storefront_products`/`seller_orders` views. It also adds `audit_logs`, `ledger_entries`,
+  `webhook_events` (append-only where it matters), `delete_account_data`, email sync, length caps and
+  grant revokes.
+- `api` function: H1 fee split, price floor, stock check, seller gate, order expiry, fail-closed
+  amount check with a `payment_amount_unverified` alert, per-IP limits on public routes and the
+  webhook, stored webhook events, refund audit rows, and `POST /deleteAccount`.
+- App: buyer reads go to `storefront_products` (paged, with "Load more"). Seller and admin order
+  reads go to `seller_orders`. `productDetail` reads CJ directly. The import screen enforces the
+  price floor and handles publish refusals (`ListingRejected`). Sellers can only advance paid orders.
+  Both profiles have "Delete account". `commissionPercent` is gone.
+
+**Behaviour changes to know about:**
+- A seller without an active subscription has an empty storefront and can't be checked out. That
+  includes any real sellers who never paid.
+- `products` is no longer publicly readable. Anything buyer-facing must use `storefront_products`.
+- An unreadable IntaSend amount now holds the payment (alert) instead of fulfilling it.
+  Confirm the response shape in the sandbox before live traffic.
+- The ledger books refunds but doesn't reverse `SELLER_EARNING`; a payout job must net them.
+
+**Tests:** 170 PGlite checks (the hardening section is new), 70 Deno tests / 285 steps. `flutter
+analyze` shows no new issues. `flutter test`: 51 pass plus the known `NotificationCenter` failure.
+
+**Not done:** a web page for account deletion (Google Play asks for one alongside the in-app flow).
+Browsing still calls CJ live (M2's optional "serve from `catalog_products`"). The import screen's
+profit readout still ignores the 7% fee.
+
+---
+
+## 2026-09-26 — Post-migration security & architecture audit
+
+**Status:** audit only. No code, schema or config changed. The baseline `cd supabase && npm test`
+passes.
+
+**Why:** user request: a principal-level production upgrade of the Supabase-migrated app, audit
+first ("produce an architecture report before implementing major changes").
+
+**Outcome:** `SELLORA_SECURITY_AUDIT.md` supersedes `SELLORA_ARCHITECTURE.md`. The target
+architecture is already in place: server-side pricing, re-verified payments, CAS idempotency,
+app_metadata admin, and no client secrets. No restructure is recommended. It found 7 high issues,
+including seller revenue that ignores CJ cost, no sell-price floor, a suspended seller who can
+reactivate by paying, buyers who can buy subscriptions, suspended/lapsed sellers who can still sell,
+unenforced plan limits, and unconstrained seller order-status changes. It also found 9 medium issues:
+a fail-open amount check, un-rate-limited public CJ routes, no audit log, ledger or webhook store,
+three conflicting fee rates, no order expiry, a public cost_price, and no CJ stock check.
+
+**Blocked on (product decisions):** the seller-revenue formula and who keeps the freight markup (H1).
+
+**Follow-up, same day: service fee 2% → 7%.** User decision: "I want to change the fee to 7%". It is
+a flat rate on the product subtotal only, as before. `SERVICE_FEE_RATE` (`orders.js`, the rate
+actually charged and snapshotted per order) and `AppConstants.platformServiceFeeRate` (display only,
+used by the marketing page) are now 0.07. The `splitServiceFee` test, comments, TODO.md (its
+self-contradictory §15 and the revenue example) and SELLORA_IMPLEMENTATION_PLAN.md were updated to
+match. Existing orders keep their snapshotted rate. Still open: plans' `commission_percent` is
+displayed but not charged (audit M6).
+
+**Deployed, same day:** `api` v4 is on project `ktpxbrtjmqdsnlmfslbq` (`verify_jwt=false`, as
+configured). `/health` returns 200, and an unauthenticated `createOrder` returns 401. All four
+migrations were already applied remotely. Later that day the `CRON_SECRET` function secret and the
+Vault secrets `sellora_cron_secret`/`sellora_api_url` were set, and all five pg_cron jobs are
+active. A manual `invoke_scheduled_job('refreshFxRate')` got a 202 from the function. The project also has an unrelated `websocket-server` function that nothing in this repo
+references.
+
+---
+
 ## 2026-09-27 — Firebase → Supabase, phase 2: backend on Edge Functions; auth links; Storage
 
 **Status:** done in code. **Nothing is applied to or deployed on the real Supabase project yet** —

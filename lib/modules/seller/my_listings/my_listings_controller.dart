@@ -34,7 +34,16 @@ class MyListingsController extends GetxController {
   Future<void> relist(String productId) async {
     final product = listings.firstWhereOrNull((p) => p.id == productId);
     if (product == null) return;
-    await _productRepo.updateListing(product.copyWith(isListed: true));
+    try {
+      await _productRepo.updateListing(product.copyWith(isListed: true));
+    } on ListingRejected catch (e) {
+      Get.snackbar(
+        'Can\'t publish',
+        e.reason == ListingRejection.listingLimit
+            ? 'Your plan\'s listing limit is reached. Unlist something or upgrade to publish more.'
+            : 'Publishing needs an approved account with an active plan.',
+      );
+    }
     load();
   }
 }

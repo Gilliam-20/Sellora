@@ -3,8 +3,26 @@
 // the profile fields they mirror onto), while api/index.ts orchestrates the
 // actual payment-provider calls.
 import { db, must } from "./db.js";
-import { badRequest, notFound } from "./errors.js";
+import { badRequest, forbidden, notFound } from "./errors.js";
 import { fromRow } from "./rows.js";
+
+/**
+ * Why `profile` may not buy a subscription, or null when it may. Only
+ * sellers subscribe (a buyer paying would otherwise be turned into one),
+ * and a suspended seller can't pay their way out of a suspension -
+ * activate_subscription enforces both again in SQL.
+ * @param {object|null} profile A `profiles` row (`role`, `seller_status`).
+ * @return {string|null} The refusal message.
+ */
+function subscribeRefusal(profile) {
+  if (!profile || profile.role !== "seller") {
+    return "Only seller accounts can subscribe to a plan";
+  }
+  if (profile.seller_status === "suspended") {
+    return "This seller account is suspended. Contact Sellora support.";
+  }
+  return null;
+}
 
 /**
  * Creates a pending billing_history ledger entry for a seller's subscription
@@ -20,6 +38,11 @@ async function createBillingEntry({ sellerId, planId }) {
   if (!planId || typeof planId !== "string") {
     throw badRequest("planId is required");
   }
+  const profile = must(await db().from("profiles")
+      .select("role, seller_status").eq("uid", sellerId).maybeSingle());
+  const refusal = subscribeRefusal(profile);
+  if (refusal) throw forbidden(refusal);
+
   const plan = must(await db().from("subscription_plans")
       .select("id, name, price_kes, price_usd, billing_period_days")
       .eq("id", planId).maybeSingle());
@@ -134,6 +157,7 @@ async function activatePendingSubscription(entryId, { paymentReference } = {}) {
 }
 
 export {
+  subscribeRefusal,
   createBillingEntry,
   getBillingEntry,
   attachBillingPaymentAttempt,

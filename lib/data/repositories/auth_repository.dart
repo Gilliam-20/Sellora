@@ -7,6 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart'
         AuthRetryableFetchException,
         PostgrestException,
         User;
+import '../../core/constants/app_constants.dart';
+import '../../core/network/dio_client.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/supabase_service.dart';
@@ -83,6 +85,12 @@ abstract class AuthRepository {
   Future<void> resendVerificationEmail();
 
   Future<void> signOut();
+
+  /// Permanently deletes the signed-in account, then signs out. Throws
+  /// with a message to show while the account still has orders being
+  /// delivered.
+  Future<void> deleteAccount();
+
   Future<void> updateUser(UserModel user);
 
   /// Re-reads the signed-in user's profile, bypassing [cachedUser], and
@@ -335,6 +343,15 @@ class SupabaseAuthRepository extends GetxService implements AuthRepository {
   Future<void> signOut() async {
     _cached = null;
     await _auth.signOut();
+  }
+
+  /// Goes through the `api` function: deleting an Auth user needs the
+  /// service role, and the data clean-up must happen server-side in one
+  /// transaction (`delete_account_data`).
+  @override
+  Future<void> deleteAccount() async {
+    await Get.find<DioClient>().post(ApiEndpoints.deleteAccount, data: {});
+    await signOut();
   }
 
   /// Sends only the self-editable columns. The rest are server-owned (the

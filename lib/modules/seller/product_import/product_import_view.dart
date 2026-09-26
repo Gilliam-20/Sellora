@@ -168,6 +168,7 @@ class _ProductImportViewState extends State<ProductImportView> {
                     isLoadingShipping: controller.isLoadingShipping.value,
                     shippingError: controller.shippingError.value,
                     currency: controller.currencyCode,
+                    priceFloor: controller.priceFloor,
                     priceCtrl: _priceCtrl,
                     marginPresets: _marginPresets,
                     onPresetSelected: _applyMarginPreset,
@@ -400,6 +401,7 @@ class _PricingCard extends StatelessWidget {
     required this.isLoadingShipping,
     required this.shippingError,
     required this.currency,
+    required this.priceFloor,
     required this.priceCtrl,
     required this.marginPresets,
     required this.onPresetSelected,
@@ -411,6 +413,9 @@ class _PricingCard extends StatelessWidget {
   final bool isLoadingShipping;
   final String? shippingError;
   final String currency;
+
+  /// See [ProductImportController.priceFloor].
+  final double priceFloor;
   final TextEditingController priceCtrl;
   final List<int> marginPresets;
   final ValueChanged<int> onPresetSelected;
@@ -489,7 +494,16 @@ class _PricingCard extends StatelessWidget {
             controller: priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(labelText: 'Your sell price'),
-            validator: Validators.price,
+            validator: (value) {
+              final error = Validators.price(value);
+              if (error != null) return error;
+              final price = double.parse(value!.trim());
+              if (price < priceFloor) {
+                return 'At least ${Formatters.currency(priceFloor, code: currency)} '
+                    'to cover the supplier cost and service fee';
+              }
+              return null;
+            },
           ),
           const SizedBox(height: AppSpacing.sm),
           Row(

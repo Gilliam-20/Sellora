@@ -5,6 +5,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/i18n/currencies.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/delete_account_button.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/store_repository.dart';
@@ -124,6 +125,11 @@ class BuyerProfileView extends StatelessWidget {
               onPressed: _signOut,
               child: const Text('Sign out'),
             ),
+            const SizedBox(height: AppSpacing.sm),
+            DeleteAccountButton(onDeleted: () {
+              final slug = Get.parameters['slug'];
+              Get.offAllNamed(slug != null ? '/s/$slug' : Routes.marketing);
+            }),
           ],
         ),
       ),

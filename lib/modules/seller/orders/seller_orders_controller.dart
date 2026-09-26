@@ -27,15 +27,23 @@ class SellerOrdersController extends GetxController {
     isLoading.value = false;
   }
 
-  Future<void> advanceStatus(OrderModel order) async {
-    final next = switch (order.status) {
-      OrderStatus.pending => OrderStatus.processing,
+  /// The status a seller may move [order] to, or null. Only a paid order
+  /// moves, and only forward through fulfilment — the server enforces the
+  /// same rule (the `orders_guard_status` trigger). A paid order becomes
+  /// `processing` on its own when payment is confirmed, and cancelling one
+  /// is the admin refund path, so it refunds the buyer.
+  static OrderStatus? nextStatus(OrderModel order) {
+    if (order.paymentStatus != OrderPaymentStatus.paid) return null;
+    return switch (order.status) {
       OrderStatus.processing => OrderStatus.shipped,
       OrderStatus.shipped => OrderStatus.delivered,
-      OrderStatus.delivered => OrderStatus.delivered,
-      OrderStatus.cancelled => OrderStatus.cancelled,
+      _ => null,
     };
-    if (next == order.status) return;
+  }
+
+  Future<void> advanceStatus(OrderModel order) async {
+    final next = nextStatus(order);
+    if (next == null) return;
     await _orderRepo.updateStatus(order.id, next);
     await _notificationRepo.notifyOrderStatusChanged(order.copyWith(status: next));
     load();

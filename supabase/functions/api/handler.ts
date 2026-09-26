@@ -17,7 +17,7 @@ import * as subscriptionsModule from "../_shared/subscriptions.js";
 import * as refundsModule from "../_shared/refunds.js";
 import * as catalogSyncModule from "../_shared/catalogSync.js";
 import { refreshFxRates } from "../_shared/fx.js";
-import { db } from "../_shared/db.js";
+import { db, must } from "../_shared/db.js";
 import { env } from "../_shared/env.js";
 import { ALERTS, logAlert, logError, logInfo, logWarning } from "../_shared/logging.js";
 import {
@@ -30,7 +30,7 @@ import {
   validateFreightRequest,
 } from "../_shared/params.js";
 import { publicError } from "../_shared/errors.js";
-import { checkRateLimit } from "../_shared/rateLimit.js";
+import { checkRateLimit, clientKey } from "../_shared/rateLimit.js";
 
 // deno-lint-ignore no-explicit-any
 type Json = any;
@@ -136,8 +136,9 @@ function signedIn(
 }
 
 /**
- * Counts this call against the caller's per-user budget
- * (_shared/rateLimit.js), returning the 429 to send once it's spent.
+ * Counts this call against the caller's budget (_shared/rateLimit.js) -
+ * their user id on a signed-in route, `clientKey(req)` on a public one -
+ * returning the 429 to send once it's spent.
  */
 async function rateLimited(policy: string, uid: string): Promise<Response | null> {
   const { allowed, retryAfterMs } = await checkRateLimit(policy, uid);
@@ -195,6 +196,11 @@ async function loadPayableOrder(
   if (!["pending", "awaiting_confirmation", "failed"].includes(order.paymentStatus)) {
     return { error: fail(409, "Order is already paid") };
   }
+  // Its prices were a snapshot; past the window they may be stale. A
+  // payment already started before expiry is still honoured on confirm.
+  if (order.status === "cancelled" || orders.isExpired(order)) {
+    return { error: fail(409, "This order has expired. Please check out again.") };
+  }
   if (orders.hasPendingAttempt(order, paymentMethod)) {
     return { error: fail(409, "A payment for this order is already in progress") };
   }
@@ -213,6 +219,24 @@ async function loadPayableBillingEntry(
     return { error: fail(409, "This billing entry is no longer payable") };
   }
   return { entry };
+}
+
+/**
+ * Alerts on a payment whose amount check failed (intasend.verifyAmount).
+ * An unreadable amount is its own alert: it's most likely IntaSend's
+ * response shape, and the payment waits for a human rather than shipping.
+ * @return The message for a signed-in client.
+ */
+function amountRefused(check: Json, context: Record<string, unknown>): string {
+  if (check.unreadable) {
+    logAlert(ALERTS.PAYMENT_AMOUNT_UNVERIFIED, {
+      ...context,
+      note: "held for manual reconciliation; confirm IntaSend's status response shape",
+    });
+    return "We couldn't verify this payment yet. Sellora support will confirm it shortly.";
+  }
+  logAlert(ALERTS.PAYMENT_AMOUNT_MISMATCH, { ...context, actual: check.actual });
+  return "The amount paid does not match";
 }
 
 const MPESA_PHONE_MESSAGE =
@@ -235,7 +259,9 @@ const REFUND_REFUSALS: Record<string, string> = {
 // =============================================================================
 
 /** GET /getCategories - CJ's full category tree. */
-const getCategories: Route = async () => {
+const getCategories: Route = async ({ req }) => {
+  const limited = await rateLimited("publicCatalog", clientKey(req));
+  if (limited) return limited;
   try {
     return ok(await cjApi.fetchCategories());
   } catch (err) {
@@ -246,11 +272,14 @@ const getCategories: Route = async () => {
 /**
  * GET /searchProducts?keyword=hoodie&categoryId=xxx&page=1&size=20
  *
- * Every parameter is clamped before it reaches CJ: this endpoint is public
- * and spends our one CJ API key, so an unbounded `size` or `page` is a way
- * to get that key rate-limited and take the catalog offline for everyone.
+ * Every parameter is clamped before it reaches CJ, and callers are limited
+ * per IP: this endpoint is public and spends our one CJ API key, so an
+ * unbounded `size`/`page`, or an unbounded number of calls, is a way to get
+ * that key rate-limited and take the catalog offline for everyone.
  */
-const searchProducts: Route = async ({ query }) => {
+const searchProducts: Route = async ({ req, query }) => {
+  const limited = await rateLimited("publicCatalog", clientKey(req));
+  if (limited) return limited;
   try {
     return ok(await cjApi.searchProducts({
       keyword: sanitizeKeyword(query.get("keyword") ?? undefined),
@@ -265,7 +294,9 @@ const searchProducts: Route = async ({ query }) => {
 };
 
 /** GET /getProductDetail?pid=xxxxxxxx - product info + all its variants. */
-const getProductDetail: Route = async ({ query }) => {
+const getProductDetail: Route = async ({ req, query }) => {
+  const limited = await rateLimited("publicCatalog", clientKey(req));
+  if (limited) return limited;
   try {
     const pid = sanitizeId(query.get("pid") ?? undefined);
     if (!pid) return fail(400, "A valid pid is required");
@@ -495,15 +526,13 @@ const confirmIntasendPayment = signedIn(async ({ body }, user) => {
 
     const check = intasend.verifyAmount(status.raw, { amount: order.totalKes, currency: "KES" });
     if (!check.ok) {
-      logAlert(ALERTS.PAYMENT_AMOUNT_MISMATCH, {
+      return fail(409, amountRefused(check, {
         orderId,
         uid: user.uid,
         provider: "INTASEND",
         source: "confirmIntasendPayment",
         expected: { amount: order.totalKes, currency: "KES" },
-        actual: check.actual,
-      });
-      return fail(409, "The amount paid does not match this order");
+      }));
     }
     const result = await orders.fulfillOrder(orderId);
     return ok({ ...result, paid: true });
@@ -537,8 +566,12 @@ function secretsMatch(a: unknown, b: string | undefined): boolean {
  *
  * When the INTASEND_WEBHOOK_CHALLENGE secret is set, the payload's
  * `challenge` must match it too (IntaSend's dashboard lets you set one).
+ * Every event that gets that far is stored in webhook_events before it's
+ * acted on, with the outcome written back after.
  */
-const intasendWebhook: Route = async ({ body }) => {
+const intasendWebhook: Route = async ({ req, body }) => {
+  const limited = await rateLimited("webhook", clientKey(req));
+  if (limited) return limited;
   const payload = body || {};
   const orderId = payload.api_ref || payload.invoice?.api_ref;
   try {
@@ -555,82 +588,10 @@ const intasendWebhook: Route = async ({ body }) => {
       return fail(400, "Missing invoice_id/api_ref");
     }
 
-    // api_ref addresses either an order or a pending subscription billing
-    // entry. The billing lookup returns null rather than throwing for the
-    // common case of an api_ref that is really an order id.
-    const billingEntry = await subscriptions.getBillingEntry(orderId);
-    if (billingEntry) {
-      if (!subscriptions.isPayable(billingEntry)) {
-        // Already handled - a webhook retry is a no-op.
-        return ok({ paid: billingEntry.status === "paid" });
-      }
-      if (!subscriptions.billingRefMatches(billingEntry, { invoiceId })) {
-        logAlert(ALERTS.WEBHOOK_SIGNATURE_INVALID, {
-          provider: "INTASEND",
-          billingEntryId: orderId,
-          invoiceId,
-          reason: "invoice was never started for this billing entry",
-        });
-        return json(200, { success: false, message: "Invoice does not belong to this billing entry" });
-      }
-      const billingStatus = await intasend.checkPaymentStatus({ invoiceId });
-      if (!billingStatus.isComplete) return ok({ paid: false, state: billingStatus.state });
-      const billingCheck = intasend.verifyAmount(billingStatus.raw, {
-        amount: billingEntry.amountKes,
-        currency: "KES",
-      });
-      if (!billingCheck.ok) {
-        logAlert(ALERTS.PAYMENT_AMOUNT_MISMATCH, {
-          billingEntryId: orderId,
-          sellerId: billingEntry.sellerId,
-          provider: "INTASEND",
-          source: "intasendWebhook",
-          invoiceId,
-          expected: { amount: billingEntry.amountKes, currency: "KES" },
-          actual: billingCheck.actual,
-        });
-        return json(200, { success: false, message: "Amount mismatch" });
-      }
-      return ok(await subscriptions.activatePendingSubscription(orderId, {
-        paymentReference: invoiceId,
-      }));
-    }
-
-    const order = await orders.getOrder(orderId);
-    if (!orders.paymentRefMatches(order, { invoiceId })) {
-      logAlert(ALERTS.WEBHOOK_SIGNATURE_INVALID, {
-        provider: "INTASEND",
-        orderId,
-        invoiceId,
-        reason: "invoice was never started for this order",
-      });
-      return json(200, { success: false, message: "Invoice does not belong to this order" });
-    }
-
-    const status = await intasend.checkPaymentStatus({ invoiceId });
-    if (!status.isComplete) return ok({ paid: false, state: status.state });
-
-    const check = intasend.verifyAmount(status.raw, { amount: order.totalKes, currency: "KES" });
-    if (!check.ok) {
-      logAlert(ALERTS.PAYMENT_AMOUNT_MISMATCH, {
-        orderId,
-        uid: order.uid,
-        provider: "INTASEND",
-        source: "intasendWebhook",
-        invoiceId,
-        expected: { amount: order.totalKes, currency: "KES" },
-        actual: check.actual,
-      });
-      return json(200, { success: false, message: "Amount mismatch" });
-    }
-    if (!check.actual) {
-      logWarning("intasend_amount_unreadable", {
-        orderId,
-        invoiceId,
-        note: "fulfilled on the invoice binding alone; confirm IntaSend's status response shape",
-      });
-    }
-    return ok(await orders.fulfillOrder(orderId));
+    const event = await recordWebhookEvent(payload, String(invoiceId), String(orderId));
+    const res = await applyIntasendWebhook(String(invoiceId), String(orderId));
+    await finishWebhookEvent(event, res);
+    return res;
   } catch (err) {
     logError("request_failed", { endpoint: "intasendWebhook", orderId }, err);
     // Still ack with 200 so IntaSend doesn't hammer retries for a bug on our
@@ -639,6 +600,139 @@ const intasendWebhook: Route = async ({ body }) => {
     return json(200, { success: false, message: publicError(err as Error).message });
   }
 };
+
+// The payload is stored as sent unless it's implausibly large for an
+// IntaSend event, in which case only its size is kept.
+const MAX_WEBHOOK_PAYLOAD_CHARS = 20_000;
+
+interface WebhookEvent {
+  invoiceId: string;
+  state: string;
+}
+
+/**
+ * Stores the event before it's acted on (webhook_events, service role
+ * only), one row per (provider, invoice, state) - a retry of the same event
+ * leaves the first row. A storage failure is logged, not fatal: the event
+ * is still re-verified with IntaSend before anything changes.
+ */
+async function recordWebhookEvent(
+  payload: Json,
+  invoiceId: string,
+  apiRef: string,
+): Promise<WebhookEvent> {
+  const state = String(payload.state || payload.invoice?.state || "").toUpperCase().slice(0, 40);
+  const event = { invoiceId: invoiceId.slice(0, 200), state };
+  try {
+    const text = JSON.stringify(payload);
+    must(await db().from("webhook_events").upsert({
+      provider: "INTASEND",
+      invoice_id: event.invoiceId,
+      state,
+      api_ref: apiRef.slice(0, 200),
+      payload: text.length > MAX_WEBHOOK_PAYLOAD_CHARS ? { truncated: true, chars: text.length } : payload,
+    }, { onConflict: "provider,invoice_id,state", ignoreDuplicates: true }));
+  } catch (err) {
+    logWarning("webhook_event_not_stored", { provider: "INTASEND", invoiceId }, err);
+  }
+  return event;
+}
+
+/** Records what handling the event came to (its response's message). */
+async function finishWebhookEvent(event: WebhookEvent, res: Response): Promise<void> {
+  try {
+    const answer = await res.clone().json();
+    const outcome = answer.success ?
+      (answer.data?.paid === false ? `not_complete:${answer.data?.state ?? ""}` : "processed") :
+      String(answer.message ?? "failed");
+    must(await db().from("webhook_events").update({
+      processed_at: new Date().toISOString(),
+      outcome: outcome.slice(0, 200),
+    })
+        .eq("provider", "INTASEND")
+        .eq("invoice_id", event.invoiceId)
+        .eq("state", event.state));
+  } catch (err) {
+    logWarning("webhook_event_not_finished", { provider: "INTASEND", invoiceId: event.invoiceId }, err);
+  }
+}
+
+/** The webhook's work once the event is stored: verify, then act. */
+async function applyIntasendWebhook(invoiceId: string, orderId: string): Promise<Response> {
+  // api_ref addresses either an order or a pending subscription billing
+  // entry. The billing lookup returns null rather than throwing for the
+  // common case of an api_ref that is really an order id.
+  const billingEntry = await subscriptions.getBillingEntry(orderId);
+  if (billingEntry) {
+    if (!subscriptions.isPayable(billingEntry)) {
+      // Already handled - a webhook retry is a no-op.
+      return ok({ paid: billingEntry.status === "paid" });
+    }
+    if (!subscriptions.billingRefMatches(billingEntry, { invoiceId })) {
+      logAlert(ALERTS.WEBHOOK_SIGNATURE_INVALID, {
+        provider: "INTASEND",
+        billingEntryId: orderId,
+        invoiceId,
+        reason: "invoice was never started for this billing entry",
+      });
+      return json(200, { success: false, message: "Invoice does not belong to this billing entry" });
+    }
+    const billingStatus = await intasend.checkPaymentStatus({ invoiceId });
+    if (!billingStatus.isComplete) return ok({ paid: false, state: billingStatus.state });
+    const billingCheck = intasend.verifyAmount(billingStatus.raw, {
+      amount: billingEntry.amountKes,
+      currency: "KES",
+    });
+    if (!billingCheck.ok) {
+      amountRefused(billingCheck, {
+        billingEntryId: orderId,
+        sellerId: billingEntry.sellerId,
+        provider: "INTASEND",
+        source: "intasendWebhook",
+        invoiceId,
+        expected: { amount: billingEntry.amountKes, currency: "KES" },
+      });
+      return json(200, {
+        success: false,
+        message: billingCheck.unreadable ? "Amount unverified" : "Amount mismatch",
+      });
+    }
+    return ok(await subscriptions.activatePendingSubscription(orderId, {
+      paymentReference: invoiceId,
+    }));
+  }
+
+  const order = await orders.getOrder(orderId);
+  if (!orders.paymentRefMatches(order, { invoiceId })) {
+    logAlert(ALERTS.WEBHOOK_SIGNATURE_INVALID, {
+      provider: "INTASEND",
+      orderId,
+      invoiceId,
+      reason: "invoice was never started for this order",
+    });
+    return json(200, { success: false, message: "Invoice does not belong to this order" });
+  }
+
+  const status = await intasend.checkPaymentStatus({ invoiceId });
+  if (!status.isComplete) return ok({ paid: false, state: status.state });
+
+  const check = intasend.verifyAmount(status.raw, { amount: order.totalKes, currency: "KES" });
+  if (!check.ok) {
+    amountRefused(check, {
+      orderId,
+      uid: order.uid,
+      provider: "INTASEND",
+      source: "intasendWebhook",
+      invoiceId,
+      expected: { amount: order.totalKes, currency: "KES" },
+    });
+    return json(200, {
+      success: false,
+      message: check.unreadable ? "Amount unverified" : "Amount mismatch",
+    });
+  }
+  return ok(await orders.fulfillOrder(orderId));
+}
 
 // =============================================================================
 // Subscriptions / Billing (seller plans)
@@ -762,15 +856,13 @@ const confirmBillingPayment = signedIn(async ({ body }, user) => {
 
     const check = intasend.verifyAmount(status.raw, { amount: entry.amountKes, currency: "KES" });
     if (!check.ok) {
-      logAlert(ALERTS.PAYMENT_AMOUNT_MISMATCH, {
+      return fail(409, amountRefused(check, {
         billingEntryId,
         uid: user.uid,
         provider: "INTASEND",
         source: "confirmBillingPayment",
         expected: { amount: entry.amountKes, currency: "KES" },
-        actual: check.actual,
-      });
-      return fail(409, "The amount paid does not match this billing entry");
+      }));
     }
     const result = await subscriptions.activatePendingSubscription(billingEntryId, {
       paymentReference: entry.paymentRef?.invoiceId || entry.paymentRef?.checkoutId,
@@ -784,6 +876,63 @@ const confirmBillingPayment = signedIn(async ({ body }, user) => {
     });
   }
 });
+
+// =============================================================================
+// Account
+// =============================================================================
+
+/**
+ * POST /deleteAccount   body: {}
+ * Deletes the caller's own account (Google Play requires in-app deletion
+ * for apps with sign-up). Personal data is scrubbed and a seller's listings
+ * come down (the delete_account_data SQL function); orders, billing and
+ * ledger rows stay as financial records. The Auth user is then
+ * soft-deleted, so it can't sign in again but the rows that reference it
+ * stay intact. Refused while a paid order is still being delivered.
+ * Idempotent: a retry after a failed Auth delete finishes the job.
+ */
+const deleteAccount = signedIn(async (_ctx, user) => {
+  const limited = await rateLimited("deleteAccount", user.uid);
+  if (limited) return limited;
+  try {
+    if (user.admin) {
+      return fail(403, "Admin accounts are removed with grant-admin.js --revoke");
+    }
+    const result = must(await db().rpc("delete_account_data", { p_uid: user.uid }));
+    if (!result?.deleted) {
+      return fail(409,
+          "You have orders that are still being delivered. " +
+          "You can delete your account once they arrive.",
+          { reason: result?.reason });
+    }
+    if (result.role === "seller") await removeStoreMedia(user.uid);
+    const { error } = await db().auth.admin.deleteUser(user.uid, true);
+    if (error) throw new Error(`Auth user delete failed: ${error.message}`);
+    logInfo("account_deleted", { uid: user.uid, role: result.role });
+    return ok({ deleted: true });
+  } catch (err) {
+    return sendError(err, { endpoint: "deleteAccount", uid: user.uid });
+  }
+});
+
+/**
+ * Removes a deleted seller's branding images from store-media. Best effort:
+ * the store rows no longer point at them, so a leftover file is untidy,
+ * not reachable from the app.
+ */
+async function removeStoreMedia(sellerId: string): Promise<void> {
+  try {
+    const stores = must(await db().from("stores").select("id").eq("seller_id", sellerId));
+    const bucket = db().storage.from("store-media");
+    for (const { id } of stores) {
+      const { data: files } = await bucket.list(id);
+      const paths = (files || []).map((f: Json) => `${id}/${f.name}`);
+      if (paths.length) await bucket.remove(paths);
+    }
+  } catch (err) {
+    logWarning("store_media_not_removed", { sellerId }, err);
+  }
+}
 
 // =============================================================================
 // Catalog sync + scheduled jobs
@@ -871,6 +1020,7 @@ const POST_ROUTES: Record<string, Route> = {
   payBillingMpesa,
   payBillingCard,
   confirmBillingPayment,
+  deleteAccount,
   runCatalogSync,
 };
 

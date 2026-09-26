@@ -53,8 +53,10 @@ class SupabaseSubscriptionRepository extends GetxService
     }
     final listings =
         await Get.find<ProductRepository>().sellerListings(sellerId);
+    // Published listings only — what the server's listing-limit trigger
+    // counts. Drafts are free.
     return SubscriptionUsageModel(
-      listingCount: listings.length,
+      listingCount: listings.where((p) => p.isListed).length,
       listingLimit: plan?.listingLimit ?? -1,
     );
   }

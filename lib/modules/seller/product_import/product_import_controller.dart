@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:get/get.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../data/models/freight_estimate.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -123,6 +126,21 @@ class ProductImportController extends GetxController {
 
   String get currencyCode => product.value?.currency ?? 'USD';
 
+  /// The lowest price checkout will sell this listing at: after the
+  /// service fee it must still cover CJ's cost of the dearest variant, since
+  /// one price covers them all. The server applies the same floor to CJ's
+  /// live cost at checkout (`lineRefusal` in
+  /// supabase/functions/_shared/orders.js); this catches it before import.
+  double get priceFloor {
+    final full = product.value;
+    if (full == null) return 0;
+    final dearest = full.variants
+        .map((v) => v.costPrice)
+        .fold(full.costPrice, math.max);
+    return (dearest / (1 - AppConstants.platformServiceFeeRate) * 100).ceil() /
+        100;
+  }
+
   /// The price that yields [marginPercent] over [landedCost] (CJ cost +
   /// estimated shipping), not just bare CJ cost — an accurate margin has to
   /// account for what it actually costs to get the item to a buyer.
@@ -138,18 +156,16 @@ class ProductImportController extends GetxController {
     final storeId = _storeScope.current.value?.id;
     if (user == null || full == null || storeId == null) return false;
 
-    // Soft, client-side only — listing creation isn't server-authoritative
-    // yet (Phase 5's job), so this is an upsell prompt, not real
-    // enforcement.
+    // An early upsell prompt. The limit itself is enforced server-side (a
+    // trigger on `products`), which counts published listings only.
     final plans = await _subscriptionRepo.fetchPlans();
     final plan = plans.firstWhereOrNull((p) => p.id == user.subscriptionPlanId);
-    if (plan != null && plan.listingLimit != -1) {
-      final current = (await _productRepo.sellerListings(user.uid)).length;
-      if (current >= plan.listingLimit) {
-        Get.snackbar(
-          'Listing limit reached',
-          'Your ${plan.name} plan allows up to ${plan.listingLimit} listings. Upgrade to list more.',
-        );
+    if (publish && plan != null && plan.listingLimit != -1) {
+      final listed = (await _productRepo.sellerListings(user.uid))
+          .where((p) => p.isListed)
+          .length;
+      if (listed >= plan.listingLimit) {
+        _listingLimitReached(plan.name, plan.listingLimit);
         return false;
       }
     }
@@ -174,8 +190,29 @@ class ProductImportController extends GetxController {
         Get.find<SellerDashboardController>().load();
       }
       return true;
+    } on ListingRejected catch (e) {
+      switch (e.reason) {
+        case ListingRejection.listingLimit:
+          _listingLimitReached(plan?.name, plan?.listingLimit);
+        case ListingRejection.notInGoodStanding:
+          Get.snackbar(
+            'Can\'t publish yet',
+            'Publishing needs an approved account with an active plan. '
+                'You can still save this as a draft.',
+          );
+      }
+      return false;
     } finally {
       isSubmitting.value = false;
     }
+  }
+
+  void _listingLimitReached(String? planName, int? limit) {
+    Get.snackbar(
+      'Listing limit reached',
+      planName == null || limit == null
+          ? 'Your plan\'s listing limit is reached. Upgrade to list more.'
+          : 'Your $planName plan allows up to $limit listings. Upgrade to list more.',
+    );
   }
 }

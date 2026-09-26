@@ -175,7 +175,6 @@ class _FakeSubscriptionRepository implements SubscriptionRepository {
         priceKes: 999,
         billingPeriodDays: 30,
         listingLimit: 50,
-        commissionPercent: 2,
         perks: const [],
         isPopular: popular,
       );

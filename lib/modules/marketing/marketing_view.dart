@@ -377,7 +377,7 @@ const _capabilities = [
   _CapabilityItem(Icons.dashboard_outlined, 'A seller dashboard that matters',
       'Revenue, active listings and orders waiting on you, plus the recent-orders feed you\'ll actually check daily.'),
   _CapabilityItem(Icons.receipt_long_outlined, 'Plans with a real limit',
-      'Starter, Growth and Scale tiers, each with a listing limit and commission rate that\'s clear up front.'),
+      'Starter, Growth and Scale tiers, each with a listing limit that\'s clear up front, and one flat service fee on sales.'),
 ];
 
 class _Capabilities extends StatelessWidget {
@@ -673,8 +673,8 @@ class _Faq extends StatelessWidget {
       ),
       const _FaqItem(
         'Can I change my plan later?',
-        'Yes — upgrade or downgrade at any time. Your listing limit and '
-            'commission rate update immediately.',
+        'Yes — upgrade or downgrade at any time. Your new listing limit '
+            'applies immediately; the service fee is the same on every plan.',
       ),
       const _FaqItem(
         'Who handles fulfillment?',

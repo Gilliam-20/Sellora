@@ -5,13 +5,13 @@ class AppConstants {
 
   static const String appName = 'Sellora';
 
-  /// The platform's cut of an order subtotal — 2%, applied to product
+  /// The platform's cut of an order subtotal — 7%, applied to product
   /// subtotal only (never shipping/tax unless explicitly configured).
   /// Client-side display estimates only (e.g. showing a seller their
   /// expected payout). The rate actually charged is `SERVICE_FEE_RATE` in
   /// supabase/functions/_shared/orders.js, snapshotted onto each order at
   /// creation — keep the two in step by hand.
-  static const double platformServiceFeeRate = 0.02;
+  static const double platformServiceFeeRate = 0.07;
 }
 
 /// Backend endpoints: routes of Sellora's own `api` Supabase Edge Function
@@ -65,4 +65,9 @@ class ApiEndpoints {
   static const String payBillingCard = '$baseFunctionsUrl/payBillingCard';
   static const String confirmBillingPayment =
       '$baseFunctionsUrl/confirmBillingPayment';
+
+  /// Deletes the signed-in account: personal data scrubbed, orders kept as
+  /// financial records, Auth user soft-deleted. Refused (409) while a paid
+  /// order is still being delivered.
+  static const String deleteAccount = '$baseFunctionsUrl/deleteAccount';
 }

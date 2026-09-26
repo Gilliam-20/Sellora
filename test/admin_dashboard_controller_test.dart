@@ -121,6 +121,9 @@ class _FakeAuthRepository implements AuthRepository {
   Future<void> signOut() => throw UnimplementedError();
 
   @override
+  Future<void> deleteAccount() => throw UnimplementedError();
+
+  @override
   Future<UserModel> signUpBuyer(
           {required String name,
           required String email,

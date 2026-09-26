@@ -27,11 +27,21 @@ const PUSH_CLAIM_STALE_MS = 5 * 60 * 1000;
 // immediately - that's a real user choice.
 const DUPLICATE_ATTEMPT_WINDOW_MS = 2 * 60 * 1000;
 
-// Platform service fee: 2% of the product subtotal only - never shipping or
+// Platform service fee: 7% of the product subtotal only - never shipping or
 // tax - snapshotted onto every order so a later change to this constant
 // can't retroactively change what a historical order owes its seller. See
 // SELLORA_IMPLEMENTATION_PLAN.md's "Decisions on record".
-const SERVICE_FEE_RATE = 0.02;
+const SERVICE_FEE_RATE = 0.07;
+
+// How long an unpaid order stays payable. It carries a snapshot of CJ's
+// cost and the FX rate, so it can't be paid days later at stale prices;
+// past this the api refuses to start a payment and the
+// expire_unpaid_orders pg_cron sweep cancels it.
+const ORDER_TTL_MS = 60 * 60 * 1000;
+
+// Why seller_order_gate refused, as the buyer hears it. Deliberately vague:
+// a buyer doesn't need to know a seller's plan or standing.
+const STORE_UNAVAILABLE = "This store isn't taking orders right now";
 
 // Money columns Postgres returns as numerics; the logic below does arithmetic
 // on them, so they're coerced once on read.
@@ -68,6 +78,15 @@ async function createOrder({ uid, items, shippingAddress, logisticName, storeId 
   if (!store) throw notFound("Store not found");
   const sellerId = store.seller_id;
 
+  // Standing and plan limits are the server's to enforce: a suspended or
+  // lapsed seller, or one past their plan's order_limit, can't be sold
+  // through, whatever the client let them publish.
+  const gate = must(await db().rpc("seller_order_gate", { p_seller_id: sellerId }));
+  if (gate !== "ok") {
+    logWarning("order_refused_seller_gate", { storeId, sellerId, reason: gate });
+    throw unprocessable(STORE_UNAVAILABLE);
+  }
+
   // Currency/region are derived from the shipping address server-side -
   // never trust a client-supplied currency.
   const { region: regionKey, currency } = resolveRegion(shippingAddress.countryCode);
@@ -75,12 +94,13 @@ async function createOrder({ uid, items, shippingAddress, logisticName, storeId 
   const pricing = await getPricing();
   const priced = await Promise.all(
       items.map(async (item) => {
-        const [variant, listing] = await Promise.all([
+        const [variant, listing, stock] = await Promise.all([
           cjApi.getVariant(item.vid),
           db().from("products")
               .select("id, title, image_url, sell_price, is_listed, variants")
               .eq("store_id", storeId).eq("id", item.pid).maybeSingle()
               .then(must),
+          cjApi.getProductStock(item.pid),
         ]);
         if (variant.pid !== item.pid) {
           throw badRequest("The selected product variant does not match its product");
@@ -113,9 +133,18 @@ async function createOrder({ uid, items, shippingAddress, logisticName, storeId 
         // currency other than the ProductModel default (USD) - revisit this
         // line if a seller-side listing-currency picker ever ships.
         const retailUnitPriceUsd = Number(listing.sell_price);
-        if (!Number.isFinite(retailUnitPriceUsd) || retailUnitPriceUsd <= 0) {
-          throw unprocessable(`Product ${item.pid} has no usable price set by its seller`);
+        const refusal = lineRefusal({
+          supplierUnitPriceUsd,
+          retailUnitPriceUsd,
+          quantity: item.quantity,
+          available: stock?.[item.vid],
+        });
+        if (refusal === "below_cost") {
+          logWarning("order_refused_below_cost", {
+            storeId, pid: item.pid, vid: item.vid, supplierUnitPriceUsd, retailUnitPriceUsd,
+          });
         }
+        if (refusal) throw unprocessable(LINE_REFUSALS[refusal](item));
         return {
           pid: item.pid,
           vid: item.vid,
@@ -140,7 +169,8 @@ async function createOrder({ uid, items, shippingAddress, logisticName, storeId 
   // Payments sub-account work in SELLORA_IMPLEMENTATION_PLAN.md PHASE 8,
   // still gated on confirming its five API specifics against a real
   // account). This is the snapshot those payouts will eventually read.
-  const { serviceFeeAmountUsd, sellerRevenueUsd } = splitServiceFee(retailSubtotalUsd);
+  const { serviceFeeAmountUsd, sellerRevenueUsd } =
+    splitServiceFee(retailSubtotalUsd, supplierSubtotalUsd);
 
   const freightOptions = await cjApi.calculateFreight({
     endCountryCode: shippingAddress.countryCode,
@@ -180,8 +210,8 @@ async function createOrder({ uid, items, shippingAddress, logisticName, storeId 
   const retailFreightUsd = retailShippingPrice(freightUsd, pricing, { regionKey });
   const totalUsd = round2(retailSubtotalUsd + retailFreightUsd);
   // Sellora's own platform take: what the buyer paid, minus CJ's actual
-  // costs, minus what's owed to the seller - i.e. the shipping markup plus
-  // the service fee, not the seller's revenue.
+  // costs, minus what's owed to the seller - i.e. the service fee plus the
+  // freight margin, which is Sellora's (owner decision, 2026-09-26).
   const estimatedProfitUsd = round2(
       totalUsd - supplierSubtotalUsd - freightUsd - sellerRevenueUsd);
 
@@ -265,6 +295,7 @@ async function createOrder({ uid, items, shippingAddress, logisticName, storeId 
       currency: "USD",
     })),
     fulfillment_items: priced.map(({ pid, vid, quantity }) => ({ pid, vid, quantity })),
+    expires_at: new Date(Date.now() + ORDER_TTL_MS).toISOString(),
   };
   const created = must(await db().from("orders").insert(row)
       .select("created_at").single());
@@ -276,8 +307,9 @@ async function createOrder({ uid, items, shippingAddress, logisticName, storeId 
 
 /**
  * The fields of an order a buyer may see - what createOrder answers with.
- * Deliberately a whitelist: the order row also carries the supplier cost
- * (the seller's margin) and provider references.
+ * Deliberately a whitelist: the order row also carries the supplier cost,
+ * what the seller earns (together, the seller's margin) and provider
+ * references.
  * @param {object} order camelCase order.
  * @return {object} The client-safe subset, with `totalAmount`/`totalKes`
  *   named as the app reads them.
@@ -296,25 +328,74 @@ function clientView(order) {
     logisticName: order.logisticName,
     serviceFeeRate: order.serviceFeeRate,
     serviceFeeAmount: order.serviceFeeAmount,
-    sellerRevenue: order.sellerRevenue,
+    expiresAt: order.expiresAt,
     items: order.items,
   };
 }
 
 /**
- * Splits a USD product subtotal into the platform's service fee and what's
- * left for the seller. Pure/synchronous so it can be unit-tested without a
+ * Splits a USD product subtotal into the platform's service fee and what
+ * Sellora owes the seller. Under collect-and-disburse Sellora pays CJ the
+ * goods cost out of the buyer's money, so the seller is owed the retail
+ * subtotal less that cost and the fee. Freight is not part of either: the
+ * buyer's shipping charge pays CJ's freight and the margin on it is
+ * Sellora's. Pure/synchronous so it can be unit-tested without a
  * database/CJ mock - see marginPricingService.js for the same pattern.
  * @param {number} retailSubtotalUsd Sum of retail line totals, USD, excluding
  *   shipping (the fee is never charged on shipping - see SERVICE_FEE_RATE).
+ * @param {number} supplierSubtotalUsd Sum of CJ's goods cost for the same
+ *   lines, USD, excluding freight.
  * @return {{serviceFeeAmountUsd: number, sellerRevenueUsd: number}}
  */
-function splitServiceFee(retailSubtotalUsd) {
-  const subtotal = Number.isFinite(retailSubtotalUsd) && retailSubtotalUsd > 0 ?
-    retailSubtotalUsd : 0;
+function splitServiceFee(retailSubtotalUsd, supplierSubtotalUsd) {
+  const positive = (value) => Number.isFinite(value) && value > 0 ? value : 0;
+  const subtotal = positive(retailSubtotalUsd);
   const serviceFeeAmountUsd = round2(subtotal * SERVICE_FEE_RATE);
-  const sellerRevenueUsd = round2(subtotal - serviceFeeAmountUsd);
+  const sellerRevenueUsd = round2(
+      subtotal - positive(supplierSubtotalUsd) - serviceFeeAmountUsd);
   return { serviceFeeAmountUsd, sellerRevenueUsd };
+}
+
+// What the buyer is told for each lineRefusal reason.
+const LINE_REFUSALS = Object.freeze({
+  no_price: (item) => `Product ${item.pid} has no usable price set by its seller`,
+  below_cost: (item) => `Product ${item.pid} can't be sold at its current price`,
+  out_of_stock: () => "The selected variant is out of stock",
+  insufficient_stock: () => "Not enough of the selected variant is in stock",
+});
+
+/**
+ * Whether one checkout line may be sold, as a pure decision.
+ *
+ * The price floor: the seller's price, less the service fee, must cover
+ * CJ's live cost of the item. Below it Sellora would pay CJ more than the
+ * buyer paid for the goods and the seller's revenue would go negative.
+ * Stock is checked only when CJ gave a readable count for this variant
+ * (cjApi.getProductStock returns null for "unknown", never zeros).
+ * @param {{supplierUnitPriceUsd: number, retailUnitPriceUsd: number,
+ *   quantity: number, available: (number|undefined)}} line
+ * @return {string|null} A LINE_REFUSALS key, or null when the line is fine.
+ */
+function lineRefusal({ supplierUnitPriceUsd, retailUnitPriceUsd, quantity, available }) {
+  if (!Number.isFinite(retailUnitPriceUsd) || retailUnitPriceUsd <= 0) return "no_price";
+  if (round2(retailUnitPriceUsd * (1 - SERVICE_FEE_RATE)) < supplierUnitPriceUsd) {
+    return "below_cost";
+  }
+  if (Number.isFinite(available)) {
+    if (available <= 0) return "out_of_stock";
+    if (available < quantity) return "insufficient_stock";
+  }
+  return null;
+}
+
+/**
+ * @param {object} order Order.
+ * @param {number=} now Current epoch ms.
+ * @return {boolean} Whether an unpaid order is past its payment window. An
+ *   order from before expires_at existed never expires.
+ */
+function isExpired(order, now = Date.now()) {
+  return Boolean(order.expiresAt) && millisOf(order.expiresAt) <= now;
 }
 
 function validateOrderRequest(items, shippingAddress, storeId) {
@@ -486,6 +567,33 @@ async function fulfillOrder(orderId) {
   // flip the order back to paid or ship goods that were refunded.
   if (order.paymentStatus === "refunded" || order.paymentStatus === "partially_refunded") {
     return { paid: true, fulfilled: false, alreadyHandled: true, reason: "refunded" };
+  }
+
+  // Paid after it was cancelled - it expired, or an admin cancelled it,
+  // while a payment was still in flight. The money is taken but nothing
+  // should ship: record the payment and park the order for a refund.
+  if (order.status === "cancelled") {
+    const parked = must(await db().from("orders").update({
+      payment_status: "paid",
+      cj_order_status: "NEEDS_RECONCILIATION",
+      updated_at: new Date().toISOString(),
+    })
+        .eq("id", orderId)
+        .in("payment_status", ["pending", "awaiting_confirmation", "failed"])
+        .select("id"));
+    if (parked.length > 0) {
+      logAlert(ALERTS.ORDER_NEEDS_RECONCILIATION, {
+        orderId,
+        uid: order.uid,
+        reason: "paid_after_cancel",
+      });
+    }
+    return {
+      paid: true,
+      fulfilled: false,
+      alreadyHandled: parked.length === 0,
+      reason: "cancelled",
+    };
   }
 
   const claim = decidePushClaim(order);
@@ -771,6 +879,9 @@ export {
   PUSH_CLAIM_STALE_MS,
   DUPLICATE_ATTEMPT_WINDOW_MS,
   SERVICE_FEE_RATE,
+  ORDER_TTL_MS,
   splitServiceFee,
+  lineRefusal,
+  isExpired,
   validateOrderRequest,
 };

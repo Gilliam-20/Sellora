@@ -85,7 +85,12 @@ jobs are pg_cron → pg_net → `/cron/<job>`. PayPal and product reviews were n
 
 `orders` carries server-only columns (supplier cost, provider refs, CJ/refund state machines) behind
 a column-level grant: a client `select *` on `orders` is refused, so reads name
-`SupabaseOrderRepository.columns`. Firestore transactions became compare-and-set UPDATEs in the
+`SupabaseOrderRepository.columns`. `seller_revenue` is off that grant (it's the seller's margin);
+sellers and admin read it through the `seller_orders` view. `products` is readable only by its
+owner and admin. Anything buyer-facing reads the `storefront_products` view, which has no cost
+prices and only shows sellers in good standing. Both views are select-only. Status moves,
+publishing, plan limits, the append-only `audit_logs`/`ledger_entries` and account deletion are
+enforced in `20260928000000_security_hardening.sql` (see `SELLORA_SECURITY_AUDIT.md` §6). Firestore transactions became compare-and-set UPDATEs in the
 function (CJ push and refund claims) or SQL functions (`activate_subscription`,
 `attach_order_payment_attempt`, `consume_rate_limit`).
 

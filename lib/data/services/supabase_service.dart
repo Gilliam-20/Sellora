@@ -15,13 +15,23 @@ class SupabaseService extends GetxService {
   /// on `profiles`.
   SupabaseQueryBuilder get storeCustomers => client.from('store_customers');
 
-  /// Tenant-owned listings, keyed `(store_id, id)`. RLS scopes writes to
-  /// the owning seller.
+  /// Tenant-owned listings, keyed `(store_id, id)`. RLS limits reads and
+  /// writes to the owning seller (and admin reads) — it carries their cost
+  /// price, i.e. their margin.
   SupabaseQueryBuilder get products => client.from('products');
+
+  /// What buyers read: listed products of sellers in good standing, with
+  /// `cost_price` and each variant's `costPrice` left out. Read-only.
+  SupabaseQueryBuilder get storefrontProducts =>
+      client.from('storefront_products');
 
   /// One table for every store's orders; RLS limits reads to the buyer,
   /// the seller, and admin.
   SupabaseQueryBuilder get orders => client.from('orders');
+
+  /// The seller's (and admin's) read of `orders`: the same rows, plus
+  /// `seller_revenue`, which buyers can't read. Read-only.
+  SupabaseQueryBuilder get sellerOrders => client.from('seller_orders');
 
   SupabaseQueryBuilder get notifications => client.from('notifications');
   SupabaseQueryBuilder get plans => client.from('subscription_plans');

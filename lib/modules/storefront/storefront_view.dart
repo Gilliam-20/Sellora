@@ -240,6 +240,24 @@ class StorefrontView extends GetView<StorefrontController> {
                 ),
               );
             }),
+            Obx(() {
+              if (controller.isLoading.value || !controller.hasMore.value) {
+                return const SliverToBoxAdapter(child: SizedBox.shrink());
+              }
+              return SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                  child: Center(
+                    child: controller.isLoadingMore.value
+                        ? const CircularProgressIndicator()
+                        : OutlinedButton(
+                            onPressed: controller.loadMore,
+                            child: const Text('Load more'),
+                          ),
+                  ),
+                ),
+              );
+            }),
           ],
         ),
       ),

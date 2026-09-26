@@ -16,7 +16,7 @@ execute section-by-section in one pass; each phase below still only does what th
 
 ## Decisions on record
 
-- Platform service fee: **2%** of order subtotal (TODOD §15), snapshotted per order
+- Platform service fee: **7%** of order subtotal (TODOD §15; raised from 2% on 2026-09-26), snapshotted per order
   (`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/`paymentFee` on `OrderModel`), never
   shipping/tax unless configured, never retroactively changed on historical orders.
 - The `listings` → `stores/{storeId}/products` write-path migration **landed 2026-09-18** (see

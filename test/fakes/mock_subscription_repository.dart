@@ -82,7 +82,7 @@ class MockSubscriptionRepository extends GetxService
     final listings =
         await Get.find<ProductRepository>().sellerListings(sellerId);
     return SubscriptionUsageModel(
-      listingCount: listings.length,
+      listingCount: listings.where((p) => p.isListed).length,
       listingLimit: plan?.listingLimit ?? -1,
     );
   }

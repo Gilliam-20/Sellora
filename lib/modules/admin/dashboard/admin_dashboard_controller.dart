@@ -50,7 +50,7 @@ class AdminDashboardController extends GetxController {
   /// GMV with Sellora revenue").
   double get totalGmv => _paidOrders.fold(0.0, (sum, o) => sum + o.total);
 
-  /// Sellora's 2% cut, snapshotted per order at creation time
+  /// Sellora's 7% cut, snapshotted per order at creation time
   /// (`OrderModel.serviceFeeAmount`). Real against mock data; against the
   /// live backend this is still 0 for every order because the adopted
   /// `createOrder` Edge Function has no seller/fee concept yet and never

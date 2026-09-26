@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import '../models/cj_category.dart';
 import '../models/freight_estimate.dart';
 import '../models/product_model.dart';
@@ -7,8 +8,9 @@ import '../services/supabase_service.dart';
 import 'product_repository.dart';
 
 /// Production implementation: catalog browsing goes through
-/// [CjDropshippingService] (backend -> CJ Dropshipping API); listings and
-/// storefront reads/writes go through the `products` table.
+/// [CjDropshippingService] (backend -> CJ Dropshipping API); a seller's own
+/// listings go through the `products` table, and buyer-facing reads through
+/// the `storefront_products` view, which leaves out cost prices.
 class SupabaseProductRepository extends GetxService
     implements ProductRepository {
   final SupabaseService _db = Get.find<SupabaseService>();
@@ -59,41 +61,45 @@ class SupabaseProductRepository extends GetxService
     String storeId, {
     String? keyword,
     String? category,
+    int offset = 0,
+    int limit = storefrontPageSize,
   }) async {
-    var query =
-        _db.products.select().eq('store_id', storeId).eq('is_listed', true);
+    var query = _db.storefrontProducts.select().eq('store_id', storeId);
     if (category != null && category != 'All') {
       query = query.eq('category', category);
     }
     if (keyword != null && keyword.isNotEmpty) {
       query = query.ilike('title', '%${_escapeLike(keyword)}%');
     }
-    return _models(await query);
+    return _models(await query
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1));
   }
 
   @override
-  Future<List<ProductModel>> storefrontFeed(
-      {String? keyword, String? category}) async {
-    var query = _db.products.select().eq('is_listed', true);
+  Future<List<ProductModel>> storefrontFeed({
+    String? keyword,
+    String? category,
+    int offset = 0,
+    int limit = storefrontPageSize,
+  }) async {
+    var query = _db.storefrontProducts.select();
     if (category != null && category != 'All') {
       query = query.eq('category', category);
     }
     if (keyword != null && keyword.isNotEmpty) {
       query = query.ilike('title', '%${_escapeLike(keyword)}%');
     }
-    return _models(await query);
+    return _models(await query
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1));
   }
 
+  /// Straight from CJ. It used to prefer the first store's listing of the
+  /// same CJ id, which handed the import screen another seller's price.
   @override
-  Future<ProductModel> productDetail(String productId) async {
-    // A listed product's id is the CJ product id, unique only within its
-    // store — so this takes the first store's listing, then falls back to
-    // CJ's own detail for an unlisted catalog product.
-    final row =
-        await _db.products.select().eq('id', productId).limit(1).maybeSingle();
-    if (row != null) return ProductModel.fromMap(fromRow(row));
-    return _cj.productDetail(productId);
-  }
+  Future<ProductModel> productDetail(String productId) =>
+      _cj.productDetail(productId);
 
   @override
   Future<void> listProduct(
@@ -109,7 +115,8 @@ class SupabaseProductRepository extends GetxService
         sellPrice: sellPrice);
     // Keyed (store_id, id), so re-listing the same catalog product in the
     // same store overwrites it, as the Firestore doc id did.
-    await _db.products.upsert(toRow(listed.toMap()), onConflict: 'store_id,id');
+    await _publishing(() => _db.products
+        .upsert(toRow(listed.toMap()), onConflict: 'store_id,id'));
   }
 
   @override
@@ -119,10 +126,10 @@ class SupabaseProductRepository extends GetxService
       throw StateError(
           'Cannot update a listing with no storeId: ${product.id}');
     }
-    await _db.products
+    await _publishing(() => _db.products
         .update(toRow(product.toMap(), omit: const {'id', 'storeId'}))
         .eq('store_id', storeId)
-        .eq('id', product.id);
+        .eq('id', product.id));
   }
 
   @override
@@ -131,6 +138,25 @@ class SupabaseProductRepository extends GetxService
         .update({'is_listed': false})
         .eq('store_id', storeId)
         .eq('id', productId);
+  }
+
+  /// Translates the database's publish refusals (supabase/migrations/
+  /// 20260928000000_security_hardening.sql) into [ListingRejected]: the
+  /// listing-limit trigger raises with hint `listing_limit`, and the
+  /// publish policy refuses a seller not in good standing as an RLS
+  /// violation (42501).
+  Future<void> _publishing(Future<dynamic> Function() write) async {
+    try {
+      await write();
+    } on PostgrestException catch (e) {
+      if (e.hint == 'listing_limit' || e.message.contains('listing limit')) {
+        throw const ListingRejected(ListingRejection.listingLimit);
+      }
+      if (e.code == '42501') {
+        throw const ListingRejected(ListingRejection.notInGoodStanding);
+      }
+      rethrow;
+    }
   }
 
   List<ProductModel> _models(List<Map<String, dynamic>> rows) =>

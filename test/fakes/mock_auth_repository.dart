@@ -167,6 +167,9 @@ class MockAuthRepository extends GetxService implements AuthRepository {
   }
 
   @override
+  Future<void> deleteAccount() => signOut();
+
+  @override
   Future<void> updateUser(UserModel user) async {
     _current = user;
     _controller.add(user);

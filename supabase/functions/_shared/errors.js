@@ -20,6 +20,8 @@ class HttpError extends Error {
 
 /** @param {string} message @return {HttpError} A 400. */
 const badRequest = (message) => new HttpError(400, message);
+/** @param {string} message @return {HttpError} A 403. */
+const forbidden = (message) => new HttpError(403, message);
 /** @param {string} message @return {HttpError} A 404. */
 const notFound = (message) => new HttpError(404, message);
 /**
@@ -46,6 +48,7 @@ function publicError(err) {
 export {
   HttpError,
   badRequest,
+  forbidden,
   notFound,
   unprocessable,
   publicError,

@@ -58,11 +58,18 @@ describe("verifyAmount", () => {
         false);
   });
 
-  test("fails open when the amount can't be located, and says so", () => {
-    // The invoice binding is the real control; blocking a genuine payment on
-    // an unverified field path would be worse. The caller logs this case.
+  test("fails closed when the amount can't be located, and says why", () => {
+    // Nothing is fulfilled on a payment nobody checked; the caller alerts
+    // on `unreadable` so a genuine payment is reconciled by hand.
     const result = verifyAmount({ invoice: { state: "COMPLETE" } }, expected);
-    assert.equal(result.ok, true);
+    assert.equal(result.ok, false);
+    assert.equal(result.unreadable, true);
     assert.equal(result.actual, null);
+  });
+
+  test("a readable mismatch is not reported as unreadable", () => {
+    const result = verifyAmount(
+        { invoice: { net_amount: 10, currency: "KES" } }, expected);
+    assert.equal(result.unreadable, false);
   });
 });

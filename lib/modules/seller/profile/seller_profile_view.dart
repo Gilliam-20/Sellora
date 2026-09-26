@@ -4,6 +4,7 @@ import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/responsive.dart';
+import '../../../core/widgets/delete_account_button.dart';
 import '../../../data/repositories/auth_repository.dart';
 
 class SellerProfileView extends StatelessWidget {
@@ -82,6 +83,9 @@ class SellerProfileView extends StatelessWidget {
               onPressed: _signOut,
               child: const Text('Sign out'),
             ),
+            const SizedBox(height: AppSpacing.sm),
+            DeleteAccountButton(
+                onDeleted: () => Get.offAllNamed(Routes.login)),
           ],
         ),
       ),

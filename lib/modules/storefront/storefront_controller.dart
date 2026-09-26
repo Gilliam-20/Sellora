@@ -10,6 +10,10 @@ class StorefrontController extends GetxController {
 
   final items = <ProductModel>[].obs;
   final isLoading = true.obs;
+
+  /// Whether the last page came back full, so another may exist.
+  final hasMore = false.obs;
+  final isLoadingMore = false.obs;
   final selectedCategory = 'All'.obs;
   final searchQuery = ''.obs;
   final categories = const ['All', 'Electronics', 'Fashion', 'Home'];
@@ -32,12 +36,33 @@ class StorefrontController extends GetxController {
       return;
     }
     isLoading.value = true;
-    items.value = await _products.storeProducts(
+    final page = await _products.storeProducts(
       store.id,
       keyword: searchQuery.value,
       category: selectedCategory.value,
     );
+    items.value = page;
+    hasMore.value = page.length == storefrontPageSize;
     isLoading.value = false;
+  }
+
+  /// Appends the next page of the current search/category.
+  Future<void> loadMore() async {
+    final store = scope.current.value;
+    if (store == null || !hasMore.value || isLoadingMore.value) return;
+    isLoadingMore.value = true;
+    try {
+      final page = await _products.storeProducts(
+        store.id,
+        keyword: searchQuery.value,
+        category: selectedCategory.value,
+        offset: items.length,
+      );
+      items.addAll(page);
+      hasMore.value = page.length == storefrontPageSize;
+    } finally {
+      isLoadingMore.value = false;
+    }
   }
 
   void search(String query) {

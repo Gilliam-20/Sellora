@@ -161,22 +161,25 @@ function extractAmount(data) {
 }
 
 /**
- * Checks that IntaSend actually collected what we asked for. Defence in
- * depth only: the amount on an invoice is fixed by us at creation and the
- * payer can't alter it, so the real control is that the invoice belongs to
- * the order (see orders.paymentRefMatches). Returns true when the amount
- * can't be located rather than blocking a genuine payment on an unverified
- * field path - the caller logs that case.
+ * Checks that IntaSend actually collected what we asked for, alongside the
+ * invoice binding (orders.paymentRefMatches).
+ *
+ * Fails closed: an amount it can't read is refused (`unreadable: true`),
+ * not waved through, so nothing is fulfilled on a payment nobody checked
+ * (SELLORA_SECURITY_AUDIT.md M1). The cost of a wrong field path is a
+ * genuine payment held for manual reconciliation, which the caller alerts
+ * on - confirm the path in the sandbox before going live.
  * @param {object} data Raw response from `checkPaymentStatus`.
  * @param {{amount: number, currency: string}} expected Our order's total.
- * @return {{ok: boolean, actual: (object|null)}} Verification outcome.
+ * @return {{ok: boolean, actual: (object|null), unreadable: boolean}}
+ *   Verification outcome.
  */
 function verifyAmount(data, { amount, currency }) {
   const actual = extractAmount(data);
-  if (!actual) return { ok: true, actual: null };
+  if (!actual) return { ok: false, actual: null, unreadable: true };
   const ok = actual.currency === currency &&
       Math.abs(actual.value - amount) < 0.01;
-  return { ok, actual };
+  return { ok, actual, unreadable: false };
 }
 
 // IntaSend only accepts a refund reason from a fixed list; anything else is

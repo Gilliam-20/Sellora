@@ -9,7 +9,6 @@ class SubscriptionPlanModel {
     required this.priceKes,
     required this.billingPeriodDays,
     required this.listingLimit,
-    required this.commissionPercent,
     required this.perks,
     this.isPopular = false,
     this.orderLimit = -1,
@@ -23,20 +22,19 @@ class SubscriptionPlanModel {
   final double priceKes;
   final int billingPeriodDays;
 
-  /// -1 means unlimited listings.
+  /// -1 means unlimited listings. Enforced server-side on publish (a
+  /// trigger on `products`); drafts don't count.
   final int listingLimit;
-  final double commissionPercent;
   final List<String> perks;
   final bool isPopular;
 
-  /// -1 means unlimited orders per billing period. Not yet enforced —
-  /// `createOrder` has no seller/store attribution to count against (see
-  /// WORKLOG.md, 2026-09-12).
+  /// -1 means unlimited paid orders per billing period. Enforced by
+  /// `createOrder` (the `seller_order_gate` SQL function).
   final int orderLimit;
 
-  /// -1 means unlimited stores. Schema-only, unenforced: a seller can only
-  /// ever have one store today, and multi-store-per-seller is still an open
-  /// decision (SELLORA_IMPLEMENTATION_PLAN.md).
+  /// -1 means unlimited stores. Enforced by the `stores` insert policy;
+  /// multi-store-per-seller is still an open product decision
+  /// (SELLORA_IMPLEMENTATION_PLAN.md).
   final int storeLimit;
 
   /// Feature flags (e.g. `customDomain`, `advancedAnalytics`). Plumbing
@@ -49,7 +47,6 @@ class SubscriptionPlanModel {
     double? priceKes,
     int? billingPeriodDays,
     int? listingLimit,
-    double? commissionPercent,
     List<String>? perks,
     bool? isPopular,
     int? orderLimit,
@@ -63,7 +60,6 @@ class SubscriptionPlanModel {
       priceKes: priceKes ?? this.priceKes,
       billingPeriodDays: billingPeriodDays ?? this.billingPeriodDays,
       listingLimit: listingLimit ?? this.listingLimit,
-      commissionPercent: commissionPercent ?? this.commissionPercent,
       perks: perks ?? this.perks,
       isPopular: isPopular ?? this.isPopular,
       orderLimit: orderLimit ?? this.orderLimit,
@@ -80,7 +76,6 @@ class SubscriptionPlanModel {
       priceKes: (map['priceKes'] as num?)?.toDouble() ?? 0,
       billingPeriodDays: map['billingPeriodDays'] as int? ?? 30,
       listingLimit: map['listingLimit'] as int? ?? 25,
-      commissionPercent: (map['commissionPercent'] as num?)?.toDouble() ?? 5,
       perks: List<String>.from(map['perks'] as List? ?? []),
       isPopular: map['isPopular'] as bool? ?? false,
       orderLimit: map['orderLimit'] as int? ?? -1,
@@ -96,7 +91,6 @@ class SubscriptionPlanModel {
         'priceKes': priceKes,
         'billingPeriodDays': billingPeriodDays,
         'listingLimit': listingLimit,
-        'commissionPercent': commissionPercent,
         'perks': perks,
         'isPopular': isPopular,
         'orderLimit': orderLimit,
