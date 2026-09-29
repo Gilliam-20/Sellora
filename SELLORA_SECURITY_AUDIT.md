@@ -1,7 +1,7 @@
 # Sellora Security & Architecture Audit — Supabase edition
 
-Audit date: 26 September 2026. This replaces the Firebase-era `SELLORA_ARCHITECTURE.md` (11 September)
-as the current audit. It covers the repository as found after the Supabase migration commits
+Audit date: 26 September 2026. This replaces the Firebase-era `SELLORA_ARCHITECTURE.md` (11 September;
+deleted 2026-09-30, see git history) as the current audit. It covers the repository as found after the Supabase migration commits
 (`bfa8f8f`, `e307b3d`). Nothing here has been run against the real Supabase project, CJ, or IntaSend.
 The same was true of the migration itself (see `WORKLOG.md`, 2026-09-26/27).
 

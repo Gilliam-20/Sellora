@@ -162,19 +162,16 @@ each seller gets their own storefront at `sellora.app/s/{slug}`, buyers become c
 store rather than global Sellora accounts, and the shared buyer feed goes away.
 
 The design is written up — see `WORKLOG.md` for the decisions, the open questions, and a link to the
-full document. As of 2026-09-11, implementation has started on decisions that don't require the still-
-open questions (#1 buyer account scoping, #4 multi-store-per-seller, #5 white-label depth): a
-`StoreScope` service resolves `/s/:slug`, `stores/{storeId}/products` and `.../orders` subcollections
-now exist with matching Firestore rules, and `SELLORA_ARCHITECTURE.md`/`SELLORA_IMPLEMENTATION_PLAN.md`
-hold the current audit and phased plan. The buyer marketplace in `lib/modules/buyer/` and the flat
-top-level `listings`/`orders` collections are still live and have **not** been migrated or removed —
-check `WORKLOG.md`'s latest entry before extending either the old or new model.
+full document. What's built avoids the still-open questions (#1 buyer account scoping, #4
+multi-store-per-seller, #5 white-label depth): `StoreScope` resolves `/s/:slug`, which is now the buyer
+shell itself (`lib/modules/buyer/`; the old flat `/buyer` feed is gone), and `products`/`orders` are
+keyed by `store_id` in Postgres. `SELLORA_IMPLEMENTATION_PLAN.md` holds the phased plan and
+`SELLORA_SECURITY_AUDIT.md` the current audit — check them and `WORKLOG.md`'s latest entry before
+extending the model.
 
 ## Known gaps (from README, still open)
 
-As of 2026-09-11, order creation is server-side and the IntaSend webhook verifies a shared "challenge"
-value before confirming payment — see `WORKLOG.md`'s 2026-09-11 entry for what changed and why. Still
-open:
+Order creation is server-side and the IntaSend webhook confirms payment. Still open:
 
 - The IntaSend webhook (`intasendWebhook` in `supabase/functions/api/handler.ts`) is implemented from
   their published docs, not verified against a real account — reconfirm the exact payload shape before
@@ -190,7 +187,7 @@ open:
   against a real CJ developer account.
 - `billing_history`/`subscriptions` have no client write policy. Only the backend writes them, and
   `SupabaseSubscriptionRepository.subscribeSeller` goes through `ApiEndpoints.subscribeSeller`.
-- With the mocks gone, the catalog/orders/subscriptions flows need the `api` Edge Function deployed, a
+- The catalog/orders/subscriptions flows need the `api` Edge Function deployed, a
   real CJ Dropshipping account, and a confirmed IntaSend production setup with real secrets — none of
   that is done here.
 - The Supabase migration has been tested only in PGlite (`supabase/tests`) and the Edge Function only

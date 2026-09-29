@@ -3,33 +3,29 @@
 A subscription marketplace: sellers pay a monthly fee to list products
 sourced from **CJ Dropshipping**, buyers shop the combined catalog
 across every seller, and payments (subscriptions + checkout) run
-through **IntaSend** and **M-Pesa**. One Flutter codebase targets Web,
-Android and iOS, with three role-based portals — Buyer, Seller, Admin —
-behind a single sign-in.
+through **IntaSend** and **M-Pesa**. One Flutter codebase targets Web
+and Android, with three role-based portals — Buyer, Seller, Admin —
+behind a single sign-in. The backend is Supabase (Auth, Postgres,
+Storage, Edge Functions).
 
 ## Running it — there is no demo mode
 
-Every repository talks to the real backend; the in-memory mock mode
-(`AppConstants.useMockData`) was removed on 2026-09-26. You need a
-reachable Supabase project (`lib/core/config/supabase_config.dart`) with
+Every repository talks to the real backend. You need a reachable Supabase project (`lib/core/config/supabase_config.dart`) with
 `supabase/migrations` applied. Sign-in/sign-up work against that alone.
 The catalog, CJ import, checkout and subscription payments also need the
 `api` Supabase Edge Function deployed with real CJ Dropshipping and
 IntaSend credentials; until then those screens show errors or empty
 states. See WORKLOG.md and TODO.md's Supabase checklist.
 
-This zip contains the Dart source (`lib/`) and `pubspec.yaml` only —
-platform runner folders (`android/`, `ios/`, `web/`, etc.) aren't
-included, so the first step scaffolds them:
-
 ```bash
-flutter create . --org com.yourcompany.sellora --project-name sellora
 flutter pub get
-flutter run
+flutter run                 # or: flutter run -d chrome
 ```
 
-`flutter create .` is safe to run on top of existing code — it only
-adds the platform folders that are missing; it won't touch `lib/` or
+Only the `android/` and `web/` platform folders exist. To add others
+(e.g. iOS), run
+`flutter create . --org com.yourcompany.sellora --project-name sellora`;
+it only adds missing platform folders and won't touch `lib/` or
 `pubspec.yaml`.
 
 ## Architecture
@@ -43,12 +39,12 @@ lib/
     routes/         route names, GetPage table, role-based middleware
     bindings/        InitialBinding — permanent, app-wide singletons
   core/
-    network/        DioClient (auto-attaches Firebase ID token)
+    network/        DioClient (auto-attaches the Supabase access token)
     widgets/        signature components (ManifestStub, ProductCard...)
     utils/          validators, formatters
   data/
-    models/         plain Dart models, no Firestore/UI leakage
-    services/       thin wrappers: Firebase Auth, Firestore, CJ proxy, IntaSend proxy
+    models/         plain Dart models, no backend/UI leakage
+    services/       thin wrappers: SupabaseService, CJ proxy, IntaSend proxy
     repositories/   ONE abstract interface per domain, with a
                     Supabase-backed impl (in-memory test fakes live in test/fakes/)
   modules/
@@ -147,7 +143,7 @@ until at least one plan exists.
 
 ## Platforms
 
-Flutter Web + Android + iOS from one codebase. Supabase has no static
+Flutter Web + Android from one codebase. Supabase has no static
 hosting, so the web build still deploys to Firebase Hosting until that's
 decided — `firebase.json` points hosting at `build/web`:
 
@@ -158,7 +154,8 @@ firebase deploy --only hosting
 
 ## What's a starting point vs. production-ready
 
-Built out and demoable end-to-end: auth (buyer/seller sign-up +
+Built out (identity runs against the real project; the catalog, order
+and payment flows have not yet run against a live backend): auth (buyer/seller sign-up +
 sign-in), seller onboarding with plan selection and M-Pesa payment,
 seller catalog browsing + listing, seller order fulfillment queue,
 seller subscription management, buyer storefront/cart/checkout/order

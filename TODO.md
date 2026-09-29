@@ -1,24 +1,23 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-26 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-09-30 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
-| **0 — Audit** | Done (`SELLORA_ARCHITECTURE.md`) |
+| **0 — Audit** | Done. The Firebase-era audit is superseded by `SELLORA_SECURITY_AUDIT.md` |
 | **1 — Foundation** | Done — theme, responsive shell, shared primitives, 0 analyzer issues |
 | **2 — Auth + seller onboarding** | In progress — signup creates a store, marketing page is the signed-out entry point, seller shell now guards on store resolution. 2026-09-25: onboarding gained a store-setup step (name/category/country/currency) ahead of plan selection, the shell's no-store dead end now routes to it and creates the store, and email-verification status/resend is surfaced (not enforced). Still missing: multi-store switcher (blocked on open decision #4), required email verification, Google sign-in |
 | **3 — Billing** | Security core done — server-side `subscribeSeller`, immutable billing ledger, locked-down subscription fields, configurable plan schema (orderLimit/storeLimit/features), listing usage tracked. 2026-09-26: order/store limits enforced server-side (audit §6, H6). Usage for listings, paid orders and stores comes from the server's `my_plan_usage()`. Renew action, billing history, plan limits shown side by side, and a downgrade that would exceed the new listing cap is refused, with a trigger backstop (audit §7). Not done: cancel/resume (no auto-renewal exists; unpaid plans lapse), proration on a mid-period upgrade (owner call) |
 | **4 — Catalog + CJ import** | Client plumbing (endpoints, response parsing, admin sync) reconciled with the real CJ backend 2026-09-14; `ProductVariant` carries CJ's real per-SKU `vid`/`sku`/price 2026-09-15; a real seller import screen (variant picker + margin-based smart pricing + draft/publish) shipped 2026-09-15, replacing the old flat-price bottom sheet. Category browsing (chip filter), a shipping-cost estimate feeding the import screen's landed-cost pricing, and a buyer-facing variant selector all shipped 2026-09-18. 2026-09-26: product synchronization. The hourly `syncListings` job refreshes listed products' CJ cost and flags (and notifies the seller about) a listing whose price no longer covers cost plus fee, or that CJ no longer offers. It never unlists. The import screen's earnings readout now matches the real split (price − 7% fee − CJ cost; the buyer pays shipping). Listing ids are keyed `(store_id, id)` since the Supabase move, so the old doc-id concern is gone (audit §7). Still open: CJ integration is unverified against a real account; a server-side full `marginPricingService` quote remains a product call |
-| **5 — Seller product management** | Write-path migration done 2026-09-18 (`listProduct`/`updateListing`/`unlistProduct` now target `stores/{storeId}/products`, flat `listings` is dead code). Variants management UI also done 2026-09-18 (per-variant enable/disable + seller SKU override, from My Listings) — see WORKLOG.md for both. Still not started: collections, real inventory tracking, SEO fields, bulk operations, pagination, server-authorized writes |
-| **6 — Store builder** | First slice shipped 2026-09-19: seller-facing "Customize store" screen editing `StoreModel`'s existing branding fields (name/tagline/logo/banner/accent color), storefront renders logo/banner/accent. 2026-09-20: logo/banner can now be picked from the seller's device (`image_picker`) instead of pasted as a URL, inlined as a `data:` URI (no `firebase_storage` yet). Not started: theme/section/block/setting models, renderer, preview flow, publish flow |
+| **5 — Seller product management** | Listing/draft/unlist writes go to `products` (keyed `(store_id, id)`), gated by RLS plus the publishing and plan-limit triggers. Variants management UI (per-variant enable/disable + seller SKU override, from My Listings). Listings and the storefront read in pages. Still not started: collections, real inventory tracking, SEO fields, bulk operations, per-variant pricing |
+| **6 — Store builder** | First slice: seller-facing "Customize store" screen editing `StoreModel`'s branding fields (name/tagline/logo/banner/accent color); storefront renders logo/banner/accent. Logo/banner upload to the `store-media` Storage bucket (2026-09-27). Not started: theme/section/block/setting models, renderer, preview flow, publish flow |
 | **7 — Customer storefront** | Core shopping flow shipped 2026-09-20: the buyer shell (shop/cart/orders/alerts/profile) now lives at `/s/:slug` itself, guest-reachable end to end for browsing/cart, gated to a signed-in buyer only at checkout's submit step and for order history/profile. The old flat `/buyer` shell and its duplicate marketplace-era feed (`BuyerHomeController`) are deleted. Still not started: collections (needs PHASE 5's model first), a dedicated `Customer` model, order-detail/tracking, multi-store switcher |
-| **8 — Payments + orders** | `IntasendService` (order-checkout payment) reconciled with the real backend 2026-09-14; the per-SKU CJ variant id gap closed 2026-09-15 — `FirebaseOrderRepository.placeOrder` now sends real `{pid, vid, quantity}` per item. `shippingAddress`/response-shape gap also closed 2026-09-15 — checkout now collects a country and sends `{countryCode, line}`, and `placeOrder` reads the real `{id, totalAmount, currency, items, ...}` response. Still open: `shippingAddress.line` is one free-text string, not CJ's full fulfillment-address shape; no provider abstraction beyond IntaSend, refunds, multi-seller cart splitting |
+| **8 — Payments + orders** | Done in code, never run live. `createOrder` prices each line from the seller's `products.sell_price`, snapshots buyer/seller/store and the 7% fee split; checkout offers M-Pesa and card (IntaSend); `intasendWebhook` confirms payment and pushes fulfillment to CJ, with cron retry and tracking refresh. Refunds exist server-side (admin-only `/refundOrder`). Still open: no refunds UI or `ApiEndpoints` entry; `ShippingAddress` is `{countryCode, line}`, not CJ's full fulfillment-address shape; no provider abstraction beyond IntaSend; multi-seller carts rejected, not split; no real split payout |
 | **9 — Analytics + marketing** | Dashboard-analytics slice shipped 2026-09-21: date-range filtering, gross sales/net revenue/AOV/order-status breakdown, a sales-over-time chart, top products, a store-health card (plan/listing/order usage), and a guided setup checklist. Not started: discount codes, customer analytics/CustomerModel, marketing campaigns |
-| **10 — Admin** | First slice shipped 2026-09-22: the admin shell's screens (Overview, Sellers, Sync, Orders, Plans) already ran against the real backend, not marketplace-era mocks — this row was stale. What was actually missing was fixed this session: a platform-financial-model overview (seller GMV vs Sellora service-fee revenue vs subscription MRR/ARR, kept separate per TODO.md §35) replacing a single naive GMV tile, plus a new Stores tab (`StoreRepository.allStores()` was already there, unused). Not started: store suspension (no `StoreModel` status field), refunds UI, coupons, categories, themes, feature flags, platform settings, reports, support, churn |
-| **11 — i18n** | First slice shipped 2026-09-25: `lib/core/i18n/` adds a KES/USD/GBP/EUR currency registry, an integer-minor-unit `Money` type, a country/shipping-zone/payment-method registry mirroring `functions/lib/regions.js` (sync-tested), and `flutter_localizations` wiring. `CurrencyService` converts all four currencies from the server's cached `config/fx` rates; sellers pick shipping zones in Customize store; checkout offers only in-zone countries, converts CJ freight into the cart currency, and offers card (IntaSend hosted page) alongside Kenya-only M-Pesa. Not done: server-side zone enforcement, non-KES settlement, minor-unit persisted models, ARB string extraction/second language |
-| **12 — Security + production** | 2026-09-11 pull-forward (role self-escalation via *update*, `listings` ownership, server-only flat `orders`, `defineSecret`) plus a full audit pass 2026-09-25 that found and closed: admin self-escalation via user-doc *create*, client-creatable store orders, sellers able to set `paymentStatus`/totals on orders, store slug hijacking (now reserved in `store_slugs`), no per-user rate limits (now Firestore-backed, 429), raw upstream error messages returned to clients, unvalidated freight/phone/redirect inputs (open redirect), and revoked tokens still accepted. Admin custom claim now honoured by rules. 15 new rules tests, 17 new function tests. Still open: admins still authorized via the `role` field fallback, App Check not enforced, no Crashlytics/monitoring, backups, runbooks, `functions/node_modules` tracked in git |
-
-| **Firebase → Supabase** | Done in code 2026-09-27. Phase 1 (2026-09-26): Auth + database (`supabase/migrations`, RLS replacing `firestore.rules`, `Supabase*Repository`, `grant-admin.js`). Phase 2 (2026-09-27): `functions/` ported to one `api` Edge Function (`supabase/functions/`), with pg_cron for the four scheduled jobs, server-only order columns, catalog/config/rate-limit tables, Storage for store images, and the Android auth deep link plus an expired-link screen. 89 SQL/RLS checks (PGlite) and 261 Deno test steps pass. **Nothing is applied or deployed to the real project yet**: see the owner checklist below and WORKLOG.md 2026-09-27 |
+| **10 — Admin** | First slice shipped 2026-09-22: Overview, Sellers, Stores, Sync, Orders and Plans tabs; Overview shows the platform financial model (seller GMV vs Sellora service-fee revenue vs subscription MRR/ARR, kept separate per §35). Seller suspension is `profiles.seller_status`. Not started: per-store suspension, refunds UI, coupons, categories, themes, feature flags, platform settings, reports, support, churn |
+| **11 — i18n** | First slice shipped 2026-09-25: `lib/core/i18n/` adds a KES/USD/GBP/EUR currency registry, an integer-minor-unit `Money` type, a country/shipping-zone/payment-method registry mirroring `supabase/functions/_shared/regions.js` (sync-tested), and `flutter_localizations` wiring. `CurrencyService` converts all four currencies from the server's `fx_rates` table; sellers pick shipping zones in Customize store; checkout offers only in-zone countries, converts CJ freight into the cart currency, and offers card (IntaSend hosted page) alongside Kenya-only M-Pesa. Not done: server-side zone enforcement, non-KES settlement, minor-unit persisted models, ARB string extraction/second language |
+| **12 — Security + production** | See `SELLORA_SECURITY_AUDIT.md` (2026-09-26, §6/§7). RLS on every table, `profiles` guard triggers (no self-escalation), column-level grants hiding server-only order columns, append-only `audit_logs`/`ledger_entries`, status/publishing/plan-limit triggers, Postgres-backed per-user rate limits (`consume_rate_limit`, 429). Admin is `app_metadata.role`, set only by `grant-admin.js`. Still open: `seller`/`buyer` is the `profiles.role` column, not a JWT claim; no monitoring/crash reporting; backups (PITR) and staging; runbooks; `functions/node_modules` tracked in git (goes with deleting `functions/`) |
+| **Firebase → Supabase** | Done in code 2026-09-27. Phase 1 (2026-09-26): Auth + database (`supabase/migrations`, RLS replacing `firestore.rules`, `Supabase*Repository`, `grant-admin.js`). Phase 2 (2026-09-27): `functions/` ported to one `api` Edge Function (`supabase/functions/`), with pg_cron for the scheduled jobs, server-only order columns, catalog/config/rate-limit tables, Storage for store images, and the Android auth deep link plus an expired-link screen. 89 SQL/RLS checks (PGlite) and 261 Deno test steps pass. **Nothing is applied or deployed to the real project yet**: see the owner checklist below and WORKLOG.md 2026-09-27 |
 
 Mock data was removed 2026-09-26. Every repository hits the real backend, so the catalog, checkout and
 subscription payments work only once the `api` Edge Function is deployed with real CJ/IntaSend
@@ -151,7 +150,7 @@ First:
 * identify reusable components
 * identify technical debt
 * identify incomplete screens
-* identify existing Firebase integration
+* identify existing Supabase integration
 * identify existing authentication
 * identify existing GetX controllers
 * identify existing Dio/API services
@@ -159,7 +158,7 @@ First:
 * identify existing navigation
 * identify existing theme/design system
 * identify existing CJ Dropshipping integration
-* identify existing Firestore structure
+* identify existing database schema
 * identify existing storage/cache implementation
 
 Then create a migration plan.
@@ -182,12 +181,11 @@ Primary stack:
 * Dart
 * GetX
 * Dio
-* Firebase
-* Firebase Authentication
-* Cloud Firestore
-* Firebase Storage
-* Firebase Cloud Functions where appropriate
-* Firebase Crashlytics
+* Supabase
+* Supabase Auth
+* Supabase Postgres (RLS)
+* Supabase Storage
+* Supabase Edge Functions where appropriate
 * GetStorage/local storage where already appropriate
 * CJ Dropshipping API
 * Responsive Flutter UI
@@ -224,7 +222,7 @@ middleware/
 core/
 errors/
 network/
-firebase/
+supabase/
 storage/
 utils/
 validators/
@@ -307,11 +305,11 @@ GetX Controller
 ↓
 Repository
 ↓
-Service/API/Firebase
+Service/API/Supabase
 ↓
 Data source
 
-Controllers must NOT contain large amounts of Firebase/Dio business logic.
+Controllers must NOT contain large amounts of Supabase/Dio business logic.
 
 Repositories should abstract data access.
 
@@ -336,7 +334,7 @@ Every store-owned resource must be associated with:
 
 Do NOT create a flat database where all sellers share ambiguous product/order/customer data.
 
-Recommended conceptual structure:
+Recommended conceptual structure (implemented as Postgres tables keyed by store_id; see supabase/migrations):
 
 users/{userId}
 
@@ -370,7 +368,7 @@ notifications/{notificationId}
 
 Use appropriate references and indexes.
 
-Design Firestore rules around ownership.
+Design RLS policies around ownership.
 
 A seller must NEVER be able to read or modify another seller's:
 
@@ -1452,9 +1450,9 @@ Use integer minor units or a safe decimal strategy.
 
 ---
 
-# 37. FIREBASE SECURITY
+# 37. DATABASE SECURITY
 
-Implement strict Firestore rules.
+Implement strict row-level security (RLS) policies.
 
 Principles:
 
@@ -1481,7 +1479,7 @@ Preferred architecture:
 
 Flutter
 ↓
-Sellora backend / Cloud Functions
+Sellora backend / Supabase Edge Function
 ↓
 CJ Dropshipping API
 
@@ -1532,7 +1530,7 @@ Create centralized errors.
 Handle:
 
 * network errors
-* Firebase errors
+* Supabase errors
 * authentication errors
 * payment errors
 * CJ errors
@@ -1596,7 +1594,7 @@ Optimize for scale.
 
 Avoid:
 
-* unnecessary Firestore reads
+* unnecessary database reads
 * unnecessary rebuilds
 * huge widget trees
 * loading entire collections into memory
@@ -1618,19 +1616,19 @@ Use:
 
 # 44. DATABASE DESIGN
 
-Create proper Firestore indexes.
+Create proper database indexes.
 
-Every important collection should have clear ownership and query strategy.
+Every important table should have clear ownership and query strategy.
 
 Document:
 
-* collection purpose
+* table purpose
 * fields
 * indexes
 * security rules
 * relationships
 
-Do not create random Firestore documents just to make a screen work.
+Do not create random rows just to make a screen work.
 
 ---
 
@@ -1745,8 +1743,8 @@ Before modifying code:
 2. inspect pubspec.yaml
 3. inspect architecture
 4. inspect routes
-5. inspect Firebase
-6. inspect Firestore models
+5. inspect Supabase
+6. inspect database models
 7. inspect controllers
 8. inspect API services
 9. inspect CJ integration
@@ -1756,7 +1754,7 @@ Before modifying code:
 
 Then produce:
 
-SELLORA_ARCHITECTURE.md
+an architecture audit (now SELLORA_SECURITY_AUDIT.md)
 
 and
 
@@ -1876,51 +1874,8 @@ Implement:
 
 # PHASE 8 — PAYMENTS + ORDERS
 
-Status as of 2026-09-20 (see the STATUS table and WORKLOG.md's 2026-09-11/14/15 entries for detail).
-`useMockData` is still `true`, so none of the "real mode" work below has run against a live provider
-or a real CJ account.
-
-* **Order creation** — done, server-side. `createOrder` (`functions/lib/orders.js`) re-prices every
-  item from CJ's own live price and writes the order; `firestore.rules` denies client-side order
-  creation outright (`orders` create is `if false`). `FirebaseOrderRepository.placeOrder` sends real
-  `{pid, vid, quantity}` items and a `{countryCode, line}` `shippingAddress`, and reads the real
-  `{id, totalAmount, currency, items, ...}` response (closed 2026-09-15). Still open:
-  `shippingAddress.line` is one free-text string, not the `{fullName, phone, email, line1, line2,
-  city, province, zip}` shape CJ fulfillment actually needs; a mixed-seller cart is rejected outright
-  rather than split — one seller per order is assumed.
-* **M-Pesa** — wired end to end mechanically: `CheckoutController.placeOrder`'s real-mode branch
-  calls `IntasendService.payOrderMpesa` with the server-assigned order id. Unreachable and unverified
-  in practice — that branch never runs while `useMockData` is `true`, and the flow has never hit a
-  live IntaSend sandbox.
-* **Cards** — server endpoint exists (`ApiEndpoints.payOrderCard`) but nothing in the Flutter checkout
-  UI calls it; no card option is offered to the buyer.
-* **Payment callbacks** — `intasendWebhook` verifies a shared "challenge" value (implemented from
-  IntaSend's published docs, not confirmed against a live account — see Known Gaps), looks the order
-  up by `api_ref`, sets `paymentStatus`/`paymentReference`, and triggers CJ fulfillment. This webhook
-  is the only thing that actually confirms a payment anywhere in the system.
-* **Payment provider abstraction** — not done. `CheckoutController` calls `IntasendService` directly;
-  there's no `PaymentProvider` interface, so adding cards/PayPal/another processor still means editing
-  the checkout controller. (The adopted backend already carries a second, unreconciled provider —
-  `paypalApi.js` — that the Flutter client never calls.)
-* **Order state machine** — partial. `OrderStatus` (pending/processing/shipped/delivered/cancelled)
-  and `OrderPaymentStatus` (pending/paid/failed) exist on `OrderModel`, but `OrderPaymentStatus` has
-  no `refunded`/`partially_refunded` case, so `functions/lib/refunds.js`'s own payment-status values
-  (which do track those) can't round-trip into the Flutter model as-is.
-* **Refunds** — real, tested logic exists server-side (`functions/lib/refunds.js`: a pure
-  `decideRefund` plus `refundOrder` — transactional claim-then-call-then-write, IntaSend/PayPal
-  refund calls, partial-refund and stale-claim handling) but it belongs to the adopted single-vendor
-  backend, was never reconciled with Sellora's seller/store/fee model, and has no `ApiEndpoints` entry
-  or UI — no seller or admin can trigger a refund today.
-* **Service fee** — done as a data model. `AppConstants.platformServiceFeeRate = 0.02` (2026-09-11) is
-  snapshotted onto the order at creation (`serviceFeeRate`/`serviceFeeAmount`/`sellerRevenue`/
-  `paymentFee` on `OrderModel`), so a later admin change to the rate never rewrites historical orders.
-  Not yet true end-to-end: the adopted backend's `createOrder` has no seller/fee concept at all, so
-  these fields aren't actually populated by its real response yet — see `ApiEndpoints.createOrder`'s
-  doc comment.
-* **CJ fulfillment** — wired but unverified. `intasendWebhook`, once it confirms payment, calls
-  `placeCjOrder()` in-process per item (no HTTP self-call, no missing-auth-header bug — unlike the old
-  `onOrderCreated` trigger it replaced). CJ's own auth handshake and response shapes are still
-  unconfirmed against a real CJ developer account (see Known Gaps).
+Status as of 2026-09-30: done in code, never run against a live IntaSend or CJ account. See the
+STATUS table above and `SELLORA_IMPLEMENTATION_PLAN.md` PHASE 8 for what's still open.
 
 ---
 
@@ -1959,7 +1914,7 @@ Implement:
 
 Audit:
 
-* Firestore rules
+* RLS policies
 * API security
 * authentication
 * payment security
@@ -1981,7 +1936,7 @@ At the end of EVERY phase:
 3. Fix errors.
 4. Verify affected screens.
 5. Verify routing.
-6. Verify Firebase operations.
+6. Verify Supabase operations.
 7. Verify responsive layouts.
 8. Document what changed.
 9. Do not continue if the previous phase is broken.
@@ -2076,7 +2031,7 @@ Do NOT:
 * create giant controllers
 * create giant files
 * duplicate mobile and desktop screens unnecessarily
-* ignore Firestore security
+* ignore database security (RLS)
 * ignore empty states
 * ignore error states
 * create fake functionality
@@ -2138,9 +2093,9 @@ Then report:
 
 ### C. Existing screens
 
-### D. Existing Firebase structure
+### D. Existing Supabase structure
 
-### E. Existing Firestore rules
+### E. Existing RLS policies
 
 ### F. Existing CJ integration
 
