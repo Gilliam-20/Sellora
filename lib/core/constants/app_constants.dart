@@ -12,6 +12,12 @@ class AppConstants {
   /// supabase/functions/_shared/orders.js, snapshotted onto each order at
   /// creation — keep the two in step by hand.
   static const double platformServiceFeeRate = 0.07;
+
+  /// Where the web build is hosted, for links shared from a non-web build
+  /// (on web the page's own origin is used). Override with
+  /// `--dart-define=SELLORA_WEB_URL=https://...`.
+  static const String webAppUrl = String.fromEnvironment('SELLORA_WEB_URL',
+      defaultValue: 'https://sellora.app');
 }
 
 /// Backend endpoints: routes of Sellora's own `api` Supabase Edge Function

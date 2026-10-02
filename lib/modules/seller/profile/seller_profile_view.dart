@@ -62,6 +62,20 @@ class SellerProfileView extends StatelessWidget {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.people_outline),
+              title: const Text('Customers'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Get.toNamed(Routes.sellerCustomers),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.campaign_outlined),
+              title: const Text('Marketing & discounts'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Get.toNamed(Routes.sellerMarketing),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.payments_outlined),
               title: const Text('Subscription & billing'),
               trailing: const Icon(Icons.chevron_right),

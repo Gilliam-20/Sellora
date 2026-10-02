@@ -1,5 +1,13 @@
 import { db, must } from "./db.js";
 import * as cjApi from "./cjApi.js";
+import {
+  DISCOUNT_MESSAGES,
+  discountFromRow,
+  discountTriggerRefusal,
+  isDiscountLive,
+  normalizeDiscountCode,
+  priceDiscount,
+} from "./discounts.js";
 import { badRequest, notFound, unprocessable } from "./errors.js";
 import { getUsdToKesRate, getRate } from "./fx.js";
 import { getPricing, retailShippingPrice } from "./pricing.js";
@@ -48,6 +56,7 @@ const STORE_UNAVAILABLE = "This store isn't taking orders right now";
 const NUMERIC_FIELDS = [
   "total", "totalUsd", "totalKes", "fxRate", "refundedAmount",
   "serviceFeeRate", "serviceFeeAmount", "sellerRevenue", "shippingFee",
+  "discountAmount",
 ];
 
 const round2 = (value) => Math.round(value * 100) / 100;
@@ -69,9 +78,15 @@ const round2 = (value) => Math.round(value * 100) / 100;
  * is always re-derived from CJ's own freight quote for this address, never
  * from anything the client sends. Falls back to the cheapest option when
  * omitted or when it no longer matches an option CJ actually offers.
+ * discountCode: optional - one of this store's discount codes. Priced here
+ * from the `discounts` row (discounts.js); its usage limits are enforced by
+ * the orders_enforce_discount trigger when the row is inserted.
  */
-async function createOrder({ uid, items, shippingAddress: rawAddress, logisticName, storeId }) {
+async function createOrder({
+  uid, items, shippingAddress: rawAddress, logisticName, storeId, discountCode: rawCode,
+}) {
   const shippingAddress = validateOrderRequest(items, rawAddress, storeId);
+  const discountCode = normalizeDiscountCode(rawCode);
 
   const store = must(await db().from("stores")
       .select("id, seller_id").eq("id", storeId).maybeSingle());
@@ -85,6 +100,15 @@ async function createOrder({ uid, items, shippingAddress: rawAddress, logisticNa
   if (gate !== "ok") {
     logWarning("order_refused_seller_gate", { storeId, sellerId, reason: gate });
     throw unprocessable(STORE_UNAVAILABLE);
+  }
+
+  // Checked before the CJ calls below, so a mistyped code fails fast.
+  let discount = null;
+  if (discountCode) {
+    discount = discountFromRow(must(await db().from("discounts")
+        .select("id, code, kind, value, min_subtotal, product_ids, starts_at, ends_at, is_active")
+        .eq("store_id", storeId).eq("code", discountCode).maybeSingle()));
+    if (!isDiscountLive(discount)) throw unprocessable(DISCOUNT_MESSAGES.invalid);
   }
 
   // Currency/region are derived from the shipping address server-side -
@@ -164,13 +188,25 @@ async function createOrder({ uid, items, shippingAddress: rawAddress, logisticNa
   }
   const supplierSubtotalUsd = priced.reduce((sum, i) => sum + i.supplierLineTotalUsd, 0);
   const retailSubtotalUsd = priced.reduce((sum, i) => sum + i.retailLineTotalUsd, 0);
+  // The seller funds a discount out of their own margin, and the service fee
+  // is taken on what the buyer actually pays for the goods.
+  const discountUsd = discount ? priceDiscount(discount, priced) : 0;
+  const chargedSubtotalUsd = round2(retailSubtotalUsd - discountUsd);
   // USD bookkeeping figures, parallel to supplierSubtotalUsd/retailSubtotalUsd
   // above - not yet wired to a real payout (that's the IntaSend Split
   // Payments sub-account work in SELLORA_IMPLEMENTATION_PLAN.md PHASE 8,
   // still gated on confirming its five API specifics against a real
   // account). This is the snapshot those payouts will eventually read.
   const { serviceFeeAmountUsd, sellerRevenueUsd } =
-    splitServiceFee(retailSubtotalUsd, supplierSubtotalUsd);
+    splitServiceFee(chargedSubtotalUsd, supplierSubtotalUsd);
+  // Every line already covers its cost at full price (lineRefusal); a code
+  // must not undo that, or Sellora would pay CJ more than the buyer paid.
+  if (discount && sellerRevenueUsd < 0) {
+    logWarning("order_refused_discount_below_cost", {
+      storeId, discountId: discount.id, discountUsd, supplierSubtotalUsd,
+    });
+    throw unprocessable(DISCOUNT_MESSAGES.belowCost);
+  }
 
   const freightOptions = await cjApi.calculateFreight({
     endCountryCode: shippingAddress.countryCode,
@@ -208,7 +244,7 @@ async function createOrder({ uid, items, shippingAddress: rawAddress, logisticNa
   }
 
   const retailFreightUsd = retailShippingPrice(freightUsd, pricing, { regionKey });
-  const totalUsd = round2(retailSubtotalUsd + retailFreightUsd);
+  const totalUsd = round2(chargedSubtotalUsd + retailFreightUsd);
   // Sellora's own platform take: what the buyer paid, minus CJ's actual
   // costs, minus what's owed to the seller - i.e. the service fee plus the
   // freight margin, which is Sellora's (owner decision, 2026-09-26).
@@ -259,6 +295,9 @@ async function createOrder({ uid, items, shippingAddress: rawAddress, logisticNa
     service_fee_amount: display(serviceFeeAmountUsd),
     seller_revenue: display(sellerRevenueUsd),
     shipping_fee: display(retailFreightUsd),
+    discount_id: discount?.id ?? null,
+    discount_code: discount?.code ?? null,
+    discount_amount: display(discountUsd),
     logistic_name: chosenLogistic?.logisticName || null,
     shipping_address: shippingAddress,
     // What the app renders: priced in `currency`, in OrderItem's shape.
@@ -282,6 +321,7 @@ async function createOrder({ uid, items, shippingAddress: rawAddress, logisticNa
     service_fee_amount_usd: serviceFeeAmountUsd,
     seller_revenue_usd: sellerRevenueUsd,
     estimated_profit_usd: estimatedProfitUsd,
+    discount_amount_usd: discountUsd,
     lines: priced.map((item) => ({
       productId: item.pid,
       variantId: item.vid,
@@ -297,8 +337,15 @@ async function createOrder({ uid, items, shippingAddress: rawAddress, logisticNa
     fulfillment_items: priced.map(({ pid, vid, quantity }) => ({ pid, vid, quantity })),
     expires_at: new Date(Date.now() + ORDER_TTL_MS).toISOString(),
   };
-  const created = must(await db().from("orders").insert(row)
-      .select("created_at").single());
+  let created;
+  try {
+    created = must(await db().from("orders").insert(row)
+        .select("created_at").single());
+  } catch (err) {
+    const refusal = discountTriggerRefusal(err);
+    if (refusal) throw unprocessable(refusal);
+    throw err;
+  }
   return {
     ...clientView(fromRow(row)),
     createdAt: created.created_at,
@@ -325,6 +372,8 @@ function clientView(order) {
     totalAmount: order.total,
     totalKes: order.totalKes,
     shippingFee: order.shippingFee,
+    discountCode: order.discountCode,
+    discountAmount: order.discountAmount,
     logisticName: order.logisticName,
     serviceFeeRate: order.serviceFeeRate,
     serviceFeeAmount: order.serviceFeeAmount,

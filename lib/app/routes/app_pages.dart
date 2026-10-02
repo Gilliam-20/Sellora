@@ -19,7 +19,9 @@ import '../../modules/marketing/marketing_controller.dart';
 import '../../modules/marketing/marketing_view.dart';
 import '../../modules/onboarding/bindings/seller_onboarding_binding.dart';
 import '../../modules/onboarding/views/seller_onboarding_view.dart';
+import '../../modules/seller/customers/seller_customers_view.dart';
 import '../../modules/seller/manage_variants/manage_variants_view.dart';
+import '../../modules/seller/marketing/seller_marketing_view.dart';
 import '../../modules/seller/product_import/product_import_view.dart';
 import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
@@ -133,6 +135,18 @@ class AppPages {
       name: Routes.sellerStoreCustomize,
       page: () => const StoreCustomizeView(),
       binding: StoreCustomizeBinding(),
+      middlewares: [RoleMiddleware(UserRole.seller)],
+    ),
+    GetPage(
+      name: Routes.sellerCustomers,
+      page: () => const SellerCustomersView(),
+      binding: SellerCustomersBinding(),
+      middlewares: [RoleMiddleware(UserRole.seller)],
+    ),
+    GetPage(
+      name: Routes.sellerMarketing,
+      page: () => const SellerMarketingView(),
+      binding: SellerMarketingBinding(),
       middlewares: [RoleMiddleware(UserRole.seller)],
     ),
 

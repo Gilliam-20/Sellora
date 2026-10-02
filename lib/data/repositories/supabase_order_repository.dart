@@ -15,12 +15,14 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   /// column-level grant refuses `select *` outright — so reads must name
   /// these. A column added here must be granted in a new migration too
   /// (see supabase/migrations/20260927000000_backend.sql).
+  ///
+  /// No `seller_revenue`: buyers can't read it (see [sellerColumns]).
   static const columns = 'id, code, buyer_id, seller_id, store_id, items, '
       'status, total, currency, shipping_address, payment_method, '
       'payment_reference, tracking_number, payment_status, service_fee_rate, '
-      'service_fee_amount, seller_revenue, payment_fee, shipping_fee, '
+      'service_fee_amount, payment_fee, shipping_fee, '
       'logistic_name, created_at, updated_at, payment_provider, tracking, '
-      'refunded_amount';
+      'refunded_amount, discount_code, discount_amount';
 
   /// [columns] plus `seller_revenue` — what Sellora owes the seller, i.e.
   /// their margin. Buyers can't read it; sellers and admin read it through
@@ -59,6 +61,8 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       // createOrder re-validates it against CJ's own freight quote and only
       // ever trusts the name, never a price - omit it to auto-pick cheapest.
       if (order.logisticName != null) 'logisticName': order.logisticName,
+      // Only the code is sent; createOrder prices what it takes off.
+      if (order.discountCode != null) 'discountCode': order.discountCode,
     });
 
     // The response is `{success, data: {id, code, totalAmount, currency,
@@ -76,6 +80,8 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       logisticName: data['logisticName'] as String?,
       serviceFeeRate: (data['serviceFeeRate'] as num?)?.toDouble(),
       serviceFeeAmount: (data['serviceFeeAmount'] as num?)?.toDouble(),
+      discountCode: data['discountCode'] as String?,
+      discountAmount: (data['discountAmount'] as num?)?.toDouble() ?? 0,
     );
   }
 

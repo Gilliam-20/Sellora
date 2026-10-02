@@ -51,6 +51,23 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
                   const _OnboardingChecklist(),
                   const SizedBox(height: AppSpacing.lg),
                 ],
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => Get.toNamed(Routes.sellerCustomers),
+                      icon: const Icon(Icons.people_outline, size: 18),
+                      label: const Text('Customers'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => Get.toNamed(Routes.sellerMarketing),
+                      icon: const Icon(Icons.campaign_outlined, size: 18),
+                      label: const Text('Marketing & discounts'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
                 _DateRangeChips(controller: controller),
                 const SizedBox(height: AppSpacing.md),
                 _MetricsGrid(

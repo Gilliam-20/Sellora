@@ -37,6 +37,7 @@ class _CheckoutViewState extends State<CheckoutView> {
   final _provinceCtrl = TextEditingController();
   final _zipCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController(); // M-Pesa
+  final _discountCtrl = TextEditingController();
 
   /// Only the countries in the store's enabled shipping zones (see
   /// `StoreModel.shippingZones`), Kenya first. Falls back to every
@@ -87,6 +88,7 @@ class _CheckoutViewState extends State<CheckoutView> {
       _provinceCtrl,
       _zipCtrl,
       _phoneCtrl,
+      _discountCtrl,
     ]) {
       ctrl.dispose();
     }
@@ -168,6 +170,17 @@ class _CheckoutViewState extends State<CheckoutView> {
                             controller.cartRepo.subtotal,
                             fromCode: currency),
                       ),
+                      if (controller.appliedDiscount.value != null) ...[
+                        const SizedBox(height: 6),
+                        _CostRow(
+                          label:
+                              'Discount (${controller.appliedDiscount.value!.code})',
+                          value: '− ${currencyService.format(
+                            controller.discountAmount,
+                            fromCode: currency,
+                          )}',
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       _CostRow(
                         label: 'Shipping',
@@ -191,6 +204,9 @@ class _CheckoutViewState extends State<CheckoutView> {
                     ],
                   );
                 }),
+                const SizedBox(height: AppSpacing.md),
+                _DiscountCodeField(
+                    controller: controller, textController: _discountCtrl),
                 const SizedBox(height: AppSpacing.lg),
                 Text('Shipping address',
                     style: Theme.of(context).textTheme.titleMedium),
@@ -412,6 +428,77 @@ class _CheckoutViewState extends State<CheckoutView> {
         ),
       ),
     );
+  }
+}
+
+/// Entry for one of the store's discount codes. Once applied it shows the
+/// code and what it's worth, with a way to take it off again.
+class _DiscountCodeField extends StatelessWidget {
+  const _DiscountCodeField(
+      {required this.controller, required this.textController});
+
+  final CheckoutController controller;
+  final TextEditingController textController;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final applied = controller.appliedDiscount.value;
+      if (applied != null) {
+        return Row(
+          children: [
+            const Icon(Icons.local_offer_outlined,
+                size: 18, color: AppColors.horizonTeal),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text('${applied.code} applied — ${applied.summary}',
+                  style: Theme.of(context).textTheme.bodyMedium),
+            ),
+            TextButton(
+              onPressed: () {
+                textController.clear();
+                controller.removeDiscount();
+              },
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      }
+      final busy = controller.isApplyingDiscount.value;
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: TextField(
+              controller: textController,
+              textCapitalization: TextCapitalization.characters,
+              textInputAction: TextInputAction.done,
+              onSubmitted: busy ? null : controller.applyDiscount,
+              decoration: InputDecoration(
+                labelText: 'Discount code',
+                errorText: controller.discountError.value,
+                errorMaxLines: 2,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: OutlinedButton(
+              onPressed: busy
+                  ? null
+                  : () => controller.applyDiscount(textController.text),
+              child: busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Apply'),
+            ),
+          ),
+        ],
+      );
+    });
   }
 }
 

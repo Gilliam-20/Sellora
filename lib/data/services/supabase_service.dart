@@ -38,6 +38,10 @@ class SupabaseService extends GetxService {
   SupabaseQueryBuilder get adminOrderRefunds =>
       client.from('admin_order_refunds');
 
+  /// A store's discount codes; owner and admin only. Buyers test a code
+  /// through the `storefront_discount` function instead.
+  SupabaseQueryBuilder get discounts => client.from('discounts');
+
   SupabaseQueryBuilder get notifications => client.from('notifications');
   SupabaseQueryBuilder get plans => client.from('subscription_plans');
   SupabaseQueryBuilder get billingHistory => client.from('billing_history');

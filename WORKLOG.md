@@ -6,6 +6,73 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-03 — PHASE 9: discount codes, customer analytics, store sharing
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration joins the
+rollout's step 1 in TODO.md.
+
+**Why:** user request: "work on todo phase 9". PHASE 9's dashboard slice shipped 2026-09-21; its
+open items were discount codes, customer analytics and marketing.
+
+**Decisions (made here, reversible):**
+- The seller funds a discount from their own margin. The 7% service fee is taken on what the buyer
+  actually pays for the goods (`splitServiceFee(chargedSubtotal, ...)`), the way Shopify charges
+  on the discounted price.
+- A code that would push seller revenue below zero is refused (422), so Sellora never pays CJ more
+  than the buyer paid. Every line already clears that floor at full price (`lineRefusal`).
+- A use counts until its order is cancelled, so an unpaid order that expires gives the use back.
+- Amounts (fixed discount, minimum order) are in the listings' currency, USD today, like
+  `sell_price`.
+
+**What changed:**
+- **Migration `20261003000100_discounts.sql`.** A `discounts` table (percentage or fixed amount,
+  minimum order, specific products, start/end, total usage limit, once per customer, on/off).
+  Owner/admin-only RLS. A guard keeps the id and store fixed. A used code can't be deleted (the
+  `orders.discount_id` FK), so sellers turn it off instead. `orders` gains
+  `discount_id`/`discount_code`/`discount_amount` (client-readable, appended to `seller_orders`)
+  and server-only `discount_amount_usd`. The `orders_enforce_discount` trigger locks the code's
+  row on insert and enforces its limits, so two checkouts can't both take the last use.
+  `storefront_discount(store, code)` lets anyone who knows a code read its terms for the checkout
+  preview, without usage figures. `store_discount_usage(store)` is owner-only. 36 new RLS checks.
+- **Server.** `_shared/discounts.js` (pure: normalize, liveness, `priceDiscount`, trigger-error
+  mapping) and `createOrder` takes `discountCode`. The code is checked before the CJ calls, priced
+  on the eligible lines, and the trigger's refusal comes back as a 422 the buyer reads.
+  `createOrder` was already rate-limited per user, which also limits code guessing through it.
+- **Checkout.** Discount-code field with apply/remove, a discount line in the summary, and the
+  total includes it. The preview mirrors the server's rules (`DiscountModel.quote`). The order
+  carries what the server actually priced.
+- **Seller: Marketing** (`/seller/marketing`). Discount list with status (active/scheduled/
+  ended/used up/off), uses, an on/off switch, and a create/edit sheet. Also the storefront link
+  with copy and WhatsApp/Facebook/X share links (`core/utils/store_link.dart`; non-web builds use
+  `AppConstants.webAppUrl`, `--dart-define=SELLORA_WEB_URL`).
+- **Seller: Customers** (`/seller/customers`). Registered customers (`store_customers`) joined
+  with the store's orders: customers, returning customers and repeat rate, new in 30 days, average
+  spend, then a searchable/sortable list and a profile sheet with order history. Totals are
+  converted into the store's currency per order (the dashboard still sums raw `total`s).
+  `CustomerAnalytics` is pure and tested.
+- Both are linked from the Dashboard and Store profile, not new shell tabs: an 8-item bottom bar
+  doesn't work on mobile (TODO.md §8). New `DiscountRepository`/`CustomerRepository` with
+  `Supabase*` implementations in `InitialBinding`, plus `test/fakes/mock_discount_repository.dart`.
+- **Bug fixed on the way:** `SupabaseOrderRepository.columns` (the buyer's read of `orders`)
+  named `seller_revenue`, which the 2026-09-28 hardening revoked from clients. Every buyer
+  order-history read would have been refused. It's now only in `sellerColumns`.
+
+**Tests:** `flutter analyze` reports no new issues. `flutter test` 89 pass; the one failure is the known
+`seller_shell_controller_test` one. New: `discount_model_test`, `customer_analytics_test`,
+`store_link_test`, `seller_marketing_controller_test`. `supabase npm test`: 233 RLS checks,
+338 Deno steps (new `discounts.test.js`).
+
+**Not done, needs a decision or a model first:**
+- Free-shipping codes: CJ freight still has to be paid. Who pays it (seller or Sellora's freight
+  margin) is an owner call.
+- Collection- and customer-group-scoped codes: neither collections (PHASE 5) nor customer groups
+  exist.
+- Automatic discounts, abandoned cart (the cart is in-memory by design), email campaigns, customer
+  tags/notes/marketing consent (needs a writable customer record, open decision #1).
+- Analytics by country/device and conversion rate: nothing records sessions or devices.
+
+---
+
 ## 2026-10-03 — PHASE 8: admin refunds, structured shipping address, payment-provider interface
 
 **Status:** done in code and tested. **Not applied or deployed.** The new migration joins the

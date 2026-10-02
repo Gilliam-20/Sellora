@@ -6,10 +6,12 @@ import '../../../core/i18n/countries.dart';
 import '../../../core/i18n/money.dart';
 import '../../../core/network/api_exception.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../data/models/discount_model.dart';
 import '../../../data/models/freight_estimate.dart';
 import '../../../data/models/order_model.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/cart_repository.dart';
+import '../../../data/repositories/discount_repository.dart';
 import '../../../data/repositories/order_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/product_repository.dart';
@@ -24,6 +26,7 @@ class CheckoutController extends GetxController {
       Get.find<NotificationRepository>();
   final ProductRepository _productRepo = Get.find<ProductRepository>();
   final OrderPaymentProvider _payments = Get.find<OrderPaymentProvider>();
+  final DiscountRepository _discountRepo = Get.find<DiscountRepository>();
 
   final isPlacingOrder = false.obs;
   final errorMessage = RxnString();
@@ -62,7 +65,70 @@ class CheckoutController extends GetxController {
       Get.find<CurrencyService>().convertMoney(
           Money.fromMajor(option.cost, option.currency), cartRepo.currency);
 
-  double get total => (cartRepo.subtotalMoney + shippingFeeMoney).toMajor();
+  double get total =>
+      (cartRepo.subtotalMoney - discountMoney + shippingFeeMoney).toMajor();
+
+  // ---- Discount code ------------------------------------------------------
+
+  /// The code the buyer applied, as `storefront_discount` described it. A
+  /// preview only: `createOrder` re-checks and re-prices it, and its answer
+  /// is what the order carries.
+  final appliedDiscount = Rxn<DiscountModel>();
+  final discountError = RxnString();
+  final isApplyingDiscount = false.obs;
+
+  List<DiscountLine> get _discountLines => [
+        for (final item in cartRepo.items)
+          (productId: item.product.id, lineTotal: item.lineTotal),
+      ];
+
+  /// What the applied code takes off the current cart, in the cart's
+  /// currency (the listings' own, which is also the code's).
+  Money get discountMoney {
+    final discount = appliedDiscount.value;
+    if (discount == null) return Money.zero(cartRepo.currency);
+    final quote = discount.quote(_discountLines);
+    return Money.fromMajor(
+        quote.refusal == null ? quote.amount : 0, cartRepo.currency);
+  }
+
+  double get discountAmount => discountMoney.toMajor();
+
+  Future<void> applyDiscount(String raw) async {
+    final code = DiscountModel.normalizeCode(raw);
+    discountError.value = null;
+    if (code.isEmpty) return;
+    final storeId = cartRepo.storeId;
+    if (!DiscountModel.codePattern.hasMatch(code) || storeId == null) {
+      discountError.value = _invalidCode;
+      return;
+    }
+    isApplyingDiscount.value = true;
+    try {
+      final discount = await _discountRepo.lookup(storeId, code);
+      if (discount == null) {
+        discountError.value = _invalidCode;
+        return;
+      }
+      final quote = discount.quote(_discountLines);
+      if (quote.refusal != null) {
+        discountError.value = quote.refusal;
+        return;
+      }
+      appliedDiscount.value = discount;
+    } catch (_) {
+      discountError.value = 'Couldn\'t check that code. Please try again.';
+    } finally {
+      isApplyingDiscount.value = false;
+    }
+  }
+
+  void removeDiscount() {
+    appliedDiscount.value = null;
+    discountError.value = null;
+  }
+
+  static const _invalidCode = 'This discount code isn\'t valid';
 
   /// Re-quotes [shippingOptions] for [countryCode]. Called on load and
   /// whenever the buyer changes the destination country — never blocks or
@@ -179,6 +245,7 @@ class CheckoutController extends GetxController {
         createdAt: DateTime.now(),
         shippingFee: shippingFee,
         logisticName: selectedShippingOption.value?.logisticName,
+        discountCode: appliedDiscount.value?.code,
       );
       final OrderModel order;
       try {

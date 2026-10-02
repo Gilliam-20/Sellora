@@ -183,6 +183,8 @@ class OrderModel {
     this.paymentFee = 0,
     this.shippingFee = 0,
     this.logisticName,
+    this.discountCode,
+    this.discountAmount = 0,
   });
 
   OrderModel copyWith({
@@ -197,6 +199,8 @@ class OrderModel {
     double? serviceFeeAmount,
     double? sellerRevenue,
     String? logisticName,
+    String? discountCode,
+    double? discountAmount,
   }) {
     return OrderModel(
       id: id ?? this.id,
@@ -220,6 +224,8 @@ class OrderModel {
       paymentFee: paymentFee,
       shippingFee: shippingFee,
       logisticName: logisticName ?? this.logisticName,
+      discountCode: discountCode ?? this.discountCode,
+      discountAmount: discountAmount ?? this.discountAmount,
     );
   }
 
@@ -266,6 +272,12 @@ class OrderModel {
   /// Also what `fulfillOrder` tells CJ to use when pushing the order.
   final String? logisticName;
 
+  /// The discount code the buyer used, if any, and what it took off the
+  /// goods, in [currency]. Priced server-side by `createOrder` and already
+  /// subtracted from [total].
+  final String? discountCode;
+  final double discountAmount;
+
   factory OrderModel.fromMap(Map<String, dynamic> map) {
     return OrderModel(
       id: map['id'] as String,
@@ -296,6 +308,8 @@ class OrderModel {
       paymentFee: (map['paymentFee'] as num?)?.toDouble() ?? 0,
       shippingFee: (map['shippingFee'] as num?)?.toDouble() ?? 0,
       logisticName: map['logisticName'] as String?,
+      discountCode: map['discountCode'] as String?,
+      discountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0,
     );
   }
 
@@ -321,5 +335,7 @@ class OrderModel {
         'paymentFee': paymentFee,
         'shippingFee': shippingFee,
         'logisticName': logisticName,
+        'discountCode': discountCode,
+        'discountAmount': discountAmount,
       };
 }

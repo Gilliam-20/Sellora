@@ -345,19 +345,20 @@ const calculateFreight = signedIn(async ({ body }, user) => {
 /**
  * POST /createOrder
  * body: { items: [{ pid, vid, quantity }], shippingAddress: {...}, storeId,
- *   logisticName?: string }
+ *   logisticName?: string, discountCode?: string }
  * Prices everything from CJ's live prices + the selling store's own listed
  * price. `logisticName` is the buyer's chosen CJ shipping line from
  * `calculateFreight` (omit it to auto-pick the cheapest) - only the name is
- * trusted, never a price.
+ * trusted, never a price. `discountCode` is one of the store's codes; what it
+ * takes off is priced here, never sent by the client.
  */
 const createOrder = signedIn(async ({ body }, user) => {
   const limited = await rateLimited("createOrder", user.uid);
   if (limited) return limited;
   try {
-    const { items, shippingAddress, logisticName, storeId } = body || {};
+    const { items, shippingAddress, logisticName, storeId, discountCode } = body || {};
     const order = await orders.createOrder({
-      uid: user.uid, items, shippingAddress, logisticName, storeId,
+      uid: user.uid, items, shippingAddress, logisticName, storeId, discountCode,
     });
     logInfo("order_created", {
       orderId: order.id,

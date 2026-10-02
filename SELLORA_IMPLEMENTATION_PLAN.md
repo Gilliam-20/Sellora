@@ -125,11 +125,17 @@ dispatch on `orders.payment_provider`. The
 IntaSend payload shape and the Split Payments specifics (precision, sub-account KYC, payout
 minimums/fees, settlement, refund-on-split) need confirming against a real account.
 
-## PHASE 9 — Analytics + marketing: dashboard slice
+## PHASE 9 — Analytics + marketing: dashboard, discounts, customers
 
 The seller Home screen has date-range metrics, a sales chart, order-status breakdown, top products, a
-store-health/plan-usage card and a setup checklist. Not started: discount codes, customer analytics,
-marketing campaigns.
+store-health/plan-usage card and a setup checklist. Discount codes (2026-10-03) live in `discounts`
+(`20261003000100_discounts.sql`). `createOrder` prices them (`_shared/discounts.js`) and the
+`orders_enforce_discount` trigger enforces usage limits at insert. The seller funds the discount, the
+7% fee is on the discounted goods total, and a code that would put the order below CJ cost is refused.
+Sellers manage codes and share their store link on `/seller/marketing`. `/seller/customers` derives
+customer analytics from `store_customers` plus the store's orders. Not started: free-shipping codes
+(owner call), collection/customer-group codes, automatic discounts, abandoned cart, campaigns,
+customer tags/notes, analytics by country/device/conversion.
 
 ## PHASE 10 — Admin: first slice
 

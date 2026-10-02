@@ -1,7 +1,9 @@
 import 'package:get/get.dart';
 import 'catalog/seller_catalog_controller.dart';
+import 'customers/seller_customers_controller.dart';
 import 'dashboard/seller_dashboard_controller.dart';
 import 'manage_variants/manage_variants_controller.dart';
+import 'marketing/seller_marketing_controller.dart';
 import 'my_listings/my_listings_controller.dart';
 import 'orders/seller_orders_controller.dart';
 import 'product_import/product_import_controller.dart';
@@ -46,5 +48,19 @@ class StoreCustomizeBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<StoreCustomizeController>(() => StoreCustomizeController());
+  }
+}
+
+class SellerCustomersBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<SellerCustomersController>(() => SellerCustomersController());
+  }
+}
+
+class SellerMarketingBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<SellerMarketingController>(() => SellerMarketingController());
   }
 }

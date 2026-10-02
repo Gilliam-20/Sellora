@@ -521,5 +521,74 @@ ok('refunds: anon cannot read it', await throws(() => as('anon', 'select id from
 ok('refunds: the view cannot be written through', await throws(() => as(admin, "update admin_order_refunds set refunded_amount = 0 where id = 'o2'")));
 ok('refunds: total_kes stays off the shared grant', await throws(() => as(seller1, "select total_kes from orders where id = 'o2'")));
 
+// ---- 20261003000100_discounts.sql: implementation plan PHASE 9.
+console.log('discounts');
+const st1 = 'store-' + S1, st2 = 'store-' + S2;
+await as(seller1, "insert into discounts (id, store_id, code, kind, value) values ('d1', $1, 'SAVE10', 'percentage', 10)", [st1]);
+ok('discounts: a seller creates a code for their own store', (await as(seller1, "select id from discounts where id = 'd1'")).rows.length === 1);
+ok("discounts: not for another seller's store", await throws(() => as(seller1, "insert into discounts (store_id, code, kind, value) values ($1, 'NOPE', 'percentage', 10)", [st2])));
+ok('discounts: another seller cannot read them', (await as(seller2, 'select id from discounts')).rows.length === 0);
+ok('discounts: nor can a buyer', (await as(buyer, 'select id from discounts')).rows.length === 0);
+ok('discounts: nor anon', (await as('anon', 'select id from discounts')).rows.length === 0);
+ok('discounts: admin can', (await as(admin, "select id from discounts where id = 'd1'")).rows.length === 1);
+ok('discounts: codes are stored upper-case', await throws(() => as(seller1, "insert into discounts (store_id, code, kind, value) values ($1, 'lower', 'percentage', 10)", [st1])));
+ok('discounts: a percentage cannot exceed 100', await throws(() => as(seller1, "insert into discounts (store_id, code, kind, value) values ($1, 'BIG', 'percentage', 101)", [st1])));
+ok('discounts: one code per store', await throws(() => as(seller1, "insert into discounts (store_id, code, kind, value) values ($1, 'SAVE10', 'fixed_amount', 5)", [st1])));
+ok('discounts: a code cannot move to another store', await throws(() => as(seller1, "update discounts set store_id = $1 where id = 'd1'", [st2])));
+ok("discounts: another seller cannot change it", (await as(seller2, "update discounts set value = 99 where id = 'd1' returning id")).rows.length === 0);
+
+r = await one('anon', "select public.storefront_discount($1, ' save10 ') d", [st1]);
+ok('lookup: anyone with the code reads its terms, case-insensitively', r.d?.code === 'SAVE10' && r.d.kind === 'percentage' && Number(r.d.value) === 10, JSON.stringify(r));
+ok('lookup: the terms carry no usage figures', r.d && !('usageLimit' in r.d) && !('id' in r.d));
+ok('lookup: an unknown code is null', (await one('anon', "select public.storefront_discount($1, 'NOPE') d", [st1])).d === null);
+ok("lookup: a code is only valid in its own store", (await one('anon', "select public.storefront_discount($1, 'SAVE10') d", [st2])).d === null);
+await as(seller1, "update discounts set is_active = false where id = 'd1'");
+ok('lookup: an inactive code is null', (await one('anon', "select public.storefront_discount($1, 'SAVE10') d", [st1])).d === null);
+await as(seller1, "update discounts set is_active = true, starts_at = now() + interval '1 day' where id = 'd1'");
+ok('lookup: a code that has not started is null', (await one('anon', "select public.storefront_discount($1, 'SAVE10') d", [st1])).d === null);
+await as(seller1, "update discounts set starts_at = now() - interval '2 days', ends_at = now() - interval '1 day' where id = 'd1'");
+ok('lookup: an ended code is null', (await one('anon', "select public.storefront_discount($1, 'SAVE10') d", [st1])).d === null);
+await as(seller1, "update discounts set ends_at = null, usage_limit = 1 where id = 'd1'");
+
+const discountOrder = (id, buyerId, discountId, store = st1) => as('postgres',
+  "insert into orders (id, code, buyer_id, seller_id, store_id, discount_id, discount_code, discount_amount) values ($1, $1, $2, $3, $4, $5, 'SAVE10', 3)",
+  [id, buyerId, S1, store, discountId]);
+await discountOrder('o-d1', B1, 'd1');
+const exhausted = await throws(() => discountOrder('o-d2', B2, 'd1'));
+ok('limits: a code past its usage limit is refused at insert', /discount_exhausted/.test(exhausted?.message ?? ''), exhausted?.message);
+ok('limits: and the lookup stops offering it', (await one('anon', "select public.storefront_discount($1, 'SAVE10') d", [st1])).d === null);
+await as('postgres', "update orders set status = 'cancelled' where id = 'o-d1'");
+ok('limits: a cancelled order gives its use back', (await one('anon', "select public.storefront_discount($1, 'SAVE10') d", [st1])).d?.code === 'SAVE10');
+await as(seller1, "update discounts set usage_limit = null, once_per_customer = true where id = 'd1'");
+await discountOrder('o-d3', B1, 'd1');
+const again = await throws(() => discountOrder('o-d4', B1, 'd1'));
+ok('limits: once per customer refuses a second order', /discount_already_used/.test(again?.message ?? ''), again?.message);
+ok('limits: another customer may still use it', !(await throws(() => discountOrder('o-d5', B2, 'd1'))));
+const wrongStore = await throws(() => discountOrder('o-d6', B1, 'd1', st2));
+ok("limits: a code cannot be used on another store's order", /discount_unavailable/.test(wrongStore?.message ?? ''), wrongStore?.message);
+await as(seller1, "update discounts set is_active = false where id = 'd1'");
+ok('limits: an inactive code is refused at insert', /discount_unavailable/.test((await throws(() => discountOrder('o-d7', B2, 'd1')))?.message ?? ''));
+await as(seller1, "update discounts set is_active = true where id = 'd1'");
+
+r = await one(buyer, "select discount_code, discount_amount from orders where id = 'o-d3'");
+ok('orders: the buyer sees the code and what it took off', r?.discount_code === 'SAVE10' && Number(r.discount_amount) === 3);
+ok('orders: the USD bookkeeping stays server-only', await throws(() => as(buyer, "select discount_amount_usd from orders where id = 'o-d3'")));
+ok('orders: a client cannot write the discount', await throws(() => as(seller1, "update orders set discount_amount = 0 where id = 'o-d3'")));
+r = await one(seller1, "select discount_id, discount_code from seller_orders where id = 'o-d3'");
+ok('orders: the seller sees it through seller_orders', r?.discount_id === 'd1' && r.discount_code === 'SAVE10');
+
+r = await as(seller1, 'select * from public.store_discount_usage($1)', [st1]);
+ok('usage: the owner reads uses per code', r.rows.length === 1 && r.rows[0].uses === 2, JSON.stringify(r.rows));
+ok("usage: another seller reads nothing of it", (await as(seller2, 'select * from public.store_discount_usage($1)', [st1])).rows.length === 0);
+ok('usage: anon cannot ask', await throws(() => as('anon', 'select * from public.store_discount_usage($1)', [st1])));
+ok('usage: clients cannot call discount_uses', await throws(() => as(seller1, "select public.discount_uses('d1')")));
+
+ok('delete: a used code cannot be deleted', await throws(() => as(seller1, "delete from discounts where id = 'd1'")));
+await as(seller1, "insert into discounts (id, store_id, code, kind, value) values ('d2', $1, 'FIVEOFF', 'fixed_amount', 5)", [st1]);
+await as(seller2, "delete from discounts where id = 'd2'");
+ok("delete: another seller cannot delete it", (await as('postgres', "select id from discounts where id = 'd2'")).rows.length === 1);
+await as(seller1, "delete from discounts where id = 'd2'");
+ok('delete: an unused code can be', (await as('postgres', "select id from discounts where id = 'd2'")).rows.length === 0);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
