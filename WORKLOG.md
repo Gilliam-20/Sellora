@@ -6,6 +6,52 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-03 — PHASE 8: admin refunds, structured shipping address, payment-provider interface
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration joins the
+rollout's step 1 in TODO.md.
+
+**Why:** user request: "go to the todo and work on phase 8". Of PHASE 8's five open items, three are
+code: refunds UI, the CJ address shape, and a provider abstraction. The other two weren't started.
+Splitting mixed-seller carts is an owner decision, and real split payouts need a live IntaSend
+account.
+
+**What changed:**
+- **Refunds.** `/refundOrder` already existed, but the amounts an admin needs (`total_kes`, refund
+  state and history) are server-only `orders` columns. Migration
+  `20261003000000_admin_order_refunds.sql` adds an admin-only, read-only `admin_order_refunds` view
+  instead of widening the shared column grant (6 new RLS checks). Admin → Orders: tapping an order
+  opens a sheet with the payment and refund state and a refund form: amount (empty means the
+  rest), IntaSend reason, note, and a confirm step that says whether the order will be cancelled.
+  New: `OrderRefundInfo` (mirrors `decideRefund`'s refusals), `OrderRepository.refundInfo`/
+  `refundOrder` (fake updated), `ApiEndpoints.refundOrder`.
+- **Shipping address (a real bug).** `createOrder` accepted `{countryCode, line}` while
+  `cjApi.createDropshipOrder` reads `fullName`/`phone`/`line1`/`city`/..., so every paid order would
+  have reached CJ with those fields blank. `normalizeShippingAddress` in `_shared/orders.js` now
+  keeps only the known fields, trims them, and refuses a missing name/phone/street/city or a bad
+  phone/email with a 400 that names the field. `fulfillOrder` re-checks it before the push.
+  `shippingCountry` falls back to the ISO code. Checkout has proper fields, prefilled from the
+  buyer's profile. The email is the account's. A 4xx from `createOrder` now shows the server's
+  message instead of "payment didn't go through". `ShippingAddress.fromMap` still reads the old
+  shape.
+- **Payment provider.** `OrderPaymentProvider` (`startOrderPayment` → `PaymentPromptSent` |
+  `PaymentRedirect`, `confirmOrderPayment`, `supports`) is bound in `InitialBinding` to the
+  `IntasendService` instance. Checkout no longer names IntaSend. Billing still calls
+  `IntasendService` directly.
+
+**Tests:** `flutter analyze` reports no new issues. `flutter test` 65 pass; the one failure is the known
+`seller_shell_controller_test` one. New `order_refund_model_test.dart` and `shipping_address_test.dart`.
+`supabase npm test`: 197 RLS checks; 320 Deno steps, which include the new `normalizeShippingAddress`
+cases.
+
+**Deploy note:** the new function refuses the old app build's `{countryCode, line}` address, so the
+function and the web build must ship together (TODO.md rollout steps 2-3).
+
+**Still blocked:** splitting mixed-seller carts (owner decision), split payouts and confirming
+IntaSend's refund payload (live account), and server-side provider dispatch for collection.
+
+---
+
 ## 2026-09-26 — Audit follow-up: Batch C re-verified, billing (PHASE 3), listing sync (PHASE 4), rollout preflight
 
 **Status:** done in code and tested. **Not applied or deployed**, like the entry below. The rollout

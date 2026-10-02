@@ -20,7 +20,10 @@ const orderRow = (overrides = {}) => ({
   cj_order_status: "NOT_PUSHED",
   cj_push_attempts: 0,
   cj_push_claimed_at: null,
-  shipping_address: { countryCode: "KE", line: "Nairobi" },
+  shipping_address: {
+    countryCode: "KE", fullName: "Wanjiru K", phone: "+254712345678",
+    line1: "12 Moi Ave", city: "Nairobi",
+  },
   fulfillment_items: [{ pid: "p1", vid: "v1", quantity: 1 }],
   ...overrides,
 });

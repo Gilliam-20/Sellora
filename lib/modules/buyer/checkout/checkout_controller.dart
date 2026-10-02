@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../core/i18n/countries.dart';
 import '../../../core/i18n/money.dart';
+import '../../../core/network/api_exception.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/freight_estimate.dart';
 import '../../../data/models/order_model.dart';
@@ -13,7 +14,7 @@ import '../../../data/repositories/order_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/services/currency_service.dart';
-import '../../../data/services/intasend_service.dart';
+import '../../../data/services/order_payment_provider.dart';
 
 class CheckoutController extends GetxController {
   final CartRepository cartRepo = Get.find<CartRepository>();
@@ -22,6 +23,7 @@ class CheckoutController extends GetxController {
   final NotificationRepository _notificationRepo =
       Get.find<NotificationRepository>();
   final ProductRepository _productRepo = Get.find<ProductRepository>();
+  final OrderPaymentProvider _payments = Get.find<OrderPaymentProvider>();
 
   final isPlacingOrder = false.obs;
   final errorMessage = RxnString();
@@ -120,14 +122,14 @@ class CheckoutController extends GetxController {
   /// the destination country doesn't support (M-Pesa outside Kenya) is
   /// refused here too, not just hidden in the UI.
   Future<void> placeOrder({
-    required String address,
-    required String countryCode,
+    required ShippingAddress address,
     required PaymentMethodType method,
     String? mpesaPhone,
   }) async {
     final user = _authRepo.cachedUser;
     if (user == null || cartRepo.items.isEmpty) return;
-    if (!Countries.resolve(countryCode).paymentMethods.contains(method)) {
+    if (!Countries.resolve(address.countryCode).paymentMethods.contains(method) ||
+        !_payments.supports(method)) {
       errorMessage.value =
           '${method.label} isn\'t available for this shipping country.';
       return;
@@ -136,8 +138,6 @@ class CheckoutController extends GetxController {
     isPlacingOrder.value = true;
     errorMessage.value = null;
     try {
-      final shippingAddress =
-          ShippingAddress(countryCode: countryCode, line: address);
       // A real multi-seller cart would split into one order per seller.
       // Simplified here to a single order against the first item's
       // seller — matches supabase/functions/_shared/orders.js's createOrder, which
@@ -159,16 +159,11 @@ class CheckoutController extends GetxController {
           .toList();
 
       // Create the order server-side — re-priced from listings, ignoring
-      // whatever total this draft carries — *before* contacting IntaSend,
-      // so the server-assigned order id can be the payment's orderId. See
+      // whatever total this draft carries — *before* starting payment, so
+      // the server-assigned order id can be the payment's orderId. See
       // SupabaseOrderRepository.placeOrder and supabase/functions/api/index.ts's
       // intasendWebhook, which is what actually confirms payment and
       // starts CJ fulfillment; this controller does neither itself.
-      //
-      // NOTE: never yet run against a real backend, and fails until
-      // functions/ is ported to Edge Functions. See ApiEndpoints.createOrder's
-      // doc comment for what's still open (shippingAddress.line stays one
-      // free-text string, not CJ's full fulfillment-address shape).
       final draft = OrderModel(
         id: '',
         code: '',
@@ -179,45 +174,50 @@ class CheckoutController extends GetxController {
         status: OrderStatus.pending,
         total: total,
         currency: cartRepo.currency,
-        shippingAddress: shippingAddress,
+        shippingAddress: address,
         paymentMethod: method.orderLabel,
         createdAt: DateTime.now(),
         shippingFee: shippingFee,
         logisticName: selectedShippingOption.value?.logisticName,
       );
-      final order = await _orderRepo.placeOrder(draft);
+      final OrderModel order;
+      try {
+        order = await _orderRepo.placeOrder(draft);
+      } on ApiException catch (e) {
+        // A 4xx from createOrder (a refused address, an unavailable item)
+        // is written for the buyer; anything else isn't.
+        final status = e.statusCode ?? 0;
+        errorMessage.value = status >= 400 && status < 500
+            ? e.message
+            : 'Couldn\'t place your order. Please try again.';
+        return;
+      }
       await _notificationRepo.notifyOrderPlaced(order);
 
-      final intasend = Get.find<IntasendService>();
-      switch (method) {
-        case PaymentMethodType.mpesa:
-          await intasend.payOrderMpesa(
-            orderId: order.id,
-            phoneNumber: Formatters.toMpesaFormat(mpesaPhone ?? ''),
-          );
+      // Like the order itself, completion is confirmed server-side (the
+      // provider's webhook), not by this client.
+      final started = await _payments.startOrderPayment(
+        orderId: order.id,
+        method: method,
+        phone: method == PaymentMethodType.mpesa
+            ? Formatters.toMpesaFormat(mpesaPhone ?? '')
+            : null,
+        // Back to the storefront (hash routing), not this checkout page —
+        // the cart is already cleared by then.
+        redirectUrl: kIsWeb
+            ? Uri.base
+                .replace(fragment: '/s/${Get.parameters['slug'] ?? ''}')
+                .toString()
+            : null,
+      );
+      switch (started) {
+        case PaymentPromptSent():
           _onOrderPlaced(order.code,
-              'Order ${order.code} placed — complete the M-Pesa prompt on your phone to finish payment.');
-        case PaymentMethodType.card:
-          // IntaSend's hosted card page. Like M-Pesa, completion is
-          // confirmed by intasendWebhook server-side, not by this client.
-          final checkoutUrl = await intasend.payOrderCard(
-            orderId: order.id,
-            method: method.intasendMethod!,
-            // Back to the storefront (hash routing), not this checkout
-            // page — the cart is already cleared by then.
-            redirectUrl: kIsWeb
-                ? Uri.base
-                    .replace(fragment: '/s/${Get.parameters['slug'] ?? ''}')
-                    .toString()
-                : null,
-          );
-          if (checkoutUrl == null || checkoutUrl.isEmpty) {
-            throw StateError('No checkout URL returned');
-          }
-          await launchUrl(Uri.parse(checkoutUrl),
-              mode: LaunchMode.externalApplication);
+              'Order ${order.code} placed — complete the ${method.label} prompt on your phone to finish payment.');
+        case PaymentRedirect(:final url):
+          await launchUrl(url, mode: LaunchMode.externalApplication);
           _onOrderPlaced(order.code,
-              'Order ${order.code} placed — finish paying by card in the page that just opened.');
+              'Order ${order.code} placed — finish paying in the page that just opened.');
       }
     } catch (e) {
       errorMessage.value = method == PaymentMethodType.mpesa

@@ -309,7 +309,8 @@ async function createDropshipOrder({
     data: {
       orderNumber,
       shippingCountryCode: shippingAddress.countryCode,
-      shippingCountry: shippingAddress.country,
+      // Sellora stores only the ISO code; CJ keys off shippingCountryCode.
+      shippingCountry: shippingAddress.country || shippingAddress.countryCode,
       shippingProvince: shippingAddress.province,
       shippingCity: shippingAddress.city,
       shippingZip: shippingAddress.zip,

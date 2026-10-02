@@ -40,26 +40,63 @@ extension OrderPaymentStatusX on OrderPaymentStatus {
       };
 }
 
-/// Where an order ships. `countryCode` is the only field
-/// `supabase/functions/_shared/orders.js`'s `createOrder` validates — it derives the
-/// order's region/currency from it (see `supabase/functions/_shared/regions.js`) and
-/// rejects a request without one. `line` is the free-text street/city
-/// address collected before this class existed.
-///
-/// NOT yet the full `{fullName, phone, email, line1, line2, city, province,
-/// zip}` shape `supabase/functions/_shared/cjApi.js` needs to actually push a fulfillment
-/// to CJ — that's a separate, still-open gap (see WORKLOG.md 2026-09-15).
+/// Where an order ships, in the shape CJ fulfilment needs
+/// (`createDropshipOrder` in `supabase/functions/_shared/cjApi.js`).
+/// `createOrder` refuses an order missing [fullName], [phone], [line1] or
+/// [city] (`normalizeShippingAddress` in `_shared/orders.js`), and derives
+/// the order's region/currency from [countryCode].
 class ShippingAddress {
-  ShippingAddress({required this.countryCode, required this.line});
+  ShippingAddress({
+    required this.countryCode,
+    this.fullName = '',
+    this.phone = '',
+    this.email,
+    this.line1 = '',
+    this.line2,
+    this.city = '',
+    this.province,
+    this.zip,
+  });
 
   final String countryCode;
-  final String line;
+  final String fullName;
+  final String phone;
+  final String? email;
+  final String line1;
+  final String? line2;
+  final String city;
+  final String? province;
+  final String? zip;
 
-  Map<String, dynamic> toMap() => {'countryCode': countryCode, 'line': line};
+  /// One line for receipts and order lists.
+  String get summary => [line1, line2, city, province, zip, countryCode]
+      .where((part) => part != null && part.isNotEmpty)
+      .join(', ');
 
+  Map<String, dynamic> toMap() => {
+        'countryCode': countryCode,
+        'fullName': fullName,
+        'phone': phone,
+        if (email != null && email!.isNotEmpty) 'email': email,
+        'line1': line1,
+        if (line2 != null && line2!.isNotEmpty) 'line2': line2,
+        'city': city,
+        if (province != null && province!.isNotEmpty) 'province': province,
+        if (zip != null && zip!.isNotEmpty) 'zip': zip,
+      };
+
+  /// Also reads the `{countryCode, line}` shape stored before addresses
+  /// were structured, as [line1].
   factory ShippingAddress.fromMap(Map<String, dynamic> map) => ShippingAddress(
         countryCode: map['countryCode'] as String? ?? '',
-        line: map['line'] as String? ?? '',
+        fullName: map['fullName'] as String? ?? '',
+        phone: map['phone'] as String? ?? '',
+        email: map['email'] as String?,
+        line1: map['line1'] as String? ?? map['line'] as String? ?? '',
+        line2: map['line2'] as String?,
+        city: map['city'] as String? ?? '',
+        province: map['province'] as String?,
+        zip: map['zip'] as String?,
       );
 }
 
@@ -246,7 +283,7 @@ class OrderModel {
       shippingAddress: map['shippingAddress'] is Map
           ? ShippingAddress.fromMap(
               Map<String, dynamic>.from(map['shippingAddress'] as Map))
-          : ShippingAddress(countryCode: '', line: ''),
+          : ShippingAddress(countryCode: ''),
       paymentMethod: map['paymentMethod'] as String? ?? 'IntaSend',
       paymentReference: map['paymentReference'] as String?,
       trackingNumber: map['trackingNumber'] as String?,

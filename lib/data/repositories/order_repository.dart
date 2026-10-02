@@ -1,4 +1,5 @@
 import '../models/order_model.dart';
+import '../models/order_refund_model.dart';
 
 abstract class OrderRepository {
   Future<OrderModel> placeOrder(OrderModel order);
@@ -17,4 +18,14 @@ abstract class OrderRepository {
   Future<List<OrderModel>> sellerOrders(String sellerId);
   Future<List<OrderModel>> allOrders(); // admin oversight
   Future<void> updateStatus(String orderId, OrderStatus status);
+
+  /// Admin only. An order's charged amount and refund history, or null if
+  /// the caller can't see it.
+  Future<OrderRefundInfo?> refundInfo(String orderId);
+
+  /// Admin only. Refunds [amount] (everything left when null) through the
+  /// order's payment provider. Throws an ApiException carrying the server's
+  /// reason when the refund is refused or the provider rejects it.
+  Future<void> refundOrder(String orderId,
+      {double? amount, String? reason, String? comment});
 }

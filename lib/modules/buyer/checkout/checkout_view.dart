@@ -7,6 +7,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../data/models/order_model.dart';
 import '../../../data/models/store_model.dart';
 import '../../../data/models/user_model.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -26,8 +27,16 @@ class _CheckoutViewState extends State<CheckoutView> {
   // the responsive width check below) would otherwise hand every field
   // a brand-new, empty controller and silently wipe what the buyer typed.
   final _formKey = GlobalKey<FormState>();
-  final _addressCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
+  late final _nameCtrl =
+      TextEditingController(text: Get.find<AuthRepository>().cachedUser?.name);
+  late final _contactPhoneCtrl = TextEditingController(
+      text: Get.find<AuthRepository>().cachedUser?.phone);
+  final _line1Ctrl = TextEditingController();
+  final _line2Ctrl = TextEditingController();
+  final _cityCtrl = TextEditingController();
+  final _provinceCtrl = TextEditingController();
+  final _zipCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController(); // M-Pesa
 
   /// Only the countries in the store's enabled shipping zones (see
   /// `StoreModel.shippingZones`), Kenya first. Falls back to every
@@ -69,8 +78,18 @@ class _CheckoutViewState extends State<CheckoutView> {
 
   @override
   void dispose() {
-    _addressCtrl.dispose();
-    _phoneCtrl.dispose();
+    for (final ctrl in [
+      _nameCtrl,
+      _contactPhoneCtrl,
+      _line1Ctrl,
+      _line2Ctrl,
+      _cityCtrl,
+      _provinceCtrl,
+      _zipCtrl,
+      _phoneCtrl,
+    ]) {
+      ctrl.dispose();
+    }
     super.dispose();
   }
 
@@ -231,11 +250,85 @@ class _CheckoutViewState extends State<CheckoutView> {
                   );
                 }),
                 const SizedBox(height: AppSpacing.sm),
+                // Everything CJ needs to ship the parcel; createOrder
+                // refuses an order missing name, phone, street or city.
                 TextFormField(
-                  controller: _addressCtrl,
-                  maxLines: 2,
-                  decoration: const InputDecoration(hintText: 'Street, city'),
-                  validator: (v) => Validators.notEmpty(v, label: 'Address'),
+                  controller: _nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.name],
+                  maxLength: 100,
+                  decoration: const InputDecoration(
+                      labelText: 'Full name', counterText: ''),
+                  validator: (v) => Validators.notEmpty(v, label: 'Name'),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextFormField(
+                  controller: _contactPhoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  autofillHints: const [AutofillHints.telephoneNumber],
+                  decoration: const InputDecoration(
+                      labelText: 'Phone',
+                      helperText: 'For the courier, if they need to reach you'),
+                  validator: Validators.phone,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextFormField(
+                  controller: _line1Ctrl,
+                  autofillHints: const [AutofillHints.streetAddressLine1],
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                      labelText: 'Street address', counterText: ''),
+                  validator: (v) =>
+                      Validators.notEmpty(v, label: 'Street address'),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextFormField(
+                  controller: _line2Ctrl,
+                  autofillHints: const [AutofillHints.streetAddressLine2],
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                      labelText: 'Apartment, building, floor (optional)',
+                      counterText: ''),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextFormField(
+                  controller: _cityCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  autofillHints: const [AutofillHints.addressCity],
+                  maxLength: 100,
+                  decoration: const InputDecoration(
+                      labelText: 'City / town', counterText: ''),
+                  validator: (v) => Validators.notEmpty(v, label: 'City'),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _provinceCtrl,
+                        textCapitalization: TextCapitalization.words,
+                        autofillHints: const [AutofillHints.addressState],
+                        maxLength: 100,
+                        decoration: const InputDecoration(
+                            labelText: 'County / state (optional)',
+                            counterText: ''),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        controller: _zipCtrl,
+                        autofillHints: const [AutofillHints.postalCode],
+                        maxLength: 20,
+                        decoration: const InputDecoration(
+                            labelText: 'Postal code (optional)',
+                            counterText: ''),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 Text('Payment', style: Theme.of(context).textTheme.titleMedium),
@@ -301,8 +394,17 @@ class _CheckoutViewState extends State<CheckoutView> {
           onPressed: () {
             if (_formKey.currentState!.validate()) {
               controller.placeOrder(
-                  address: _addressCtrl.text.trim(),
-                  countryCode: _countryCode,
+                  address: ShippingAddress(
+                    countryCode: _countryCode,
+                    fullName: _nameCtrl.text.trim(),
+                    phone: _contactPhoneCtrl.text.trim(),
+                    email: Get.find<AuthRepository>().cachedUser?.email,
+                    line1: _line1Ctrl.text.trim(),
+                    line2: _line2Ctrl.text.trim(),
+                    city: _cityCtrl.text.trim(),
+                    province: _provinceCtrl.text.trim(),
+                    zip: _zipCtrl.text.trim(),
+                  ),
                   method: _method,
                   mpesaPhone: _phoneCtrl.text.trim());
             }

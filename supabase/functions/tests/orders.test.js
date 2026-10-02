@@ -13,6 +13,7 @@ import {
   lineRefusal,
   isExpired,
   validateOrderRequest,
+  normalizeShippingAddress,
 } from "../_shared/orders.js";
 
 // Postgres hands timestamps back as ISO strings, which is what the state
@@ -261,7 +262,10 @@ describe("isExpired", () => {
 
 describe("validateOrderRequest", () => {
   const items = [{ pid: "p1", vid: "v1", quantity: 1 }];
-  const address = { countryCode: "KE" };
+  const address = {
+    countryCode: "KE", fullName: "Wanjiru K", phone: "+254712345678",
+    line1: "12 Moi Ave", city: "Nairobi",
+  };
 
   test("requires a storeId - a cart can no longer check out unattributed to a seller", () => {
     assert.throws(() => validateOrderRequest(items, address, undefined));
@@ -271,5 +275,58 @@ describe("validateOrderRequest", () => {
 
   test("passes with a valid storeId and otherwise-valid items/address", () => {
     assert.doesNotThrow(() => validateOrderRequest(items, address, "store-1"));
+  });
+
+  test("returns the normalized address it validated", () => {
+    assert.equal(validateOrderRequest(items, address, "store-1").city, "Nairobi");
+  });
+
+  test("refuses the old {countryCode, line} shape CJ cannot ship to", () => {
+    assert.throws(() => validateOrderRequest(items, { countryCode: "KE", line: "Moi Ave, Nairobi" }, "store-1"),
+        /shippingAddress.fullName is required/);
+  });
+});
+
+describe("normalizeShippingAddress", () => {
+  const valid = {
+    countryCode: " ke ", fullName: " Wanjiru K ", phone: "+254 712 345678",
+    email: "w@example.com", line1: "12 Moi Ave", line2: "", city: "Nairobi",
+    province: "Nairobi County", zip: "00100",
+  };
+
+  test("trims, upper-cases the country and drops empty optionals", () => {
+    const a = normalizeShippingAddress(valid);
+    assert.equal(a.countryCode, "KE");
+    assert.equal(a.fullName, "Wanjiru K");
+    assert.equal("line2" in a, false);
+    assert.equal(a.zip, "00100");
+  });
+
+  test("keeps only the fields CJ reads", () => {
+    const a = normalizeShippingAddress({ ...valid, isAdmin: true, line: "old" });
+    assert.equal("isAdmin" in a, false);
+    assert.equal("line" in a, false);
+  });
+
+  for (const field of ["fullName", "phone", "line1", "city"]) {
+    test(`requires ${field}`, () => {
+      assert.throws(() => normalizeShippingAddress({ ...valid, [field]: "  " }),
+          new RegExp(`shippingAddress\.${field} is required`));
+    });
+  }
+
+  test("refuses a bad country code, phone or email", () => {
+    assert.throws(() => normalizeShippingAddress({ ...valid, countryCode: "KEN" }));
+    assert.throws(() => normalizeShippingAddress({ ...valid, phone: "call me" }));
+    assert.throws(() => normalizeShippingAddress({ ...valid, email: "nope" }));
+  });
+
+  test("refuses non-text and oversized fields", () => {
+    assert.throws(() => normalizeShippingAddress({ ...valid, city: 42 }), /must be text/);
+    assert.throws(() => normalizeShippingAddress({ ...valid, zip: "1".repeat(21) }), /too long/);
+  });
+
+  test("refuses a missing address", () => {
+    assert.throws(() => normalizeShippingAddress(undefined));
   });
 });

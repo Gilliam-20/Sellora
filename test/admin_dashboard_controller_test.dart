@@ -74,7 +74,7 @@ OrderModel _order({
     items: const [],
     status: OrderStatus.pending,
     total: total,
-    shippingAddress: ShippingAddress(countryCode: 'KE', line: '123 St'),
+    shippingAddress: ShippingAddress(countryCode: 'KE', line1: '123 St'),
     createdAt: DateTime.now(),
     paymentStatus: paymentStatus,
     serviceFeeRate: 0.02,

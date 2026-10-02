@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:sellora/data/models/order_model.dart';
+import 'package:sellora/data/models/order_refund_model.dart';
 import 'package:sellora/data/repositories/order_repository.dart';
 
 class MockOrderRepository extends GetxService implements OrderRepository {
@@ -55,5 +56,41 @@ class MockOrderRepository extends GetxService implements OrderRepository {
     // silently corrupted a paid order's dashboard/analytics numbers the
     // moment a seller marked it shipped.
     if (index != -1) _orders[index] = _orders[index].copyWith(status: status);
+  }
+
+  /// Refunds recorded by [refundOrder], keyed by order id.
+  final Map<String, double> refunded = {};
+
+  @override
+  Future<OrderRefundInfo?> refundInfo(String orderId) async {
+    final order = _orders.firstWhereOrNull((o) => o.id == orderId);
+    if (order == null) return null;
+    return OrderRefundInfo(
+      orderId: orderId,
+      paymentProvider: 'INTASEND',
+      paymentStatus: switch (order.paymentStatus) {
+        OrderPaymentStatus.paid => 'paid',
+        OrderPaymentStatus.partiallyRefunded => 'partially_refunded',
+        OrderPaymentStatus.refunded => 'refunded',
+        OrderPaymentStatus.failed => 'failed',
+        OrderPaymentStatus.pending => 'pending',
+      },
+      chargedAmount: order.total,
+      refundedAmount: refunded[orderId] ?? 0,
+    );
+  }
+
+  @override
+  Future<void> refundOrder(String orderId,
+      {double? amount, String? reason, String? comment}) async {
+    final info = await refundInfo(orderId);
+    if (info == null) return;
+    final total = (refunded[orderId] ?? 0) + (amount ?? info.remaining);
+    refunded[orderId] = total;
+    final index = _orders.indexWhere((o) => o.id == orderId);
+    _orders[index] = _orders[index].copyWith(
+        paymentStatus: total >= (info.chargedAmount ?? 0)
+            ? OrderPaymentStatus.refunded
+            : OrderPaymentStatus.partiallyRefunded);
   }
 }

@@ -110,9 +110,18 @@ retries failed pushes and another refreshes tracking. `OrderPaymentStatus` inclu
 `partiallyRefunded`/`refunded`. Refunds exist server-side (`_shared/refunds.js`, admin-only
 `/refundOrder`).
 
-Still open: no `ApiEndpoints` entry or UI for refunds; `ShippingAddress` is `{countryCode, line}`, not
-the structured address CJ fulfillment needs; mixed-seller carts are rejected, not split; no
-`PaymentProvider` abstraction beyond IntaSend; no real split payout (money moves as one charge). The
+2026-10-03: Admin → Orders opens a refund sheet per order (charged amount in KES, refunded so far,
+history, last failure, full or partial refund with an IntaSend reason). It reads the admin-only
+`admin_order_refunds` view and posts `ApiEndpoints.refundOrder`. `ShippingAddress` is now
+`{fullName, phone, email, line1, line2, city, province, zip, countryCode}`; `createOrder` normalizes it
+and refuses one missing name/phone/street/city (`normalizeShippingAddress`), and `fulfillOrder`
+re-checks it before pushing to CJ. Checkout pays through `OrderPaymentProvider`
+(`lib/data/services/order_payment_provider.dart`), which `IntasendService` implements.
+
+Still open: mixed-seller carts are rejected, not split (needs a decision: one payment across several
+orders, or one checkout per store); no real split payout (money moves as one charge); the server's
+payment routes (`payOrderMpesa`/`payOrderCard`/webhook) are IntaSend-specific, though refunds already
+dispatch on `orders.payment_provider`. The
 IntaSend payload shape and the Split Payments specifics (precision, sub-account KYC, payout
 minimums/fees, settlement, refund-on-split) need confirming against a real account.
 

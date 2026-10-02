@@ -54,7 +54,11 @@ class InitialBinding extends Bindings {
     Get.put<AuthRepository>(SupabaseAuthRepository(), permanent: true);
 
     Get.put(CjDropshippingService(), permanent: true);
-    Get.put(IntasendService(), permanent: true);
+    // The one order-payment provider today; checkout finds it by its
+    // interface, so a second provider is a binding here, not a checkout
+    // change.
+    Get.put<OrderPaymentProvider>(Get.put(IntasendService(), permanent: true),
+        permanent: true);
 
     Get.put<ProductRepository>(SupabaseProductRepository(), permanent: true);
     Get.put<OrderRepository>(SupabaseOrderRepository(), permanent: true);

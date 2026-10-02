@@ -510,5 +510,16 @@ ok('report: counts plans, admins and the bucket', r.plans.includes('basic') && N
 ok('report: counts approved sellers without a current subscription', Number.isInteger(Number(r.activeSellersWithoutSubscription)));
 ok('report: clients cannot read it', await throws(() => as(admin, 'select public.deployment_report()')));
 
+// ---- 20261003000000_admin_order_refunds.sql: implementation plan PHASE 8.
+console.log('admin refund view');
+await as('postgres', "update orders set total_kes = 1300, refund_error = 'boom' where id = 'o2'");
+r = await one(admin, "select total_kes, refund_status, refund_error, refunds from admin_order_refunds where id = 'o2'");
+ok('refunds: admin reads the charged amount and refund state', Number(r?.total_kes) === 1300 && r.refund_status === 'NONE' && r.refund_error === 'boom' && Array.isArray(r.refunds));
+ok('refunds: the seller sees nothing', (await as(seller1, 'select id from admin_order_refunds')).rows.length === 0);
+ok('refunds: nor does the buyer', (await as(buyer, 'select id from admin_order_refunds')).rows.length === 0);
+ok('refunds: anon cannot read it', await throws(() => as('anon', 'select id from admin_order_refunds')));
+ok('refunds: the view cannot be written through', await throws(() => as(admin, "update admin_order_refunds set refunded_amount = 0 where id = 'o2'")));
+ok('refunds: total_kes stays off the shared grant', await throws(() => as(seller1, "select total_kes from orders where id = 'o2'")));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

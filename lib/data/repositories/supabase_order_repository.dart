@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../models/order_model.dart';
+import '../models/order_refund_model.dart';
 import '../services/supabase_service.dart';
 import 'order_repository.dart';
 
@@ -135,6 +136,37 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       'status': status.name,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', orderId);
+  }
+
+  /// Reads the admin-only `admin_order_refunds` view; anyone else gets no
+  /// row, hence null.
+  @override
+  Future<OrderRefundInfo?> refundInfo(String orderId) async {
+    final row = await _db.adminOrderRefunds
+        .select('id, payment_provider, payment_status, total_kes, '
+            'refunded_amount, refund_status, refund_error, refund_currency, '
+            'refunds, cj_order_status')
+        .eq('id', orderId)
+        .maybeSingle();
+    return row == null ? null : OrderRefundInfo.fromMap(fromRow(row));
+  }
+
+  /// The refund itself is server-side only: it calls the provider, then
+  /// records the result on columns no client can write.
+  @override
+  Future<void> refundOrder(String orderId,
+      {double? amount, String? reason, String? comment}) async {
+    await _dio.post(
+      ApiEndpoints.refundOrder,
+      data: {
+        'orderId': orderId,
+        if (amount != null) 'amount': amount,
+        if (reason != null) 'reason': reason,
+        if (comment != null && comment.isNotEmpty) 'comment': comment,
+      },
+      // A provider round trip, not a table read.
+      receiveTimeout: const Duration(seconds: 60),
+    );
   }
 
   List<OrderModel> _models(List<Map<String, dynamic>> rows) =>

@@ -1,8 +1,10 @@
 import 'package:get/get.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/i18n/countries.dart';
 import '../../core/network/dio_client.dart';
+import 'order_payment_provider.dart';
 
-enum PaymentStatus { pending, completed, failed }
+export 'order_payment_provider.dart';
 
 /// Wraps IntaSend for both seller subscription billing and buyer
 /// order checkout. The IntaSend secret key lives only in the Edge Function
@@ -14,8 +16,42 @@ enum PaymentStatus { pending, completed, failed }
 /// derives the amount from that order itself, never from a client-supplied
 /// figure. Billing payment (below) is the structurally identical mirror for
 /// a pending `billing_history` entry instead of an order.
-class IntasendService extends GetxService {
+class IntasendService extends GetxService implements OrderPaymentProvider {
   final DioClient _dio = Get.find<DioClient>();
+
+  @override
+  String get id => 'INTASEND';
+
+  /// M-Pesa by STK push; card on IntaSend's hosted page.
+  @override
+  bool supports(PaymentMethodType method) => true;
+
+  @override
+  Future<PaymentStart> startOrderPayment({
+    required String orderId,
+    required PaymentMethodType method,
+    String? phone,
+    String? redirectUrl,
+  }) async {
+    switch (method) {
+      case PaymentMethodType.mpesa:
+        if (phone == null || phone.isEmpty) {
+          throw ArgumentError('An M-Pesa payment needs a phone number');
+        }
+        return PaymentPromptSent(
+            await payOrderMpesa(orderId: orderId, phoneNumber: phone));
+      case PaymentMethodType.card:
+        final url = await payOrderCard(
+            orderId: orderId,
+            method: method.intasendMethod!,
+            redirectUrl: redirectUrl);
+        final uri = url == null ? null : Uri.tryParse(url);
+        if (uri == null || !uri.hasScheme) {
+          throw StateError('No checkout URL returned');
+        }
+        return PaymentRedirect(uri);
+    }
+  }
 
   /// Triggers an M-Pesa STK push to [phoneNumber] (format 2547XXXXXXXX) for
   /// the already-created order [orderId]. Returns the IntaSend invoice id;
@@ -53,6 +89,7 @@ class IntasendService extends GetxService {
   /// Re-checks order [orderId]'s payment status directly with the server
   /// (never trusts a client-side guess); a `completed` result means the
   /// order has also just been marked paid and pushed to CJ server-side.
+  @override
   Future<PaymentStatus> confirmOrderPayment(String orderId) async {
     final res = await _dio.post(ApiEndpoints.confirmIntasendPayment, data: {
       'orderId': orderId,

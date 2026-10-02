@@ -1,6 +1,6 @@
 # SELLORA — MASTER BUILD PROMPT
 
-## STATUS (as of 2026-09-30 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
+## STATUS (as of 2026-10-03 — see WORKLOG.md and SELLORA_IMPLEMENTATION_PLAN.md for detail)
 
 | Phase | Status |
 |---|---|
@@ -12,7 +12,7 @@
 | **5 — Seller product management** | Listing/draft/unlist writes go to `products` (keyed `(store_id, id)`), gated by RLS plus the publishing and plan-limit triggers. Variants management UI (per-variant enable/disable + seller SKU override, from My Listings). Listings and the storefront read in pages. Still not started: collections, real inventory tracking, SEO fields, bulk operations, per-variant pricing |
 | **6 — Store builder** | First slice: seller-facing "Customize store" screen editing `StoreModel`'s branding fields (name/tagline/logo/banner/accent color); storefront renders logo/banner/accent. Logo/banner upload to the `store-media` Storage bucket (2026-09-27). Not started: theme/section/block/setting models, renderer, preview flow, publish flow |
 | **7 — Customer storefront** | Core shopping flow shipped 2026-09-20: the buyer shell (shop/cart/orders/alerts/profile) now lives at `/s/:slug` itself, guest-reachable end to end for browsing/cart, gated to a signed-in buyer only at checkout's submit step and for order history/profile. The old flat `/buyer` shell and its duplicate marketplace-era feed (`BuyerHomeController`) are deleted. Still not started: collections (needs PHASE 5's model first), a dedicated `Customer` model, order-detail/tracking, multi-store switcher |
-| **8 — Payments + orders** | Done in code, never run live. `createOrder` prices each line from the seller's `products.sell_price`, snapshots buyer/seller/store and the 7% fee split; checkout offers M-Pesa and card (IntaSend); `intasendWebhook` confirms payment and pushes fulfillment to CJ, with cron retry and tracking refresh. Refunds exist server-side (admin-only `/refundOrder`). Still open: no refunds UI or `ApiEndpoints` entry; `ShippingAddress` is `{countryCode, line}`, not CJ's full fulfillment-address shape; no provider abstraction beyond IntaSend; multi-seller carts rejected, not split; no real split payout |
+| **8 — Payments + orders** | Done in code, never run live. `createOrder` prices each line from the seller's `products.sell_price`, snapshots buyer/seller/store and the 7% fee split; checkout offers M-Pesa and card (IntaSend); `intasendWebhook` confirms payment and pushes fulfillment to CJ, with cron retry and tracking refresh. 2026-10-03: admin refunds from the Orders tab (`ApiEndpoints.refundOrder`, admin-only `admin_order_refunds` view); checkout collects the structured address CJ ships to and `createOrder` refuses one without name/phone/street/city; checkout takes payment through an `OrderPaymentProvider` interface (IntaSend is the one implementation). Still open: multi-seller carts rejected, not split (owner call); no real split payout (needs a live IntaSend account); the server's payment routes are still IntaSend-specific |
 | **9 — Analytics + marketing** | Dashboard-analytics slice shipped 2026-09-21: date-range filtering, gross sales/net revenue/AOV/order-status breakdown, a sales-over-time chart, top products, a store-health card (plan/listing/order usage), and a guided setup checklist. Not started: discount codes, customer analytics/CustomerModel, marketing campaigns |
 | **10 — Admin** | First slice shipped 2026-09-22: Overview, Sellers, Stores, Sync, Orders and Plans tabs; Overview shows the platform financial model (seller GMV vs Sellora service-fee revenue vs subscription MRR/ARR, kept separate per §35). Seller suspension is `profiles.seller_status`. Not started: per-store suspension, refunds UI, coupons, categories, themes, feature flags, platform settings, reports, support, churn |
 | **11 — i18n** | First slice shipped 2026-09-25: `lib/core/i18n/` adds a KES/USD/GBP/EUR currency registry, an integer-minor-unit `Money` type, a country/shipping-zone/payment-method registry mirroring `supabase/functions/_shared/regions.js` (sync-tested), and `flutter_localizations` wiring. `CurrencyService` converts all four currencies from the server's `fx_rates` table; sellers pick shipping zones in Customize store; checkout offers only in-zone countries, converts CJ freight into the cart currency, and offers card (IntaSend hosted page) alongside Kenya-only M-Pesa. Not done: server-side zone enforcement, non-KES settlement, minor-unit persisted models, ARB string extraction/second language |
@@ -29,14 +29,15 @@ secrets (owner steps below).
 - [ ] **Roll out the security hardening and the follow-up pass (2026-09-26, `SELLORA_SECURITY_AUDIT.md`
       §6 and §7), in this order:**
       1. `cd supabase && npx supabase db push`. This applies `20260928000000_security_hardening.sql`,
-         `20260929000000_billing_usage.sql`, `20260930000000_listing_sync.sql` and
-         `20260930000100_deployment_report.sql`.
+         `20260929000000_billing_usage.sql`, `20260930000000_listing_sync.sql`,
+         `20260930000100_deployment_report.sql` and `20261003000000_admin_order_refunds.sql`.
       2. `npm run deploy`: the new function calls `seller_order_gate`, which step 1 creates, and
          registers the `syncListings` job that step 1 schedules.
       3. `flutter build web` + `firebase deploy --only hosting`. The old build reads `products`
          directly, which buyers can no longer do, so storefronts are empty until this ships. It also
          calls the CJ catalog routes, which now refuse anyone but a signed-in seller or admin, and
-         reads `my_plan_usage()`.
+         reads `my_plan_usage()`. The new build's checkout also sends the structured shipping
+         address, which the new function requires, so deploy steps 2 and 3 together.
       4. `SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/preflight.js` (from
          `supabase/`). It checks everything below that can be checked from outside and names the
          fix for each failure, including approved sellers with no current subscription (their
@@ -83,7 +84,8 @@ secrets (owner steps below).
       Sync once. Optionally add a `pricing` row to override the margin defaults in
       `supabase/functions/_shared/pricing.js`.
 - [ ] Smoke-test in the running app: seller sign-up (store gets created) → onboarding → plan payment,
-      buyer sign-up at `/s/<slug>`, checkout with M-Pesa sandbox, logo upload in Customize store, a
+      buyer sign-up at `/s/<slug>`, checkout with M-Pesa sandbox, a small sandbox refund from Admin →
+      Orders (confirms IntaSend's refund payload), logo upload in Customize store, a
       reset link on web and on Android, sign-out/sign-in, admin sign-in.
 - [ ] Once happy: retire Firebase. Delete the deployed Cloud Functions (`firebase functions:delete`)
       and the `sellora-20` Auth/Firestore data, then delete `functions/`. It still holds an untracked

@@ -43,10 +43,8 @@ class ApiEndpoints {
   /// Re-prices and writes the order server-side
   /// (supabase/functions/_shared/orders.js). The client never writes an
   /// order row directly — `orders` has no insert policy. Items are
-  /// `{pid, vid, quantity}` with CJ's own ids; `storeId` is required.
-  /// Still unreconciled: `shippingAddress.line` is one free-text string, not
-  /// the `{fullName, phone, email, line1, line2, city, province, zip}` shape
-  /// CJ fulfilment needs (see SELLORA_IMPLEMENTATION_PLAN.md's PHASE 8).
+  /// `{pid, vid, quantity}` with CJ's own ids; `storeId` is required, and
+  /// so are the address fields CJ ships to (see ShippingAddress).
   static const String createOrder = '$baseFunctionsUrl/createOrder';
 
   /// Order-checkout payment (not billing). Each acts on an already-created
@@ -55,6 +53,13 @@ class ApiEndpoints {
   static const String payOrderCard = '$baseFunctionsUrl/payOrderCard';
   static const String confirmIntasendPayment =
       '$baseFunctionsUrl/confirmIntasendPayment';
+
+  /// Admin-only. Refunds an order through the provider that took the
+  /// payment (supabase/functions/_shared/refunds.js); body
+  /// `{orderId, amount?, reason?, comment?}`, where omitting `amount`
+  /// refunds whatever is left. A refusal comes back as 409 (order state) or
+  /// 400 (amount) with a message meant for the admin.
+  static const String refundOrder = '$baseFunctionsUrl/refundOrder';
 
   /// Creates a pending billing_history entry for a seller's subscription
   /// purchase, server-priced from subscription_plans

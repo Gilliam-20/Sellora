@@ -70,8 +70,8 @@ const round2 = (value) => Math.round(value * 100) / 100;
  * from anything the client sends. Falls back to the cheapest option when
  * omitted or when it no longer matches an option CJ actually offers.
  */
-async function createOrder({ uid, items, shippingAddress, logisticName, storeId }) {
-  validateOrderRequest(items, shippingAddress, storeId);
+async function createOrder({ uid, items, shippingAddress: rawAddress, logisticName, storeId }) {
+  const shippingAddress = validateOrderRequest(items, rawAddress, storeId);
 
   const store = must(await db().from("stores")
       .select("id, seller_id").eq("id", storeId).maybeSingle());
@@ -398,6 +398,65 @@ function isExpired(order, now = Date.now()) {
   return Boolean(order.expiresAt) && millisOf(order.expiresAt) <= now;
 }
 
+// Every field `cjApi.createDropshipOrder` reads, with whether it's required
+// and its longest accepted length. An order is only worth taking money for
+// if CJ can ship it, so a missing field is refused here, at creation, not
+// discovered at fulfilment after the customer has paid.
+const ADDRESS_FIELDS = Object.freeze({
+  fullName: { required: true, max: 100 },
+  phone: { required: true, max: 30 },
+  email: { required: false, max: 254 },
+  line1: { required: true, max: 200 },
+  line2: { required: false, max: 200 },
+  city: { required: true, max: 100 },
+  province: { required: false, max: 100 },
+  zip: { required: false, max: 20 },
+});
+
+/**
+ * The shipping address as stored on the order and pushed to CJ: known
+ * fields only, trimmed, with the country code upper-cased. Throws a 400
+ * naming the first missing or oversized field.
+ * @param {*} address Client-supplied `shippingAddress`.
+ * @return {object} The normalized address.
+ */
+function normalizeShippingAddress(address) {
+  if (!address || typeof address !== "object") {
+    throw badRequest("shippingAddress is required");
+  }
+  const countryCode = typeof address.countryCode === "string" ?
+    address.countryCode.trim().toUpperCase() : "";
+  if (!/^[A-Z]{2}$/.test(countryCode)) {
+    throw badRequest("A valid two-letter shippingAddress.countryCode is required");
+  }
+  const normalized = { countryCode };
+  for (const [field, { required, max }] of Object.entries(ADDRESS_FIELDS)) {
+    const raw = address[field];
+    const value = typeof raw === "string" ? raw.trim() : "";
+    if (raw != null && typeof raw !== "string") {
+      throw badRequest(`shippingAddress.${field} must be text`);
+    }
+    if (required && !value) {
+      throw badRequest(`shippingAddress.${field} is required`);
+    }
+    if (value.length > max) {
+      throw badRequest(`shippingAddress.${field} is too long`);
+    }
+    if (value) normalized[field] = value;
+  }
+  if (normalized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email)) {
+    throw badRequest("shippingAddress.email is not a valid email address");
+  }
+  if (!/^\+?[0-9 ()-]{6,30}$/.test(normalized.phone)) {
+    throw badRequest("shippingAddress.phone is not a valid phone number");
+  }
+  return normalized;
+}
+
+/**
+ * Validates a createOrder request.
+ * @return {object} The normalized shipping address to store.
+ */
 function validateOrderRequest(items, shippingAddress, storeId) {
   if (typeof storeId !== "string" || !storeId) {
     throw badRequest("storeId is required");
@@ -405,9 +464,7 @@ function validateOrderRequest(items, shippingAddress, storeId) {
   if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
     throw badRequest("items[] must contain between 1 and 50 items");
   }
-  if (!shippingAddress || typeof shippingAddress.countryCode !== "string" || shippingAddress.countryCode.length !== 2) {
-    throw badRequest("A valid two-letter shippingAddress.countryCode is required");
-  }
+  const address = normalizeShippingAddress(shippingAddress);
   const variants = new Set();
   for (const item of items) {
     if (!item || typeof item.pid !== "string" || !item.pid || typeof item.vid !== "string" || !item.vid) {
@@ -419,6 +476,7 @@ function validateOrderRequest(items, shippingAddress, storeId) {
     if (variants.has(item.vid)) throw badRequest("Duplicate variants must be combined before checkout");
     variants.add(item.vid);
   }
+  return address;
 }
 
 /**
@@ -643,7 +701,10 @@ async function fulfillOrder(orderId) {
   try {
     const cjResult = await cjApi.createDropshipOrder({
       orderNumber: orderId,
-      shippingAddress: order.shippingAddress,
+      // Re-checked so an order stored before addresses were structured
+      // fails here with the missing field named (and parks once its
+      // attempts run out) instead of reaching CJ with blanks.
+      shippingAddress: normalizeShippingAddress(order.shippingAddress),
       logisticName: order.logisticName,
       remark: `Sellora order ${order.code || orderId}`,
       products: (order.fulfillmentItems || []).map((i) => ({
@@ -884,4 +945,5 @@ export {
   lineRefusal,
   isExpired,
   validateOrderRequest,
+  normalizeShippingAddress,
 };
