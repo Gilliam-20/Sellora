@@ -19,7 +19,8 @@ class MarketingController extends GetxController {
 
   Future<void> _loadPlans() async {
     try {
-      plans.value = await _subscriptionRepo.fetchPlans();
+      plans.value =
+          SubscriptionPlanModel.offered(await _subscriptionRepo.fetchPlans());
     } catch (_) {
       // If plans can't load, the pricing section just renders empty —
       // the rest of the marketing page doesn't depend on it.

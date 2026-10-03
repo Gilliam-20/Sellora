@@ -43,6 +43,20 @@ function downgradeRefusal(plan, listedCount) {
 }
 
 /**
+ * Why `plan` can't be bought, or null when it can: a retired plan
+ * (`is_active` false) is no longer sold, except as a renewal by a seller
+ * already on it, so retiring a plan never strands its current subscribers.
+ * @param {{name: string, is_active: (boolean|undefined)}} plan
+ * @param {string|null|undefined} currentPlanId The seller's subscribed plan.
+ * @param {string} planId The plan being bought.
+ * @return {string|null} The refusal message.
+ */
+function retiredPlanRefusal(plan, currentPlanId, planId) {
+  if (plan.is_active !== false || currentPlanId === planId) return null;
+  return `${plan.name} is no longer offered. Choose another plan.`;
+}
+
+/**
  * Creates a pending billing_history ledger entry for a seller's subscription
  * purchase. The plan's price/terms are snapshotted onto the entry now, so a
  * later admin price edit never rewrites what this entry actually charged -
@@ -62,10 +76,16 @@ async function createBillingEntry({ sellerId, planId }) {
   if (refusal) throw forbidden(refusal);
 
   const plan = must(await db().from("subscription_plans")
-      .select("id, name, price_kes, price_usd, billing_period_days, listing_limit")
+      .select("id, name, price_kes, price_usd, billing_period_days, listing_limit, is_active")
       .eq("id", planId).maybeSingle());
   if (!plan) {
     throw notFound(`Plan ${planId} not found`);
+  }
+  if (plan.is_active === false) {
+    const current = must(await db().from("subscriptions")
+        .select("plan_id").eq("seller_id", sellerId).maybeSingle());
+    const retired = retiredPlanRefusal(plan, current?.plan_id, planId);
+    if (retired) throw conflict(retired);
   }
   const listed = await db().from("products")
       .select("id", { count: "exact", head: true })
@@ -183,6 +203,7 @@ async function activatePendingSubscription(entryId, { paymentReference } = {}) {
 export {
   subscribeRefusal,
   downgradeRefusal,
+  retiredPlanRefusal,
   createBillingEntry,
   getBillingEntry,
   attachBillingPaymentAttempt,

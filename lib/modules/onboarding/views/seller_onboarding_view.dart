@@ -5,6 +5,7 @@ import '../../../app/theme/app_metrics.dart';
 import '../../../core/i18n/countries.dart';
 import '../../../core/i18n/currencies.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/plan_text.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
@@ -386,12 +387,12 @@ class _PlanCard extends StatelessWidget {
                           .textTheme
                           .displaySmall
                           ?.copyWith(fontSize: 22)),
-                  Text(' / month',
+                  Text(' / ${PlanText.period(plan.billingPeriodDays)}',
                       style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
-              ...plan.perks.map(
+              ...PlanText.highlights(plan).map(
                 (perk) => Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Row(

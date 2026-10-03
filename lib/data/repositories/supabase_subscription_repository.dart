@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import '../../core/constants/app_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../models/billing_history_entry_model.dart';
@@ -15,7 +16,8 @@ class SupabaseSubscriptionRepository extends GetxService
   @override
   Future<List<SubscriptionPlanModel>> fetchPlans() async {
     final rows = await _db.plans.select();
-    return rows.map((r) => SubscriptionPlanModel.fromMap(fromRow(r))).toList();
+    return SubscriptionPlanModel.sorted(
+        rows.map((r) => SubscriptionPlanModel.fromMap(fromRow(r))));
   }
 
   @override
@@ -33,6 +35,16 @@ class SupabaseSubscriptionRepository extends GetxService
   @override
   Future<void> updatePlan(SubscriptionPlanModel plan) async {
     await _db.plans.upsert(toRow(plan.toMap()));
+  }
+
+  @override
+  Future<void> createPlan(SubscriptionPlanModel plan) async {
+    try {
+      await _db.plans.insert(toRow(plan.toMap()));
+    } on PostgrestException catch (e) {
+      if (e.code == '23505') throw PlanIdTaken(plan.id);
+      rethrow;
+    }
   }
 
   /// Always the signed-in seller's own: `my_plan_usage()` reads `auth.uid()`.

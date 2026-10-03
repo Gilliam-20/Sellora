@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/plan_text.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
@@ -87,7 +88,7 @@ class SellerSubscriptionView extends GetView<SellerSubscriptionController> {
               Text('Available plans',
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: AppSpacing.sm),
-              ...controller.plans.map(
+              ...controller.offeredPlans.map(
                 (plan) => Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child:
@@ -207,9 +208,6 @@ class _UsageCard extends StatelessWidget {
 String _usageLine(int used, int limit, String what) =>
     limit < 0 ? '$used $what (unlimited)' : '$used of $limit $what';
 
-String _limit(int limit, String what) =>
-    limit < 0 ? 'Unlimited $what' : '$limit $what';
-
 class _PlanRow extends StatelessWidget {
   const _PlanRow({required this.plan, required this.isCurrent});
   final SubscriptionPlanModel plan;
@@ -234,16 +232,14 @@ class _PlanRow extends StatelessWidget {
               children: [
                 Text(plan.name, style: Theme.of(context).textTheme.titleMedium),
                 Text(
-                    '${Formatters.currency(plan.priceKes, code: 'KES')} / ${plan.billingPeriodDays} days',
+                    '${Formatters.currency(plan.priceKes, code: 'KES')} / ${PlanText.period(plan.billingPeriodDays)}',
                     style: Theme.of(context).textTheme.bodySmall),
+                if (isCurrent && !plan.isActive)
+                  Text('No longer offered to new sellers. You can keep renewing it.',
+                      style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 2),
                 Text(
-                  [
-                    _limit(plan.listingLimit, 'listings'),
-                    _limit(plan.orderLimit, 'orders'),
-                    _limit(plan.storeLimit,
-                        plan.storeLimit == 1 ? 'store' : 'stores'),
-                  ].join(' · '),
+                  PlanText.highlights(plan).join(' · '),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

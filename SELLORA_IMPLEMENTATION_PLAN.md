@@ -55,7 +55,9 @@ confirmed payment activates a plan (`activate_subscription`). `billing_history`/
 no client write policy. Plans carry configurable listing/order/store limits; the server enforces all
 three (audit §6, H6), and the app reads usage from `my_plan_usage()`. The subscription screen has
 Renew, billing history and a plan comparison. A downgrade below the seller's listed count is refused,
-with a trigger backstop.
+with a trigger backstop. Plans are admin configuration (TODO.md §16, 2026-10-03): seeded launch plans,
+a full editor with create/retire, database bounds on every field, and plan cards built from the
+configured limits and features.
 
 Not built: cancel/resume (there's no auto-renewal; an unpaid plan lapses). Proration on a mid-period
 upgrade is an owner decision.

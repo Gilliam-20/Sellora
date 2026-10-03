@@ -7,6 +7,7 @@ import '../../app/theme/app_metrics.dart';
 import '../../app/theme/app_typography.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/plan_text.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/widgets/common.dart';
 import '../../core/widgets/manifest_stub.dart';
@@ -601,7 +602,7 @@ class _PlanCard extends StatelessWidget {
             children: [
               Text(Formatters.currency(plan.priceKes, code: 'KES'),
                   style: AppTypography.price(size: 26)),
-              Text(' /mo',
+              Text(' / ${PlanText.period(plan.billingPeriodDays)}',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -609,7 +610,7 @@ class _PlanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          for (final perk in plan.perks)
+          for (final perk in PlanText.highlights(plan))
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.xs),
               child: Row(

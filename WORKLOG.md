@@ -6,6 +6,66 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-03 — TODO §16: subscription plans as admin configuration
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration
+`20261003000400_plan_config.sql` joins rollout step 1 in TODO.md. The function must deploy after it
+(`subscribeSeller` reads `subscription_plans.is_active`).
+
+**Why:** user request: "go to the todo and work on phase 16" (TODO.md §16 Subscription system; the
+previous commit, "phase 13-15", numbered the TODO's sections the same way).
+
+**Where it started:** the limits were already data-driven and enforced server-side (listing trigger,
+`seller_order_gate`, store insert policy). But the table started empty (an owner step), the admin
+screen could only edit prices, order/store limits and two flags (under a stale "not yet enforced"
+label), the listing limit wasn't editable at all, plan cards showed free-text perks that could
+contradict the real limits, and nothing bounded a value.
+
+**Decisions (made here, reversible):**
+- Plans are charged in KES. That's what `subscribeSeller` snapshots and both payment routes charge,
+  and IntaSend settles nothing else for us. `price_usd` stays as a reference price, so §16's
+  "currency" is not a separate column that the charge would ignore.
+- Retire, don't delete: `is_active = false` takes a plan off sale (marketing, onboarding, the
+  subscription screen) while its current holders keep it and may renew. `subscribeSeller` refuses
+  anyone else (409). The admin screen won't retire the last plan on offer.
+- Feature flags are a map of booleans. Two are known to the app and described to sellers
+  (`customDomain`, `advancedAnalytics`). Since neither exists as a separate feature yet, sellers
+  see them marked "coming soon" (`PlanFeature.isBuilt`). Any other key is an internal flag: editable,
+  readable through `hasFeature`, never advertised. **Nothing is gated on a flag yet.** Taking
+  analytics away from Starter is an owner call.
+- Support level (`standard`/`priority`/`dedicated`) is a promise shown on the card, not a switch.
+- Order limits keep their existing semantics: snapshotted onto `subscriptions` at payment, so an
+  edit reaches existing subscribers at their next payment. Listing and store limits apply at once.
+  The admin screen says so.
+- One plan holds "most popular" at a time, since onboarding preselects the first one it finds.
+
+**What changed:**
+- **Migration.** `support_level`, `is_active`, `sort_order`. Check constraints: slug ids, a 1–40
+  character name, prices ≥ 0, a 1–366 day period, limits ≥ -1 with stores -1 or ≥ 1, at most 12
+  perks, features an object of booleans. Seeds `starter`/`growth`/`pro` at §16's prices and limits
+  (`on conflict do nothing`, so it never overwrites an admin's edits). The USD prices (10/31/80)
+  are placeholders.
+- **Function.** `retiredPlanRefusal` in `_shared/subscriptions.js`, checked in `createBillingEntry`.
+- **App.** `SubscriptionPlanModel` gains the three fields, `PlanSupportLevel`, the `PlanFeature`
+  registry, `hasFeature`, `sorted` and `offered`. `fetchPlans` returns display order.
+  `SubscriptionRepository.createPlan` inserts, and throws `PlanIdTaken` instead of overwriting.
+  `PlanText` (`lib/core/utils/`) builds every plan card's lines from the configured fields, then
+  the admin's extra perks; the period label follows `billingPeriodDays`, not a hard-coded "/mo".
+  Admin → Plans: summary cards with Edit/Retire, "New plan", and a full editor
+  (`plan_editor.dart`) whose validation (`plan_form.dart`) mirrors the constraints, with the KES
+  price held to M-Pesa's 10–250,000 range.
+
+**Tests:** `flutter analyze` reports no new issues. `flutter test`: the one failure is the known
+`seller_shell_controller_test` one. New: `plan_config_test` (model, text, form validation, admin
+controller). `supabase npm test`: 309 RLS checks (14 new: seed, every-field edit, audit, each
+constraint), 357 Deno steps (new `retiredPlanRefusal` cases).
+
+**Not done:**
+- Gating on feature flags (see above), and a custom domain feature itself (§29).
+- §17's billing page (cancel/resume, invoices, payment method); that's the next section.
+
+---
+
 ## 2026-10-03 — TODO §13–15: import editor, seller order management, configurable service fee
 
 **Status:** done in code and tested. **Not applied or deployed.** The new migration

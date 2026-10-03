@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  isPayable, billingRefMatches, subscribeRefusal, downgradeRefusal,
+  isPayable, billingRefMatches, subscribeRefusal, downgradeRefusal, retiredPlanRefusal,
 } from "../_shared/subscriptions.js";
 
 describe("subscribeRefusal", () => {
@@ -43,6 +43,31 @@ describe("downgradeRefusal", () => {
 
   test("a numeric limit sent as a string still counts", () => {
     assert.match(downgradeRefusal({ name: "Starter", listing_limit: "25" }, 30), /Unlist 5/);
+  });
+});
+
+describe("retiredPlanRefusal", () => {
+  const retired = { name: "Starter", is_active: false };
+
+  test("an active plan is always sold", () => {
+    assert.equal(retiredPlanRefusal({ name: "Growth", is_active: true }, null, "growth"), null);
+  });
+
+  test("a plan from before is_active existed counts as active", () => {
+    assert.equal(retiredPlanRefusal({ name: "Growth" }, null, "growth"), null);
+  });
+
+  test("a retired plan is refused to a new subscriber", () => {
+    assert.equal(retiredPlanRefusal(retired, null, "starter"),
+        "Starter is no longer offered. Choose another plan.");
+  });
+
+  test("and to a seller switching from another plan", () => {
+    assert.ok(retiredPlanRefusal(retired, "growth", "starter"));
+  });
+
+  test("but a seller already on it may renew", () => {
+    assert.equal(retiredPlanRefusal(retired, "starter", "starter"), null);
   });
 });
 

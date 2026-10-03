@@ -173,14 +173,35 @@ ok('recipient cannot rewrite message', await throws(() => as(seller1, "update no
 
 console.log('plans, billing, fx');
 await db.exec(`insert into subscription_plans (id, name) values ('basic', 'Basic') on conflict do nothing; insert into fx_rates (rates) values ('{"KES":129}')`);
-r = await as('anon', 'select id from subscription_plans');
-ok('anon reads plans', r.rows.length === 1);
+r = await as('anon', 'select id from subscription_plans order by sort_order, price_kes');
+ok('anon reads plans, the seeded launch plans included', r.rows.map((p) => p.id).join() === 'basic,starter,growth,pro', JSON.stringify(r.rows));
 ok('seller cannot edit plans', (await as(seller1, "update subscription_plans set price_usd = 0 returning id")).rows.length === 0);
-r = await as(admin, "insert into subscription_plans (id, name) values ('pro', 'Pro') on conflict (id) do update set name = excluded.name returning id");
+r = await as(admin, "insert into subscription_plans (id, name) values ('premium', 'Premium') on conflict (id) do update set name = excluded.name returning id");
 ok('admin upserts plans', r.rows.length === 1);
 ok('seller cannot add plans', await throws(() => as(seller1, "insert into subscription_plans (id, name) values ('free', 'Free')")));
-ok('seller cannot delete plans', (await as(seller1, "delete from subscription_plans where id = 'pro' returning id")).rows.length === 0);
-ok('admin deletes plans', (await as(admin, "delete from subscription_plans where id = 'pro' returning id")).rows.length === 1);
+ok('seller cannot delete plans', (await as(seller1, "delete from subscription_plans where id = 'premium' returning id")).rows.length === 0);
+ok('admin deletes plans', (await as(admin, "delete from subscription_plans where id = 'premium' returning id")).rows.length === 1);
+r = (await as('anon', "select price_kes, listing_limit, order_limit, store_limit, support_level, is_popular, is_active, features from subscription_plans where id = 'growth'")).rows[0];
+ok('plans: Growth is seeded with the §16 terms', Number(r?.price_kes) === 4000 && r.listing_limit === 500 && r.order_limit === 1000 && r.store_limit === 3 && r.support_level === 'priority' && r.is_popular && r.is_active && r.features.advancedAnalytics === true, JSON.stringify(r));
+r = (await as('anon', "select listing_limit, order_limit, store_limit from subscription_plans where id = 'pro'")).rows[0];
+ok('plans: Pro is unlimited listings and orders, 10 stores', r?.listing_limit === -1 && r.order_limit === -1 && r.store_limit === 10, JSON.stringify(r));
+r = await as(admin, `update subscription_plans set listing_limit = 75, support_level = 'dedicated', is_active = false, sort_order = 5,
+  features = '{"customDomain": true, "betaThemes": false}' where id = 'starter' returning id`);
+ok('plans: admin edits every field', r.rows.length === 1);
+r = await as(admin, "select 1 from audit_logs where action = 'plan.update' and entity_id = 'starter'");
+ok('plans: the edit is audited', r.rows.length >= 1);
+ok('plans: a limit below -1 is refused', await throws(() => as(admin, "update subscription_plans set order_limit = -2 where id = 'starter'")));
+ok('plans: zero stores is refused', await throws(() => as(admin, "update subscription_plans set store_limit = 0 where id = 'starter'")));
+ok('plans: a negative price is refused', await throws(() => as(admin, "update subscription_plans set price_kes = -1 where id = 'starter'")));
+ok('plans: a zero-day period is refused', await throws(() => as(admin, "update subscription_plans set billing_period_days = 0 where id = 'starter'")));
+ok('plans: an unknown support level is refused', await throws(() => as(admin, "update subscription_plans set support_level = 'vip' where id = 'starter'")));
+ok('plans: a non-boolean feature flag is refused', await throws(() => as(admin, `update subscription_plans set features = '{"customDomain": "yes"}' where id = 'starter'`)));
+ok('plans: features must be an object', await throws(() => as(admin, "update subscription_plans set features = '[]' where id = 'starter'")));
+ok('plans: a blank name is refused', await throws(() => as(admin, "update subscription_plans set name = '  ' where id = 'starter'")));
+ok('plans: an id that is not a slug is refused', await throws(() => as(admin, "insert into subscription_plans (id, name) values ('Big Plan!', 'Big')")));
+ok('plans: more than 12 perks are refused', await throws(() => as(admin, "update subscription_plans set perks = $1 where id = 'starter'", [Array.from({ length: 13 }, (_, i) => 'perk ' + i)])));
+await as('postgres', `update subscription_plans set listing_limit = 50, support_level = 'standard', is_active = true, sort_order = 10,
+  features = '{"customDomain": false, "advancedAnalytics": false}' where id = 'starter'`);
 ok('client cannot write billing history', await throws(() => as(seller1, "insert into billing_history (seller_id, plan_id) values ($1, 'basic')", [S1])));
 r = await as('anon', "select rates from fx_rates where id = 'current'");
 ok('anon reads fx', r.rows[0]?.rates?.KES === 129);

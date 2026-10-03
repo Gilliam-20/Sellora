@@ -3,12 +3,18 @@ import '../../../data/models/subscription_plan_model.dart';
 import '../../../data/models/fee_settings.dart';
 import '../../../data/repositories/fee_repository.dart';
 import '../../../data/repositories/subscription_repository.dart';
+import 'plan_form.dart';
 
 class AdminPlansController extends GetxController {
-  final SubscriptionRepository _subscriptionRepo =
-      Get.find<SubscriptionRepository>();
+  AdminPlansController(
+      {SubscriptionRepository? subscriptionRepository,
+      FeeRepository? feeRepository})
+      : _subscriptionRepo =
+            subscriptionRepository ?? Get.find<SubscriptionRepository>(),
+        _feeRepo = feeRepository ?? Get.find<FeeRepository>();
 
-  final FeeRepository _feeRepo = Get.find<FeeRepository>();
+  final SubscriptionRepository _subscriptionRepo;
+  final FeeRepository _feeRepo;
 
   final plans = <SubscriptionPlanModel>[].obs;
   final isLoading = true.obs;
@@ -65,38 +71,67 @@ class AdminPlansController extends GetxController {
     }
   }
 
-  Future<void> updatePrice(SubscriptionPlanModel plan, double newPriceKes,
-      double newPriceUsd) async {
+  /// Saves [form] as a new plan or over an existing one (TODO.md §16).
+  /// Returns an error to show, or null once saved. Marking a plan "most
+  /// popular" takes the badge off any other, since onboarding preselects
+  /// the first popular plan it finds.
+  Future<String?> savePlan(PlanForm form, {required bool isNew}) async {
+    final result = form.build(
+        isNew: isNew, takenIds: plans.map((p) => p.id));
+    final plan = result.plan;
+    if (plan == null) return result.error;
+    final error = _offerRefusal(plan);
+    if (error != null) return error;
+
     isSaving.value = true;
     try {
-      await _subscriptionRepo
-          .updatePlan(plan.copyWith(priceKes: newPriceKes, priceUsd: newPriceUsd));
+      if (isNew) {
+        await _subscriptionRepo.createPlan(plan);
+      } else {
+        await _subscriptionRepo.updatePlan(plan);
+      }
+      if (plan.isPopular) {
+        for (final other in plans.where((p) => p.isPopular && p.id != plan.id)) {
+          await _subscriptionRepo.updatePlan(other.copyWith(isPopular: false));
+        }
+      }
       await load();
+      return null;
+    } on PlanIdTaken catch (e) {
+      return e.toString();
+    } catch (e) {
+      return 'Couldn\'t save ${plan.name}. $e';
     } finally {
       isSaving.value = false;
     }
   }
 
-  /// Schema-only fields — orderLimit/storeLimit aren't enforced anywhere
-  /// yet (see WORKLOG.md, 2026-09-12), but stay admin-editable since the
-  /// point is the config surface existing, not hiding it until enforcement
-  /// lands.
-  Future<void> updateLimitsAndFeatures(
-    SubscriptionPlanModel plan, {
-    int? orderLimit,
-    int? storeLimit,
-    Map<String, bool>? features,
-  }) async {
+  /// Retires [plan] (no longer sold; current subscribers keep it and may
+  /// renew) or offers it again. Returns an error to show, or null.
+  Future<String?> setActive(SubscriptionPlanModel plan, bool active) async {
+    final updated = plan.copyWith(isActive: active);
+    final error = _offerRefusal(updated);
+    if (error != null) return error;
     isSaving.value = true;
     try {
-      await _subscriptionRepo.updatePlan(plan.copyWith(
-        orderLimit: orderLimit,
-        storeLimit: storeLimit,
-        features: features,
-      ));
+      await _subscriptionRepo.updatePlan(updated);
       await load();
+      return null;
+    } catch (e) {
+      return 'Couldn\'t update ${plan.name}. $e';
     } finally {
       isSaving.value = false;
     }
+  }
+
+  /// With no active plan, onboarding has nothing to offer and no new
+  /// seller can start.
+  String? _offerRefusal(SubscriptionPlanModel changed) {
+    if (changed.isActive) return null;
+    final othersOnOffer =
+        plans.where((p) => p.isActive && p.id != changed.id).isNotEmpty;
+    return othersOnOffer
+        ? null
+        : 'Keep at least one plan on offer, or new sellers can\'t sign up.';
   }
 }

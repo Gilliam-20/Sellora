@@ -20,7 +20,7 @@ class MockSubscriptionRepository extends GetxService
   @override
   Future<List<SubscriptionPlanModel>> fetchPlans() async {
     await Future.delayed(const Duration(milliseconds: 200));
-    return _plans;
+    return SubscriptionPlanModel.sorted(_plans);
   }
 
   @override
@@ -68,6 +68,12 @@ class MockSubscriptionRepository extends GetxService
     await Future.delayed(const Duration(milliseconds: 200));
     final index = _plans.indexWhere((p) => p.id == plan.id);
     if (index != -1) _plans[index] = plan;
+  }
+
+  @override
+  Future<void> createPlan(SubscriptionPlanModel plan) async {
+    if (_plans.any((p) => p.id == plan.id)) throw PlanIdTaken(plan.id);
+    _plans.add(plan);
   }
 
   @override

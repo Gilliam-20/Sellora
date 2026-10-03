@@ -24,6 +24,12 @@ class SellerSubscriptionController extends GetxController {
   SubscriptionPlanModel? get currentPlan => plans
       .firstWhereOrNull((p) => p.id == authRepo.cachedUser?.subscriptionPlanId);
 
+  /// What the seller can buy: active plans, plus their own if it's been
+  /// retired (they may still renew it).
+  List<SubscriptionPlanModel> get offeredPlans => SubscriptionPlanModel.offered(
+      plans,
+      currentPlanId: authRepo.cachedUser?.subscriptionPlanId);
+
   @override
   void onInit() {
     super.onInit();

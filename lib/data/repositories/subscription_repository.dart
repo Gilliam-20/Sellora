@@ -2,7 +2,19 @@ import '../models/billing_history_entry_model.dart';
 import '../models/subscription_plan_model.dart';
 import '../models/subscription_usage_model.dart';
 
+/// [SubscriptionRepository.createPlan] was given an id another plan has.
+class PlanIdTaken implements Exception {
+  const PlanIdTaken(this.id);
+  final String id;
+
+  @override
+  String toString() => 'A plan with the ID "$id" already exists';
+}
+
 abstract class SubscriptionRepository {
+  /// Every plan, retired ones included, in display order
+  /// (`SubscriptionPlanModel.sorted`). Seller-facing lists narrow it with
+  /// `SubscriptionPlanModel.offered`.
   Future<List<SubscriptionPlanModel>> fetchPlans();
 
   /// Starts a subscription purchase server-side: creates a pending
@@ -18,6 +30,10 @@ abstract class SubscriptionRepository {
   });
 
   Future<void> updatePlan(SubscriptionPlanModel plan);
+
+  /// Adds a plan (admin only). Throws [PlanIdTaken] rather than overwriting
+  /// an existing plan with the same id.
+  Future<void> createPlan(SubscriptionPlanModel plan);
 
   /// Read-only usage against the seller's current plan limits, counted the
   /// way the server enforces them.

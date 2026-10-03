@@ -70,7 +70,9 @@ class SellerOnboardingController extends GetxController {
         _subscriptionRepo.fetchPlans(),
         if (user != null) _storeRepo.storesForSeller(user.uid),
       ]);
-      plans.value = results[0] as List<SubscriptionPlanModel>;
+      plans.value = SubscriptionPlanModel.offered(
+          results[0] as List<SubscriptionPlanModel>,
+          currentPlanId: user?.subscriptionPlanId);
       selectedPlanId.value = plans.firstWhereOrNull((p) => p.isPopular)?.id ??
           plans.firstOrNull?.id;
 
