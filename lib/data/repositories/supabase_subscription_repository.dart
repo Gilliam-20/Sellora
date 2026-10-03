@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import '../../core/constants/app_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../models/billing_history_entry_model.dart';
+import '../models/billing_profile_model.dart';
 import '../models/subscription_plan_model.dart';
 import '../models/subscription_usage_model.dart';
 import '../services/supabase_service.dart';
@@ -66,5 +67,32 @@ class SupabaseSubscriptionRepository extends GetxService
     return rows
         .map((r) => BillingHistoryEntryModel.fromMap(fromRow(r)))
         .toList();
+  }
+
+  /// Both act on the caller's own subscription (`auth.uid()`).
+  @override
+  Future<void> cancelSubscription({String? reason}) async {
+    await _db.client.rpc('cancel_my_subscription', params: {
+      'p_reason': reason,
+    });
+  }
+
+  @override
+  Future<void> resumeSubscription() async {
+    await _db.client.rpc('resume_my_subscription');
+  }
+
+  @override
+  Future<BillingProfileModel?> fetchBillingProfile(String sellerId) async {
+    final row = await _db.billingProfiles
+        .select()
+        .eq('seller_id', sellerId)
+        .maybeSingle();
+    return row == null ? null : BillingProfileModel.fromMap(fromRow(row));
+  }
+
+  @override
+  Future<void> saveBillingProfile(BillingProfileModel profile) async {
+    await _db.billingProfiles.upsert(toRow(profile.toMap()));
   }
 }

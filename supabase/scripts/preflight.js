@@ -26,6 +26,7 @@ const EXPECTED_CRON_JOBS = Object.freeze([
   "sellora-expire-rate-limits",
   "sellora-refresh-fx",
   "sellora-refresh-tracking",
+  "sellora-renewal-reminders",
   "sellora-retry-fulfilments",
   "sellora-sync-catalog",
   "sellora-sync-listings",

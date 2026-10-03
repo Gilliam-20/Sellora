@@ -730,5 +730,82 @@ ok('listing: more than 20 tags are refused', await throws(() => as(seller1, 'upd
 ok('listing: an empty tag is refused', await throws(() => as(seller1, "update products set tags = '{\"\"}' where id = 'p1' and store_id = $1", [st1])));
 ok('listing: an overlong SEO description is refused', await throws(() => as(seller1, 'update products set seo_description = $2 where id = \'p1\' and store_id = $1', [st1, 'x'.repeat(321)])));
 
+// ---- 20261003000500_billing_page.sql: TODO §17.
+console.log('billing page');
+await as('postgres', `update subscriptions set status = 'active', plan_id = 'starter', current_period_end = now() + interval '10 days',
+  cancel_at_period_end = false, renewal_reminder_for = null where seller_id = $1`, [S1]);
+await as('postgres', "insert into billing_history (id, seller_id, plan_id, plan_name, amount_kes, billing_period_days) values ('bh-inv', $1, 'starter', 'Starter', 1300, 30)", [S1]);
+r = await one('postgres', "select invoice_number from billing_history where id = 'bh-inv'");
+ok('invoice: a pending payment has no invoice number', r.invoice_number === null);
+const endBeforeInvoice = (await one('postgres', 'select current_period_end e from subscriptions where seller_id = $1', [S1])).e;
+await asService("select public.activate_subscription('bh-inv', 'INV-REF')");
+r = await one(seller1, "select invoice_number, period_start, period_end from billing_history where id = 'bh-inv'");
+ok('invoice: paying assigns a numbered invoice', /^INV-\d{4}-\d{6}$/.test(r?.invoice_number ?? ''), r?.invoice_number);
+ok('invoice: it records the period the payment bought, from the old end',
+  Math.abs(new Date(r.period_start) - new Date(endBeforeInvoice)) < 1000 &&
+  Math.abs(new Date(r.period_end) - new Date(endBeforeInvoice) - 30 * 86400000) < 1000, JSON.stringify(r));
+ok('invoice: the number cannot change', await throws(() => as('postgres', "update billing_history set invoice_number = 'INV-X' where id = 'bh-inv'")));
+r = await as('postgres', "select count(*)::int n from billing_history where status = 'paid' and invoice_number is null");
+ok('invoice: every paid entry has a number', r.rows[0].n === 0);
+ok("invoice: another seller can't read it", (await as(seller2, "select id from billing_history where id = 'bh-inv'")).rows.length === 0);
+
+r = await one(seller1, 'select public.my_plan_usage() u');
+ok('usage: reports the period start and no cancellation', r.u.currentPeriodStart && r.u.cancelAtPeriodEnd === false, JSON.stringify(r.u));
+ok('cancel: the seller cannot write the flag directly', (await as(seller1, 'update subscriptions set cancel_at_period_end = true returning seller_id')).rows.length === 0);
+r = await one(seller1, "select public.cancel_my_subscription('  Too expensive  ') c");
+ok('cancel: the seller cancels at period end', r.c.cancelAtPeriodEnd === true);
+r = await one('postgres', 'select status, cancel_at_period_end, cancel_reason, cancelled_at, current_period_end > now() running from subscriptions where seller_id = $1', [S1]);
+ok('cancel: the plan keeps running, flagged, with the trimmed reason', r.status === 'active' && r.running && r.cancel_at_period_end && r.cancel_reason === 'Too expensive' && r.cancelled_at, JSON.stringify(r));
+ok('cancel: it is audited', (await as('postgres', "select 1 from audit_logs where action = 'subscription.cancel' and entity_id = $1", [S1])).rows.length === 1);
+r = await one(seller1, 'select public.my_plan_usage() u');
+ok('usage: shows the cancellation', r.u.cancelAtPeriodEnd === true && r.u.subscriptionStatus === 'active' && r.u.cancelledAt);
+ok('cancel: an overlong reason is refused', await throws(() => as(seller1, 'select public.cancel_my_subscription($1)', ['x'.repeat(501)])));
+ok('cancel: a buyer has nothing to cancel', await throws(() => as(buyer, 'select public.cancel_my_subscription()')));
+ok('cancel: anon cannot call it', await throws(() => as('anon', 'select public.cancel_my_subscription()')));
+
+await as('postgres', "update subscriptions set current_period_end = now() + interval '2 days' where seller_id = $1", [S1]);
+r = await one('service', 'select public.send_renewal_reminders() n');
+ok('reminders: none for a cancelled plan', (await as('postgres', "select 1 from notifications where recipient_id = $1 and title = 'Your plan ends soon'", [S1])).rows.length === 0);
+r = await one(seller1, 'select public.resume_my_subscription() c');
+ok('resume: the seller resumes', r.c.cancelAtPeriodEnd === false &&
+  (await one('postgres', 'select cancel_at_period_end c, cancel_reason from subscriptions where seller_id = $1', [S1])).c === false);
+await one('service', 'select public.send_renewal_reminders() n');
+await one('service', 'select public.send_renewal_reminders() n');
+r = await as(seller1, "select message from notifications where title = 'Your plan ends soon'");
+ok('reminders: one per period once the end is three days off', r.rows.length === 1 && /Starter/.test(r.rows[0].message), JSON.stringify(r.rows));
+ok('reminders: clients cannot send them', await throws(() => as(seller1, 'select public.send_renewal_reminders()')));
+
+await one(seller1, 'select public.cancel_my_subscription() c');
+await as('postgres', "insert into billing_history (id, seller_id, plan_id, plan_name, amount_kes, billing_period_days) values ('bh-inv2', $1, 'starter', 'Starter', 1300, 30)", [S1]);
+await asService("select public.activate_subscription('bh-inv2', 'INV-REF2')");
+r = await one('postgres', 'select cancel_at_period_end c, renewal_reminder_for is distinct from current_period_end rearmed from subscriptions where seller_id = $1', [S1]);
+ok('renewing clears a cancellation and re-arms the reminder', r.c === false && r.rearmed, JSON.stringify(r));
+const [inv1, inv2] = (await as('postgres', "select invoice_number n from billing_history where id in ('bh-inv', 'bh-inv2') order by id")).rows.map((x) => x.n);
+ok('invoice: numbers are sequential', Number(inv2.slice(-6)) === Number(inv1.slice(-6)) + 1, `${inv1} ${inv2}`);
+await as('postgres', "update subscriptions set current_period_end = now() - interval '1 day' where seller_id = $1", [S1]);
+ok('resume: not once the period has ended', await throws(() => as(seller1, 'select public.resume_my_subscription()')));
+ok('cancel: nor cancel', await throws(() => as(seller1, 'select public.cancel_my_subscription()')));
+await as('postgres', "update subscriptions set current_period_end = now() + interval '20 days' where seller_id = $1", [S1]);
+
+console.log('billing profile');
+r = await as(seller1, "insert into seller_billing_profiles (seller_id, payment_method, mpesa_phone, billing_name, tax_id, updated_at) values ($1, 'mpesa', '254712345678', 'Amina Ltd', 'P051234567X', '2000-01-01') returning updated_at", [S1]);
+ok('billing profile: the seller saves a payment method, stamped now', new Date(r.rows[0]?.updated_at).getFullYear() > 2000);
+r = await as(seller1, "update seller_billing_profiles set payment_method = 'card' returning payment_method");
+ok('billing profile: and changes it', r.rows[0]?.payment_method === 'card');
+ok('billing profile: a malformed M-Pesa number is refused', await throws(() => as(seller1, "update seller_billing_profiles set mpesa_phone = '0712345678'")));
+ok('billing profile: M-Pesa without a number is refused', await throws(() => as(seller1, "update seller_billing_profiles set payment_method = 'mpesa', mpesa_phone = null")));
+ok('billing profile: an unknown method is refused', await throws(() => as(seller1, "update seller_billing_profiles set payment_method = 'paypal'")));
+ok('billing profile: not for another seller', await throws(() => as(seller2, "insert into seller_billing_profiles (seller_id, payment_method) values ($1, 'card')", [S1])));
+ok('billing profile: a buyer cannot have one', await throws(() => as(buyer, "insert into seller_billing_profiles (seller_id, payment_method) values ($1, 'card')", [B1])));
+ok("billing profile: another seller can't read it", (await as(seller2, 'select seller_id from seller_billing_profiles')).rows.length === 0);
+ok("billing profile: nor change it", (await as(seller2, "update seller_billing_profiles set tax_id = 'X' returning seller_id")).rows.length === 0);
+ok('billing profile: anon reads nothing', (await as('anon', 'select seller_id from seller_billing_profiles')).rows.length === 0);
+ok('billing profile: admin reads it', (await as(admin, 'select seller_id from seller_billing_profiles')).rows.length === 1);
+const S4 = '88888888-8888-8888-8888-888888888888';
+await signUp(S4, 'leaver@x.com', { role: 'seller', name: 'Leaver', store_name: 'Leaver Store', ...terms });
+await as({ id: S4 }, "insert into seller_billing_profiles (seller_id, payment_method, mpesa_phone) values ($1, 'mpesa', '254711111111')", [S4]);
+await one('service', 'select public.delete_account_data($1) r', [S4]);
+ok('billing profile: account deletion removes it', (await as('postgres', 'select 1 from seller_billing_profiles where seller_id = $1', [S4])).rows.length === 0);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

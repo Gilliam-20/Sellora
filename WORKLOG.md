@@ -6,6 +6,82 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-03 — TODO §17: billing page
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration
+`20261003000500_billing_page.sql` joins rollout step 1 in TODO.md and has to land before the new
+web build: the page reads `seller_billing_profiles` and fails to load without it. No Edge Function
+change.
+
+**Why:** user request: "go to the todo and work on phase 17" (TODO.md §17 Billing page, numbered
+like §13–16).
+
+**Where it started:** the Subscription screen already had the current plan, a usage line, plan
+"Switch"/"Renew" over M-Pesa and a billing history list. Missing from §17: payment method,
+invoices, cancel, resume, upgrade vs downgrade, upgrade benefits. Card billing (`payBillingCard`,
+`confirmBillingPayment`) existed in the function and `IntasendService` but nothing called it.
+
+**Decisions (made here, reversible):**
+- **There is no automatic renewal, so cancel can't stop a charge.** Cancel sets
+  `subscriptions.cancel_at_period_end`: the plan runs to its end, the renewal reminder isn't sent,
+  and the page says "Ends {date}". Resume clears the flag while the period is running. Paying for
+  another period clears it too (`activate_subscription`), so a seller who changes their mind
+  after the end just renews. `subscriptions.status` is untouched; `'cancelled'` still means only
+  account deletion.
+- **"Renewal date" is shown as "Paid through {date}. Renew by then."** That's what actually
+  happens.
+- **Renewal reminders** are new: `send_renewal_reminders()` runs daily from pg_cron (SQL only, no
+  function call) and sends one in-app notification per period when the end is ≤ 3 days away.
+  `renewal_reminder_for` records which period end it reminded about, so a renewal re-arms it.
+  Added to preflight's `EXPECTED_CRON_JOBS`.
+- **Payment method is a saved preference, not a stored instrument.** `seller_billing_profiles`
+  (owner-written under RLS) holds M-Pesa or card, the M-Pesa number in 2547… form, and an optional
+  billing name and tax ID for invoices. "Card" means IntaSend's hosted page every time. The pay
+  sheet prefills from it and offers "Save as my payment method". Account deletion deletes the row
+  (`delete_account_data` redefined with that one line).
+- **Invoices are paid billing entries.** A before-trigger numbers an entry `INV-YYYY-NNNNNN` from a
+  global sequence when it turns paid. The number can't change afterwards, and existing paid entries
+  were backfilled in payment order. `activate_subscription` now writes the period each payment bought
+  (`period_start`/`period_end`) onto the entry. Older entries other than the latest have no period.
+  The PDF comes from the `pdf` + `printing` packages (new dependencies), in Inter from Google Fonts,
+  falling back to Helvetica offline. It downloads on web and opens the share sheet on Android.
+- **Upgrade vs downgrade is by price per day** (`PlanChange`), so a yearly plan isn't called an
+  upgrade just for costing more up front. Each plan card lists what it adds or removes against the
+  current plan. The pay sheet warns before a downgrade the server would refuse for listings.
+- **The "close to your limit" nudge only counts listings and orders.** Every seller has one store,
+  so a one-store plan would always read as full.
+
+**What changed:**
+- **Migration.** The columns, sequence and trigger above. `cancel_my_subscription(reason)` and
+  `resume_my_subscription()` are security definer, scoped to `auth.uid()`, audited, and refuse a
+  period that has already ended. `my_plan_usage()` adds `currentPeriodStart`, `cancelAtPeriodEnd`,
+  `cancelledAt`. Also `seller_billing_profiles`, `send_renewal_reminders()` and the cron job.
+- **App.** `BillingProfileModel`. The billing entry and usage models read the new fields.
+  `SubscriptionRepository` gains cancel/resume/fetch/save billing profile (the test fake too).
+  `PlanChange` is in `lib/core/utils/`. The page was rewritten
+  (`seller_subscription_view.dart` + `billing_sheets.dart`, `invoice.dart`): status header with
+  Renew/Cancel/Resume, payments in progress with "Check payment" (`confirmBillingPayment`), the
+  upgrade nudge, usage meters, the payment method card, plan cards and `ManifestStub` history rows
+  that open the invoice.
+
+**Tests:** `flutter analyze`: only the two existing infos. `flutter test`: the one failure is the
+known `seller_shell_controller_test` one. New: `billing_page_test` (15). `supabase npm test`:
+345 RLS checks (35 new: invoice numbering/immutability/period, cancel/resume/audit/refusals,
+reminders once per period and not when cancelled, renewal clearing a cancellation, billing profile
+RLS and constraints, deletion), 357 Deno steps. `flutter build web` compiles. That needed
+`.dart_tool/flutter_build` cleared first: its cached web plugin registrant still imported the
+removed Firebase plugins.
+
+**Not done:**
+- Automatic renewal. IntaSend's recurring/tokenized card payments aren't verified against an
+  account, so nothing is charged without the seller starting it.
+- Emailing invoices or reminders (in-app only), and an invoice issuer address or tax registration.
+  The PDF says "Sellora, sellora.app". Owner to supply the legal details.
+- Proration on a mid-period plan change (owner call, unchanged): a change applies the new plan's
+  limits at once, including to the remaining paid time.
+
+---
+
 ## 2026-10-03 — TODO §16: subscription plans as admin configuration
 
 **Status:** done in code and tested. **Not applied or deployed.** The new migration

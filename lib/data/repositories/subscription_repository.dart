@@ -1,4 +1,5 @@
 import '../models/billing_history_entry_model.dart';
+import '../models/billing_profile_model.dart';
 import '../models/subscription_plan_model.dart';
 import '../models/subscription_usage_model.dart';
 
@@ -43,4 +44,19 @@ abstract class SubscriptionRepository {
   /// attempts included, since those are what a seller asks support about.
   Future<List<BillingHistoryEntryModel>> billingHistory(String sellerId,
       {int limit = 24});
+
+  /// Marks the signed-in seller's running plan to end at its period end:
+  /// it keeps working until then, and renewal reminders stop. There's no
+  /// automatic charge to stop, so this is the seller saying they won't
+  /// renew. Paying for another period clears it.
+  Future<void> cancelSubscription({String? reason});
+
+  /// Undoes [cancelSubscription] while the period is still running.
+  Future<void> resumeSubscription();
+
+  /// The seller's saved payment method and invoice details, or null if
+  /// they've never saved any.
+  Future<BillingProfileModel?> fetchBillingProfile(String sellerId);
+
+  Future<void> saveBillingProfile(BillingProfileModel profile);
 }

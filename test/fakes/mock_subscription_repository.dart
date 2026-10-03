@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'mock_seed_data.dart';
 import 'package:sellora/data/models/billing_history_entry_model.dart';
+import 'package:sellora/data/models/billing_profile_model.dart';
 import 'package:sellora/data/models/subscription_plan_model.dart';
 import 'package:sellora/data/models/subscription_usage_model.dart';
 import 'package:sellora/data/models/user_model.dart';
@@ -16,6 +17,8 @@ class MockSubscriptionRepository extends GetxService
   final AuthRepository _authRepository;
   final List<SubscriptionPlanModel> _plans = MockSeedData.plans();
   final List<BillingHistoryEntryModel> _history = [];
+  final Map<String, BillingProfileModel> _billingProfiles = {};
+  bool _cancelAtPeriodEnd = false;
 
   @override
   Future<List<SubscriptionPlanModel>> fetchPlans() async {
@@ -44,8 +47,13 @@ class MockSubscriptionRepository extends GetxService
       paymentReference: 'MOCK-${now.millisecondsSinceEpoch}',
       createdAt: now,
       paidAt: now,
+      invoiceNumber:
+          'INV-${now.year}-${(_history.length + 1).toString().padLeft(6, '0')}',
+      periodStart: now,
+      periodEnd: now.add(Duration(days: plan.billingPeriodDays)),
     );
     _history.insert(0, entry);
+    _cancelAtPeriodEnd = false;
 
     // Mock mode has no webhook to wait on, so this repository applies the
     // activation itself — the single place that does, instead of the
@@ -101,6 +109,7 @@ class MockSubscriptionRepository extends GetxService
               ? 'active'
               : 'lapsed',
       currentPeriodEnd: until,
+      cancelAtPeriodEnd: _cancelAtPeriodEnd,
     );
   }
 
@@ -108,4 +117,30 @@ class MockSubscriptionRepository extends GetxService
   Future<List<BillingHistoryEntryModel>> billingHistory(String sellerId,
           {int limit = 24}) async =>
       _history.where((e) => e.sellerId == sellerId).take(limit).toList();
+
+  @override
+  Future<void> cancelSubscription({String? reason}) async {
+    final until = _authRepository.cachedUser?.subscriptionActiveUntil;
+    if (until == null || !until.isAfter(DateTime.now())) {
+      throw StateError('There is no running subscription to cancel');
+    }
+    _cancelAtPeriodEnd = true;
+  }
+
+  @override
+  Future<void> resumeSubscription() async {
+    final until = _authRepository.cachedUser?.subscriptionActiveUntil;
+    if (until == null || !until.isAfter(DateTime.now())) {
+      throw StateError('This subscription has ended');
+    }
+    _cancelAtPeriodEnd = false;
+  }
+
+  @override
+  Future<BillingProfileModel?> fetchBillingProfile(String sellerId) async =>
+      _billingProfiles[sellerId];
+
+  @override
+  Future<void> saveBillingProfile(BillingProfileModel profile) async =>
+      _billingProfiles[profile.sellerId] = profile;
 }

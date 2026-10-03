@@ -63,6 +63,10 @@ class SupabaseService extends GetxService {
   SupabaseQueryBuilder get billingHistory => client.from('billing_history');
   SupabaseQueryBuilder get subscriptions => client.from('subscriptions');
 
+  /// A seller's saved payment method and invoice details; owner-written.
+  SupabaseQueryBuilder get billingProfiles =>
+      client.from('seller_billing_profiles');
+
   /// The single-row USD-base rate table, refreshed server-side and publicly
   /// readable.
   SupabaseQueryBuilder get fxRates => client.from('fx_rates');

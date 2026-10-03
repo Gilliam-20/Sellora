@@ -11,7 +11,10 @@ class SubscriptionUsageModel {
     this.storeCount = 0,
     this.storeLimit = 1,
     this.subscriptionStatus = 'none',
+    this.currentPeriodStart,
     this.currentPeriodEnd,
+    this.cancelAtPeriodEnd = false,
+    this.cancelledAt,
     this.billingPeriodDays = 30,
   });
 
@@ -29,12 +32,21 @@ class SubscriptionUsageModel {
 
   /// 'active' | 'lapsed' | 'cancelled' | 'none'.
   final String subscriptionStatus;
+  final DateTime? currentPeriodStart;
   final DateTime? currentPeriodEnd;
+
+  /// The seller cancelled: the plan runs to [currentPeriodEnd] and then
+  /// ends, with no renewal reminder. Paying again clears it.
+  final bool cancelAtPeriodEnd;
+  final DateTime? cancelledAt;
 
   /// The window [orderCount] covers.
   final int billingPeriodDays;
 
   bool get isActive => subscriptionStatus == 'active';
+
+  /// Running, but set to end at [currentPeriodEnd].
+  bool get isEnding => isActive && cancelAtPeriodEnd;
 
   factory SubscriptionUsageModel.fromMap(Map<String, dynamic> map) {
     int count(String key, int fallback) =>
@@ -47,9 +59,15 @@ class SubscriptionUsageModel {
       storeCount: count('storeCount', 0),
       storeLimit: count('storeLimit', 1),
       subscriptionStatus: map['subscriptionStatus'] as String? ?? 'none',
+      currentPeriodStart:
+          DateTime.tryParse(map['currentPeriodStart'] as String? ?? '')
+              ?.toLocal(),
       currentPeriodEnd:
           DateTime.tryParse(map['currentPeriodEnd'] as String? ?? '')
               ?.toLocal(),
+      cancelAtPeriodEnd: map['cancelAtPeriodEnd'] as bool? ?? false,
+      cancelledAt:
+          DateTime.tryParse(map['cancelledAt'] as String? ?? '')?.toLocal(),
       billingPeriodDays: count('billingPeriodDays', 30),
     );
   }

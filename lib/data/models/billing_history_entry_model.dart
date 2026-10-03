@@ -2,7 +2,8 @@
 /// from `billing_history/{id}`. The doc id doubles as the payment provider's
 /// `api_ref`/reference — see `supabase/functions/_shared/subscriptions.js`.
 ///
-/// Every field but `status`/`paymentReference`/`paidAt` is snapshotted at
+/// Every field but `status`/`paymentReference`/`paidAt` (and the
+/// invoice number and period, set alongside them on payment) is snapshotted at
 /// creation time and never rewritten, even if an admin edits the plan's
 /// price later — the same "never modify historical fees" precedent
 /// `OrderModel`'s fee fields already follow.
@@ -20,6 +21,10 @@ class BillingHistoryEntryModel {
     this.paymentReference,
     required this.createdAt,
     this.paidAt,
+    this.paymentMethod,
+    this.invoiceNumber,
+    this.periodStart,
+    this.periodEnd,
   });
 
   final String id;
@@ -36,6 +41,30 @@ class BillingHistoryEntryModel {
   final String? paymentReference;
   final DateTime createdAt;
   final DateTime? paidAt;
+
+  /// The method the latest payment attempt used: 'MPESA', 'CARD-PAYMENT'
+  /// or 'GOOGLE-PAY'. Null until one is started.
+  final String? paymentMethod;
+
+  /// Assigned by the database when the entry is paid (INV-YYYY-NNNNNN), so
+  /// a non-null number is what makes this an invoice.
+  final String? invoiceNumber;
+
+  /// The paid time this payment added. Null on payments made before
+  /// invoices existed, other than the latest.
+  final DateTime? periodStart;
+  final DateTime? periodEnd;
+
+  bool get hasInvoice => status == 'paid' && invoiceNumber != null;
+
+  /// [paymentMethod] for people.
+  String? get paymentMethodLabel => switch (paymentMethod) {
+        null => null,
+        'MPESA' => 'M-Pesa',
+        'CARD-PAYMENT' => 'Card',
+        'GOOGLE-PAY' => 'Google Pay',
+        final other => other,
+      };
 
   factory BillingHistoryEntryModel.fromMap(Map<String, dynamic> map) {
     return BillingHistoryEntryModel(
@@ -54,6 +83,10 @@ class BillingHistoryEntryModel {
       paidAt: map['paidAt'] != null
           ? DateTime.tryParse(map['paidAt'] as String)
           : null,
+      paymentMethod: map['paymentMethod'] as String?,
+      invoiceNumber: map['invoiceNumber'] as String?,
+      periodStart: DateTime.tryParse(map['periodStart'] as String? ?? ''),
+      periodEnd: DateTime.tryParse(map['periodEnd'] as String? ?? ''),
     );
   }
 }
