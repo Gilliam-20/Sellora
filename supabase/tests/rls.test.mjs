@@ -807,5 +807,56 @@ await as({ id: S4 }, "insert into seller_billing_profiles (seller_id, payment_me
 await one('service', 'select public.delete_account_data($1) r', [S4]);
 ok('billing profile: account deletion removes it', (await as('postgres', 'select 1 from seller_billing_profiles where seller_id = $1', [S4])).rows.length === 0);
 
+// ---- 20261003000600_store_builder.sql: TODO §18.
+console.log('store builder');
+const design = (accent, sections = [{ id: 'h', type: 'hero' }]) => JSON.stringify({ theme: { colors: { accent } }, sections });
+r = await as(seller1, 'insert into store_designs (store_id, draft) values ($1, $2) returning draft_updated_at', [st1, design('#112233')]);
+ok('design: the owner saves a draft', r.rows.length === 1);
+ok('design: not for another store', await throws(() => as(seller2, 'insert into store_designs (store_id, draft) values ($1, $2)', [st1, design('#000000')])));
+ok('design: a buyer cannot create one', await throws(() => as(buyer, 'insert into store_designs (store_id, draft) values ($1, $2)', [st1, design('#000000')])));
+ok('design: the owner cannot write the published copy directly', await throws(() => as(seller1, "update store_designs set published = '{}' where store_id = $1", [st1])));
+ok('design: nor on insert', await throws(() => as(seller2, 'insert into store_designs (store_id, draft, published) values ($1, $2, $2)', [st2, design('#000000')])));
+ok('design: a draft must be an object', await throws(() => as(seller1, "update store_designs set draft = '[]' where store_id = $1", [st1])));
+ok('design: an oversized draft is refused', await throws(() => as(seller1, 'update store_designs set draft = $2 where store_id = $1', [st1, JSON.stringify({ sections: [], pad: 'x'.repeat(200000).split('').map((c, i) => c + i).join('') })])));
+ok("design: another seller can't read the draft", (await as(seller2, 'select store_id from store_designs')).rows.length === 0);
+ok('design: nor a buyer', (await as(buyer, 'select store_id from store_designs')).rows.length === 0);
+ok('design: nothing is public before publishing', (await as('anon', 'select store_id from storefront_designs where store_id = $1', [st1])).rows.length === 0);
+ok('design: another seller cannot publish it', await throws(() => as(seller2, 'select public.publish_store_design($1)', [st1])));
+ok('design: anon cannot publish', await throws(() => as('anon', 'select public.publish_store_design($1)', [st1])));
+r = await one(seller1, 'select public.publish_store_design($1) p', [st1]);
+ok('design: the owner publishes, versioned', r.p.version === 1, JSON.stringify(r));
+r = await one('anon', 'select design, published_version from storefront_designs where store_id = $1', [st1]);
+ok('design: buyers read the published design', r?.design?.theme?.colors?.accent === '#112233' && r.published_version === 1, JSON.stringify(r));
+ok('design: publishing sets the store accent', (await one('postgres', 'select primary_color_hex c from stores where id = $1', [st1])).c === '#112233');
+ok('design: publishing is audited', (await as('postgres', "select 1 from audit_logs where action = 'store.design_publish' and entity_id = $1", [st1])).rows.length === 1);
+await as(seller1, 'update store_designs set draft = $2 where store_id = $1', [st1, design('#445566')]);
+r = await one('anon', 'select design from storefront_designs where store_id = $1', [st1]);
+ok('design: a saved draft does not change the live storefront', r.design.theme.colors.accent === '#112233');
+await as(seller1, 'update store_designs set draft = $2 where store_id = $1', [st1, design('red; drop', [])]);
+await one(seller1, 'select public.publish_store_design($1) p', [st1]);
+ok('design: a malformed accent is not copied to the store', (await one('postgres', 'select primary_color_hex c from stores where id = $1', [st1])).c === '#112233');
+await as(seller1, 'update store_designs set draft = $2 where store_id = $1', [st1, JSON.stringify({ sections: 'nope' })]);
+ok('design: a draft without a sections list cannot be published', await throws(() => as(seller1, 'select public.publish_store_design($1)', [st1])));
+await as(seller1, 'update store_designs set draft = $2 where store_id = $1', [st1, design('#112233', Array.from({ length: 41 }, (_, i) => ({ id: 's' + i, type: 'richText' })))]);
+ok('design: nor one with more than 40 sections', await throws(() => as(seller1, 'select public.publish_store_design($1)', [st1])));
+await as(admin, 'update stores set is_suspended = true where id = $1', [st1]);
+ok('design: a suspended store shows no design', (await as('anon', 'select store_id from storefront_designs where store_id = $1', [st1])).rows.length === 0);
+ok('newsletter: nor takes sign-ups', await throws(() => as('anon', "select public.subscribe_to_store_newsletter($1, 'a@b.co')", [st1])));
+await as(admin, 'update stores set is_suspended = false where id = $1', [st1]);
+
+console.log('newsletter');
+r = await one('anon', "select public.subscribe_to_store_newsletter($1, '  Reader@Example.com ') s", [st1]);
+ok('newsletter: a visitor signs up', r.s === true);
+await one('anon', "select public.subscribe_to_store_newsletter($1, 'reader@example.com') s", [st1]);
+r = await as(seller1, 'select email from newsletter_subscribers where store_id = $1', [st1]);
+ok('newsletter: stored once, lower-cased', r.rows.length === 1 && r.rows[0].email === 'reader@example.com', JSON.stringify(r.rows));
+ok('newsletter: a bad address is refused', await throws(() => as('anon', "select public.subscribe_to_store_newsletter($1, 'not-an-email')", [st1])));
+ok('newsletter: an unknown store is refused', await throws(() => as('anon', "select public.subscribe_to_store_newsletter('nope', 'a@b.co')")));
+ok('newsletter: no direct inserts', await throws(() => as('anon', "insert into newsletter_subscribers (store_id, email) values ($1, 'x@y.co')", [st1])));
+ok("newsletter: another seller can't read the list", (await as(seller2, 'select id from newsletter_subscribers')).rows.length === 0);
+ok('newsletter: nor anon', (await as('anon', 'select id from newsletter_subscribers')).rows.length === 0);
+ok("newsletter: another seller can't delete from it", (await as(seller2, 'delete from newsletter_subscribers returning id')).rows.length === 0);
+ok('newsletter: the owner removes a subscriber', (await as(seller1, 'delete from newsletter_subscribers returning id')).rows.length === 1);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

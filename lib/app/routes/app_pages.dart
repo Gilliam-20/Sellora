@@ -28,6 +28,7 @@ import '../../modules/seller/product_import/product_import_view.dart';
 import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
 import '../../modules/seller/store_customize/store_customize_view.dart';
+import '../../modules/seller/store_builder/store_builder_view.dart';
 import '../../modules/seller/subscription/seller_subscription_view.dart';
 import '../../modules/storefront/storefront_binding.dart';
 import '../../modules/storefront/storefront_login_view.dart';
@@ -137,6 +138,12 @@ class AppPages {
       name: Routes.sellerStoreCustomize,
       page: () => const StoreCustomizeView(),
       binding: StoreCustomizeBinding(),
+      middlewares: [RoleMiddleware(UserRole.seller)],
+    ),
+    GetPage(
+      name: Routes.sellerStoreDesign,
+      page: () => const StoreBuilderView(),
+      binding: StoreBuilderBinding(),
       middlewares: [RoleMiddleware(UserRole.seller)],
     ),
     GetPage(

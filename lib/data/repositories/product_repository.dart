@@ -69,6 +69,16 @@ abstract class ProductRepository {
     int limit = storefrontPageSize,
   });
 
+  /// Listed products of [storeId] for a storefront's featured-products
+  /// section: the ones in [ids], in that order, when given; otherwise the
+  /// newest (or, with [bestSelling], most sold) [limit].
+  Future<List<ProductModel>> featuredProducts(
+    String storeId, {
+    List<String>? ids,
+    bool bestSelling = false,
+    int limit = 8,
+  });
+
   /// All active listings across all sellers, paged like [storeProducts] —
   /// the retired shared-marketplace feed.
   Future<List<ProductModel>> storefrontFeed({

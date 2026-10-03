@@ -90,7 +90,16 @@ per-variant pricing.
 color. Logo/banner upload to the `store-media` Storage bucket (stores branded before 2026-09-27 keep
 their inline `data:` images until re-uploaded). The storefront renders them.
 
-Not started: theme/section/block/setting models, renderer, preview and publish flows.
+2026-10-03 (TODO §18): the store builder. `StoreDesign` (`lib/data/models/store_design.dart`) is the
+Store → Theme → Sections → Blocks → Settings model, with each section type's settings described by a
+schema that drives both the builder's generic editor and validation. `StorefrontRenderer`
+(`lib/modules/storefront/design/`) renders it for buyers and for the builder's preview. Seller →
+Store design (`lib/modules/seller/store_builder/`) edits a draft and publishes it (`store_designs`,
+`publish_store_design()`, `storefront_designs`). A store that never published shows
+`StoreDesign.starter`: its banner as a hero, then the catalog.
+
+Still open: real collections (the collections section opens a category), multiple themes (§19),
+theming the product/cart/checkout pages, design history beyond draft/live.
 
 ## PHASE 7 — Customer storefront: core flow done
 

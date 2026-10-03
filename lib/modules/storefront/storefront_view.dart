@@ -4,16 +4,15 @@ import 'package:get/get.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_metrics.dart';
-import '../../core/utils/color_utils.dart';
 import '../../core/utils/image_data_url.dart';
-import '../../core/utils/responsive.dart';
 import '../../core/widgets/app_page.dart';
 import '../../core/widgets/empty_state.dart';
-import '../../core/widgets/product_card.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../buyer/shell/buyer_shell_controller.dart';
+import 'design/storefront_renderer.dart';
+import 'design/storefront_theme.dart';
 import 'storefront_controller.dart';
 
 /// The "Shop" tab of the store-scoped buyer shell (BuyerShellView), reached
@@ -22,8 +21,19 @@ class StorefrontView extends GetView<StorefrontController> {
   const StorefrontView({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final sliverPadding = centeredSliverPadding(context);
+  Widget build(BuildContext context) => Obx(() {
+        final design = controller.design.value;
+        final scaffold = _scaffold(context);
+        if (design == null) return scaffold;
+        final theme = StorefrontTheme.of(Theme.of(context), design.theme);
+        return Title(
+          title: controller.scope.current.value?.name ?? 'Sellora',
+          color: theme.colorScheme.primary,
+          child: Theme(data: theme, child: scaffold),
+        );
+      });
+
+  Widget _scaffold(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title:
@@ -72,210 +82,29 @@ class StorefrontView extends GetView<StorefrontController> {
           }),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: controller.load,
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                sliverPadding.horizontal / 2,
-                AppSpacing.md,
-                sliverPadding.horizontal / 2,
-                0,
-              ),
-              sliver: SliverToBoxAdapter(
-                child: Obx(() {
-                  final bannerUrl = controller.scope.current.value?.bannerUrl;
-                  if (bannerUrl == null || bannerUrl.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-                  final fallback =
-                      Container(height: 140, color: AppColors.mist);
-                  Widget banner;
-                  if (isDataUrl(bannerUrl)) {
-                    final bannerBytes = decodeDataUrl(bannerUrl);
-                    banner = bannerBytes == null
-                        ? fallback
-                        : Image.memory(
-                            bannerBytes,
-                            height: 140,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => fallback,
-                          );
-                  } else {
-                    banner = CachedNetworkImage(
-                      imageUrl: bannerUrl,
-                      height: 140,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => fallback,
-                      errorWidget: (_, __, ___) => fallback,
-                    );
-                  }
-                  return ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadii.card),
-                    child: banner,
-                  );
-                }),
-              ),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                sliverPadding.horizontal / 2,
-                AppSpacing.md,
-                sliverPadding.horizontal / 2,
-                0,
-              ),
-              sliver: SliverToBoxAdapter(
-                child: Obx(() {
-                  final store = controller.scope.current.value;
-                  return AppPageHeader(
-                    title: store?.name ??
-                        AppLocalizations.of(context).storefrontFallbackTitle,
-                    subtitle: store?.tagline ??
-                        AppLocalizations.of(context).storefrontFallbackTagline,
-                  );
-                }),
-              ),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                sliverPadding.horizontal / 2,
-                AppSpacing.md,
-                sliverPadding.horizontal / 2,
-                0,
-              ),
-              sliver: SliverToBoxAdapter(
-                child: AppSearchField(
-                  hintText: AppLocalizations.of(context).storefrontSearchHint,
-                  onChanged: controller.search,
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-              sliver: SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 36,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: sliverPadding.horizontal / 2,
-                    ),
-                    itemCount: controller.categories.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: AppSpacing.sm),
-                    itemBuilder: (context, index) {
-                      final category = controller.categories[index];
-                      // Each chip gets its own Obx — ListView's itemBuilder
-                      // runs outside the scope of a single Obx wrapping the
-                      // whole list, so GetX can't track reads made there.
-                      return Obx(() {
-                        final selected =
-                            controller.selectedCategory.value == category;
-                        final accent = hexToColor(controller
-                                .scope.current.value?.primaryColorHex) ??
-                            AppColors.cargoNavy;
-                        return ChoiceChip(
-                          label: Text(category),
-                          selected: selected,
-                          selectedColor: accent,
-                          labelStyle: TextStyle(
-                            color: selected ? AppColors.cloud : AppColors.ink,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          onSelected: (_) =>
-                              controller.selectCategory(category),
-                        );
-                      });
-                    },
-                  ),
-                ),
-              ),
-            ),
-            Obx(() {
-              if (controller.isLoading.value) {
-                return const SliverFillRemaining(child: AppLoadingState());
-              }
-              if (controller.scope.errorMessage.value != null) {
-                return SliverFillRemaining(
-                  child: AppErrorState(
-                    message: controller.scope.errorMessage.value!,
-                    onRetry: controller.load,
-                  ),
-                );
-              }
-              // Snapshot the RxList inside Obx's tracked scope — the sliver's
-              // itemBuilder runs later during layout, outside that scope, so
-              // indexing the RxList directly there would read the observable
-              // where GetX can no longer see it (and corrupt GetX's global
-              // tracking state for every Obx built afterwards).
-              final items = List.of(controller.items);
-              // An admin took the store offline: storefront_products hides
-              // its catalog. Deliberately vague, like createOrder's refusal.
-              if (controller.scope.current.value?.isSuspended == true) {
-                return SliverFillRemaining(
-                  child: EmptyState(
-                    icon: Icons.storefront_outlined,
-                    title: AppLocalizations.of(context).storefrontClosedTitle,
-                    message:
-                        AppLocalizations.of(context).storefrontClosedMessage,
-                  ),
-                );
-              }
-              if (items.isEmpty) {
-                return SliverFillRemaining(
-                  child: EmptyState(
-                    icon: Icons.inventory_2_outlined,
-                    title: AppLocalizations.of(context).storefrontEmptyTitle,
-                    message:
-                        AppLocalizations.of(context).storefrontEmptyMessage,
-                  ),
-                );
-              }
-              return SliverPadding(
-                padding: sliverPadding,
-                sliver: SliverGrid(
-                  gridDelegate: productGridDelegate(),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final product = items[index];
-                      return ProductCard(
-                        product: product,
-                        onTap: () {
-                          final slug = controller.scope.current.value?.slug;
-                          if (slug == null) return;
-                          Get.toNamed('/s/$slug/product', arguments: product);
-                        },
-                      );
-                    },
-                    childCount: items.length,
-                  ),
-                ),
-              );
-            }),
-            Obx(() {
-              if (controller.isLoading.value || !controller.hasMore.value) {
-                return const SliverToBoxAdapter(child: SizedBox.shrink());
-              }
-              return SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.xl),
-                  child: Center(
-                    child: controller.isLoadingMore.value
-                        ? const CircularProgressIndicator()
-                        : OutlinedButton(
-                            onPressed: controller.loadMore,
-                            child: Text(AppLocalizations.of(context).loadMore),
-                          ),
-                  ),
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
+      body: Obx(() {
+        final store = controller.scope.current.value;
+        final design = controller.design.value;
+        // An admin took the store offline: storefront_products hides its
+        // catalog. Deliberately vague, like createOrder's refusal.
+        if (store?.isSuspended == true) {
+          return EmptyState(
+            icon: Icons.storefront_outlined,
+            title: AppLocalizations.of(context).storefrontClosedTitle,
+            message: AppLocalizations.of(context).storefrontClosedMessage,
+          );
+        }
+        if (design == null) return const AppLoadingState();
+        return StorefrontRenderer(
+          controller: controller,
+          design: design,
+          onOpenProduct: (product) {
+            final slug = store?.slug;
+            if (slug == null) return;
+            Get.toNamed('/s/$slug/product', arguments: product);
+          },
+        );
+      }),
     );
   }
 }

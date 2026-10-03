@@ -3,22 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../../app/theme/app_colors.dart';
+import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/i18n/countries.dart';
-import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/image_data_url.dart';
 import '../../../core/utils/responsive.dart';
-import '../../../core/utils/validators.dart';
 import '../../../core/widgets/common.dart';
 import 'store_customize_controller.dart';
-
-const _presetHexes = [
-  '#303F9F', // Cargo Navy
-  '#FFC107', // Manifest Gold
-  '#2EC4B6', // Horizon Teal
-  '#E0553F', // Danger red, as a bold option
-  '#8C6FE0', // Admin purple, as a bold option
-];
 
 class StoreCustomizeView extends GetView<StoreCustomizeController> {
   const StoreCustomizeView({super.key});
@@ -33,7 +24,7 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Customize store')),
+      appBar: AppBar(title: const Text('Store details')),
       body: ResponsiveCenter(
         maxWidth: 560,
         child: ListView(
@@ -84,80 +75,18 @@ class StoreCustomizeView extends GetView<StoreCustomizeController> {
                   label: const Text('Upload from device'),
                 )),
             const SizedBox(height: AppSpacing.lg),
-            Text('Banner', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: controller.bannerUrlCtrl,
-              decoration: const InputDecoration(labelText: 'Banner URL'),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _ImagePreview(
-                controller: controller.bannerUrlCtrl, isCircle: false),
-            const SizedBox(height: AppSpacing.sm),
-            Obx(() => OutlinedButton.icon(
-                  onPressed: controller.isPickingBanner.value
-                      ? null
-                      : controller.pickBanner,
-                  icon: controller.isPickingBanner.value
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.upload_outlined),
-                  label: const Text('Upload from device'),
-                )),
-            const SizedBox(height: AppSpacing.lg),
-            Text('Accent color', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: AppSpacing.sm),
-            Obx(
-              () => Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: _presetHexes.map((hex) {
-                  final selected = controller.colorHex.value?.toUpperCase() ==
-                      hex.toUpperCase();
-                  return GestureDetector(
-                    onTap: () => controller.selectPreset(hex),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: hexToColor(hex),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: selected ? AppColors.ink : AppColors.hairline,
-                          width: selected ? 2 : 1,
-                        ),
-                      ),
-                      child: selected
-                          ? const Icon(Icons.check,
-                              color: AppColors.cloud, size: 18)
-                          : null,
-                    ),
-                  );
-                }).toList(),
+            Material(
+              color: AppColors.cargoNavy.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(AppRadii.stub),
+              child: ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('Colors, fonts, banner and homepage'),
+                subtitle: const Text(
+                    'Set your storefront theme and homepage sections in Store design.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Get.toNamed(Routes.sellerStoreDesign),
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: controller.hexCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'Hex color', hintText: '#16213E'),
-              onChanged: controller.setHexFromField,
-            ),
-            Obx(() {
-              final error = Validators.hexColor(controller.colorHex.value);
-              if (error == null) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.xs),
-                child: Text(error,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelSmall
-                        ?.copyWith(color: AppColors.danger)),
-              );
-            }),
             const SizedBox(height: AppSpacing.lg),
             Text('Shipping zones',
                 style: Theme.of(context).textTheme.titleSmall),

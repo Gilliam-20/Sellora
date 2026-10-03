@@ -77,6 +77,30 @@ class SupabaseProductRepository extends GetxService
   }
 
   @override
+  Future<List<ProductModel>> featuredProducts(
+    String storeId, {
+    List<String>? ids,
+    bool bestSelling = false,
+    int limit = 8,
+  }) async {
+    final query = _db.storefrontProducts.select().eq('store_id', storeId);
+    if (ids != null) {
+      if (ids.isEmpty) return const [];
+      final found = {
+        for (final p in _models(await query.inFilter('id', ids))) p.id: p,
+      };
+      // A product unlisted since it was picked just drops out.
+      return [
+        for (final id in ids)
+          if (found[id] case final p?) p,
+      ].take(limit).toList();
+    }
+    return _models(await query
+        .order(bestSelling ? 'sold_count' : 'created_at', ascending: false)
+        .limit(limit));
+  }
+
+  @override
   Future<List<ProductModel>> storefrontFeed({
     String? keyword,
     String? category,

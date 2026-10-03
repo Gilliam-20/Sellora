@@ -9,6 +9,8 @@ import 'orders/seller_order_detail_controller.dart';
 import 'orders/seller_orders_controller.dart';
 import 'product_import/product_import_controller.dart';
 import 'shell/seller_shell_controller.dart';
+import '../storefront/storefront_controller.dart';
+import 'store_builder/store_builder_controller.dart';
 import 'store_customize/store_customize_controller.dart';
 import 'subscription/seller_subscription_controller.dart';
 
@@ -49,6 +51,18 @@ class StoreCustomizeBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<StoreCustomizeController>(() => StoreCustomizeController());
+  }
+}
+
+/// The builder, and the catalog its preview renders (tagged, so it never
+/// meets a buyer storefront's own controller).
+class StoreBuilderBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<StoreBuilderController>(() => StoreBuilderController());
+    Get.lazyPut<StorefrontController>(
+        () => StorefrontController(previewMode: true),
+        tag: StoreBuilderController.previewTag);
   }
 }
 

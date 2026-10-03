@@ -25,6 +25,17 @@ class SupabaseService extends GetxService {
   SupabaseQueryBuilder get storefrontProducts =>
       client.from('storefront_products');
 
+  /// Each store's design: the owner's draft and the published copy.
+  SupabaseQueryBuilder get storeDesigns => client.from('store_designs');
+
+  /// Published designs of open storefronts; what buyers read. Read-only.
+  SupabaseQueryBuilder get storefrontDesigns =>
+      client.from('storefront_designs');
+
+  /// Emails collected by a storefront's newsletter section; owner reads.
+  SupabaseQueryBuilder get newsletterSubscribers =>
+      client.from('newsletter_subscribers');
+
   /// One table for every store's orders; RLS limits reads to the buyer,
   /// the seller, and admin.
   SupabaseQueryBuilder get orders => client.from('orders');

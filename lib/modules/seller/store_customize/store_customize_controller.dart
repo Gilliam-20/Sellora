@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/image_data_url.dart';
 import '../../../data/models/store_model.dart';
 import '../../../data/repositories/store_repository.dart';
 import '../../storefront/store_scope.dart';
 
-/// Lets a seller edit the branding fields their [StoreModel] already
-/// carries (name, tagline, logo, banner, accent color) — the first slice of
-/// Phase 6's Store Builder. Sections/blocks/themes are a separate, larger
-/// piece of work; this is scoped to what `StoreModel` already stores.
+/// Store details: name, tagline, logo and shipping zones. Colors, the
+/// banner and everything else on the storefront are the store builder's
+/// (`lib/modules/seller/store_builder/`).
 class StoreCustomizeController extends GetxController {
   StoreCustomizeController({StoreScope? scope, StoreRepository? repository})
       : scope = scope ?? Get.find<StoreScope>(),
@@ -23,16 +21,11 @@ class StoreCustomizeController extends GetxController {
   late final TextEditingController nameCtrl;
   late final TextEditingController taglineCtrl;
   late final TextEditingController logoUrlCtrl;
-  late final TextEditingController bannerUrlCtrl;
-  late final TextEditingController hexCtrl;
-
-  final colorHex = RxnString();
 
   /// Enabled `ShippingZone` ids — checkout only offers countries in these.
   final shippingZones = <String>[].obs;
   final isSaving = false.obs;
   final isPickingLogo = false.obs;
-  final isPickingBanner = false.obs;
 
   final _picker = ImagePicker();
 
@@ -43,9 +36,6 @@ class StoreCustomizeController extends GetxController {
     nameCtrl = TextEditingController(text: store?.name);
     taglineCtrl = TextEditingController(text: store?.tagline);
     logoUrlCtrl = TextEditingController(text: store?.logoUrl);
-    bannerUrlCtrl = TextEditingController(text: store?.bannerUrl);
-    colorHex.value = store?.primaryColorHex;
-    hexCtrl = TextEditingController(text: store?.primaryColorHex);
     shippingZones
         .assignAll(store?.shippingZones ?? StoreModel.allShippingZoneIds);
   }
@@ -55,14 +45,7 @@ class StoreCustomizeController extends GetxController {
     nameCtrl.dispose();
     taglineCtrl.dispose();
     logoUrlCtrl.dispose();
-    bannerUrlCtrl.dispose();
-    hexCtrl.dispose();
     super.onClose();
-  }
-
-  void selectPreset(String hex) {
-    colorHex.value = hex;
-    hexCtrl.text = hex;
   }
 
   /// Toggles zone [id] on or off. The last enabled zone can't be turned
@@ -78,14 +61,7 @@ class StoreCustomizeController extends GetxController {
     return true;
   }
 
-  void setHexFromField(String value) {
-    colorHex.value = value.trim().isEmpty ? null : value.trim();
-  }
-
   Future<void> pickLogo() => _pickImage(logoUrlCtrl, isPickingLogo, 'logo');
-
-  Future<void> pickBanner() =>
-      _pickImage(bannerUrlCtrl, isPickingBanner, 'banner');
 
   /// Uploads the picked photo to Supabase Storage and puts its public URL
   /// in [target]; Save then writes that URL onto the store like a pasted one.
@@ -128,17 +104,10 @@ class StoreCustomizeController extends GetxController {
     if (store == null) return false;
     isSaving.value = true;
     try {
-      final hex = colorHex.value?.trim();
-      // copyWith's `?? this.field` pattern means null leaves a field
-      // unchanged — only pass a hex once it's valid, otherwise keep whatever
-      // color the store already had.
-      final validHex = hex != null && hexToColor(hex) != null ? hex : null;
       final updated = store.copyWith(
         name: nameCtrl.text.trim().isEmpty ? null : nameCtrl.text.trim(),
         tagline: taglineCtrl.text.trim(),
         logoUrl: logoUrlCtrl.text.trim(),
-        bannerUrl: bannerUrlCtrl.text.trim(),
-        primaryColorHex: validHex,
         shippingZones: shippingZones.toList(),
       );
       await _storeRepository.updateStore(updated);

@@ -42,6 +42,7 @@ abstract class Routes {
   static const sellerProductImport = '/seller/import';
   static const sellerManageVariants = '/seller/variants';
   static const sellerStoreCustomize = '/seller/store/customize';
+  static const sellerStoreDesign = '/seller/store/design';
   static const sellerSubscription = '/seller/subscription';
   static const sellerCustomers = '/seller/customers';
   static const sellerMarketing = '/seller/marketing';

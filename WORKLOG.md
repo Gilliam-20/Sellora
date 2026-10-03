@@ -6,6 +6,91 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-03 — TODO §18: store builder
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration
+`20261003000600_store_builder.sql` joins rollout step 1 in TODO.md. It must land before the new web
+build: the storefront reads `storefront_designs`. It falls back to the starter layout if that read
+fails, but the builder can't save without the table. No Edge Function change.
+
+**Why:** user request: "work on phase 18" (TODO.md §18 Store builder; PHASE 6 in the plan).
+
+**Where it started:** "Customize store" edited name, tagline, logo, banner and accent color, and
+the storefront was one hard-coded layout (banner, title, search, chips, grid).
+
+**Decisions (made here, reversible):**
+- **One JSON design document per store, draft and published.** `store_designs.draft` is the
+  owner's to write (column-level grants: `draft` only). `published` changes only through
+  `publish_store_design()`, which audits, versions, and copies the accent onto
+  `stores.primary_color_hex` so the screens still reading it match. Buyers read the public
+  `storefront_designs` view, which hides suspended stores and sellers not in good standing,
+  the same rule as `storefront_products`.
+- **The app owns the schema; the database bounds it** (an object, 128 KB, at most 40 sections, a
+  sections array required to publish). The model reads every document defensively. Unknown section
+  types and duplicate ids are dropped, settings are coerced through each type's schema (lengths
+  clipped, unknown options reset), fonts must be on the vetted list, and **any link or image that
+  isn't an absolute http(s) URL is discarded on read**. A seller could write the JSON directly
+  through the API, so this check runs where the storefront renders, not only in the editor.
+  `javascript:` links never reach `launchUrl`.
+- **Schema-driven editing.** Each `SectionType` lists its `SettingDef`s (text, textarea, image,
+  select, toggle, link, products) and an optional `BlockSchema` with min/max. The builder's editor
+  is generic over them, so a new section type is a schema entry plus a renderer widget.
+- **Section types:** hero, featured products (newest, best sellers or hand-picked, up to 12), all
+  products (the catalog: always present, can be moved but not removed, and publishing requires it to
+  be visible), collections, banners (1–3), testimonials (up to 6), newsletter (one per page), text.
+  The announcement bar, menu (up to 8 links) and footer (about, up to 8 links, six social networks,
+  "Powered by Sellora" toggle) sit outside the section list.
+- **"Collections" open a product category.** No collection model exists yet (PHASE 5), so a
+  collection tile is a label, an image and the category it filters the catalog to. A real
+  collection model can replace the block's `category` setting later.
+- **Links stay on the page** where they can: home, all products, a category (filters the catalog
+  and scrolls to it), a section (scrolls to it), or an external URL.
+- **Theme scope.** The storefront tab (app bar included) renders in the seller's colors, fonts and
+  button shape (`StorefrontTheme`). Product, cart and checkout pages stay Meridian for now. The
+  favicon swaps in on the web storefront and goes back to Sellora's when it closes. `package:web`
+  is now a direct dependency for this.
+- **A store that never published** shows `StoreDesign.starter`: its banner as a hero (only an http(s)
+  one; legacy inline `data:` banners aren't carried over), then the catalog, in its existing accent.
+  Existing storefronts look the same until their seller publishes.
+- **Newsletter.** `subscribe_to_store_newsletter()` (anon allowed) validates the address, refuses
+  closed stores, lower-cases, and dedupes quietly so the answer never reveals who's subscribed. It is
+  rate-limited to 60 an hour per store, because anonymous callers have no other key. The seller sees
+  the list in the newsletter section's editor, copies it, and removes people. Sellora sends nothing.
+- **Banner and accent moved out of "Customize store"** (now "Store details": name, tagline, logo,
+  shipping zones) so two screens don't edit the same thing. After publishing, the builder updates the
+  in-memory store's accent so Store details doesn't write the old one back.
+
+**What changed:**
+- **Migration.** `store_designs` (+ touch trigger), `publish_store_design`, `storefront_designs`,
+  `newsletter_subscribers`, `subscribe_to_store_newsletter`.
+- **App.** `StoreDesign` and friends (`lib/data/models/store_design.dart`).
+  `StoreDesignRepository` + Supabase implementation (registered in InitialBinding).
+  `ProductRepository.featuredProducts`. `StorefrontController` loads the design, featured products
+  and newsletter sign-ups, with a `previewMode`. The renderer and theme are in
+  `lib/modules/storefront/design/`, and `StorefrontView` is now a thin shell around the renderer.
+  The builder (`lib/modules/seller/store_builder/`, route `/seller/store/design`) has a side panel
+  with drill-down editors, sections reordered by drag, a live preview with a desktop/phone toggle
+  (Edit/Preview tabs on narrow screens), tap-to-select in the preview, Save/Publish, problems listed
+  before publishing, discard, revert to live, and a leave-without-saving guard. Entry points: Profile
+  → Store design and the dashboard checklist.
+
+**Tests:** `flutter analyze`: only the two existing infos. `flutter test`: the one failure is the
+known `seller_shell_controller_test` one. New: `store_design_test` (12: starter, round trip, hostile
+document, link safety, problems, controller editing/saving/publishing) and
+`storefront_renderer_test` (4: every section at phone and desktop widths with no layout errors,
+collection tile filtering, preview not signing anyone up). `supabase npm test`: 376 RLS checks (31
+new), 357 Deno steps. `flutter build web` compiles. Not run against a real backend or looked at in a
+browser: the app needs a Supabase project with the migrations applied.
+
+**Not done:**
+- Multiple themes and the five starter themes (TODO §19). `themeId` is in the document, ready for it.
+- Product detail, cart and checkout in the store's theme.
+- Design history (only draft and live), scheduled publishing, per-section mobile/desktop visibility.
+- Newsletter export as a file, double opt-in, and removing a deleted buyer's address (sign-ups
+  aren't tied to an account).
+
+---
+
 ## 2026-10-03 — TODO §17: billing page
 
 **Status:** done in code and tested. **Not applied or deployed.** The new migration

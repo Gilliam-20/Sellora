@@ -16,6 +16,8 @@ import '../../data/repositories/supabase_order_repository.dart';
 import '../../data/repositories/supabase_notification_repository.dart';
 import '../../data/repositories/supabase_product_repository.dart';
 import '../../data/repositories/supabase_store_repository.dart';
+import '../../data/repositories/store_design_repository.dart';
+import '../../data/repositories/supabase_store_design_repository.dart';
 import '../../data/repositories/supabase_subscription_repository.dart';
 import '../../data/repositories/order_repository.dart';
 import '../../data/repositories/notification_repository.dart';
@@ -57,6 +59,8 @@ class InitialBinding extends Bindings {
     // Sign-up creates a seller's store server-side (the handle_new_user
     // trigger), so AuthRepository no longer depends on StoreRepository.
     Get.put<StoreRepository>(SupabaseStoreRepository(), permanent: true);
+    Get.put<StoreDesignRepository>(SupabaseStoreDesignRepository(),
+        permanent: true);
     Get.put<AuthRepository>(SupabaseAuthRepository(), permanent: true);
 
     Get.put(CjDropshippingService(), permanent: true);

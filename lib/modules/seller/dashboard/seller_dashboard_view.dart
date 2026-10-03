@@ -579,7 +579,7 @@ class _OnboardingChecklist extends GetView<SellerDashboardController> {
       (
         'Customize your storefront',
         controller.hasCustomizedStore.value,
-        () => Get.toNamed(Routes.sellerStoreCustomize)
+        () => Get.toNamed(Routes.sellerStoreDesign)
       ),
       (
         'Make your first sale',
