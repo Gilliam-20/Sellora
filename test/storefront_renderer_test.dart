@@ -147,6 +147,9 @@ class _EmptyProducts implements ProductRepository {
   Future<List<ProductModel>> storeProducts(String storeId,
           {String? keyword,
           String? category,
+          StoreProductSort sort = StoreProductSort.newest,
+          double? minPrice,
+          double? maxPrice,
           int offset = 0,
           int limit = storefrontPageSize}) async =>
       const [];

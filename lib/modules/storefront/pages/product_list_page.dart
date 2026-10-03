@@ -1,10 +1,15 @@
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../../app/theme/app_metrics.dart';
+import '../../../core/i18n/currencies.dart';
+import '../../../core/i18n/money.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/app_page.dart';
 import '../../../core/widgets/empty_state.dart';
@@ -12,6 +17,7 @@ import '../../../core/widgets/product_card.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/models/store_design.dart';
 import '../../../data/repositories/product_repository.dart';
+import '../../../data/services/currency_service.dart';
 import '../design/storefront_theme.dart';
 import '../shell/storefront_links.dart';
 import '../shell/storefront_page.dart';
@@ -19,10 +25,48 @@ import '../storefront_session.dart';
 
 enum ProductListMode { shop, collection, search }
 
-/// One page of the store's products, filtered (TODO §20): the whole shop
+/// A price band a visitor filters by, in the [currency] they typed it in
+/// (their display currency then). Either end may be open.
+class PriceRange {
+  const PriceRange({this.min, this.max, required this.currency});
+  final double? min;
+  final double? max;
+  final String currency;
+
+  bool get isEmpty => min == null && max == null;
+
+  /// From a URL's `min`, `max` and `cur`; null if neither bound reads as a
+  /// non-negative number or the currency isn't one Sellora knows.
+  static PriceRange? fromParameters(Map<String, String?> params) {
+    double? amount(String key) {
+      final v = double.tryParse(params[key]?.trim() ?? '');
+      return v == null || v < 0 || !v.isFinite ? null : v;
+    }
+
+    final currency = params['cur']?.toUpperCase();
+    if (currency == null || !Currencies.isSupported(currency)) return null;
+    final range =
+        PriceRange(min: amount('min'), max: amount('max'), currency: currency);
+    return range.isEmpty ? null : range;
+  }
+
+  Map<String, String> toParameters() => {
+        if (min != null) 'min': _number(min!),
+        if (max != null) 'max': _number(max!),
+        'cur': currency,
+      };
+
+  static String _number(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+}
+
+/// One page of the store's products (TODO §20, §21): the whole shop
 /// (`/s/{slug}/shop`, with category chips), one collection
 /// (`/s/{slug}/collections/{handle}`), or search results
-/// (`/s/{slug}/search?q=`).
+/// (`/s/{slug}/search?q=`). Each can be sorted (`sort=`) and narrowed to a
+/// price range (`min=`, `max=`, `cur=`), and the shop or search to a
+/// category (`category=`). Those are read from the URL and, on web,
+/// written back to it, so a filtered list can be shared or refreshed.
 ///
 /// Owned by its page (GetBuilder, not a route binding): a visitor can open
 /// one collection on top of another, and each needs its own.
@@ -32,11 +76,19 @@ class ProductListController extends GetxController {
     required this.slug,
     this.handle,
     String? query,
+    Map<String, String?> parameters = const {},
     StorefrontSession? session,
     ProductRepository? products,
+    CurrencyService? currency,
+    void Function(String path)? onPathChanged,
   })  : session = session ?? Get.find<StorefrontSession>(),
         _products = products ?? Get.find<ProductRepository>(),
-        query = (query ?? '').obs;
+        _currency = currency ?? Get.find<CurrencyService>(),
+        _onPathChanged = onPathChanged ?? _replaceBrowserUrl,
+        query = (query ?? '').obs,
+        sort = StoreProductSort.parse(parameters['sort']).obs,
+        priceRange = Rxn(PriceRange.fromParameters(parameters)),
+        _initialCategory = parameters['category'];
 
   final ProductListMode mode;
   final String slug;
@@ -45,6 +97,9 @@ class ProductListController extends GetxController {
   final String? handle;
   final StorefrontSession session;
   final ProductRepository _products;
+  final CurrencyService _currency;
+  final void Function(String path) _onPathChanged;
+  final String? _initialCategory;
 
   final items = <ProductModel>[].obs;
   final isLoading = true.obs;
@@ -52,6 +107,8 @@ class ProductListController extends GetxController {
   final hasMore = false.obs;
   final error = RxnString();
   final RxString query;
+  final Rx<StoreProductSort> sort;
+  final Rxn<PriceRange> priceRange;
 
   /// The category shown: the collection's, or the shop's chip ('All' for
   /// none).
@@ -59,6 +116,11 @@ class ProductListController extends GetxController {
 
   /// A collection handle that matches none of the store's categories.
   final notFound = false.obs;
+
+  /// The currency the store's listings are priced in, which a price range
+  /// is converted into before it's sent. Learned from the first product
+  /// seen.
+  String? _listingCurrency;
 
   Timer? _debounce;
 
@@ -84,6 +146,11 @@ class ProductListController extends GetxController {
         return;
       }
       category.value = name;
+    } else if (_initialCategory case final wanted?) {
+      // Only one the store has: there'd be no chip to clear another.
+      final name = session.categories
+          .firstWhereOrNull((c) => c.toLowerCase() == wanted.toLowerCase());
+      if (name != null) category.value = name;
     }
     await load();
   }
@@ -93,6 +160,70 @@ class ProductListController extends GetxController {
         ProductListMode.collection => category.value,
         ProductListMode.search => 'Search',
       };
+
+  /// The shop and search offer category chips; a collection is one
+  /// category already.
+  bool get canPickCategory => mode != ProductListMode.collection;
+
+  /// How many filters narrow the list, for the Filter button's badge.
+  int get activeFilterCount =>
+      (priceRange.value == null ? 0 : 1) +
+      (canPickCategory && category.value != 'All' ? 1 : 0);
+
+  /// This page's URL with its current search, sort and filters.
+  String get currentPath {
+    final base = switch (mode) {
+      ProductListMode.shop => StorefrontPaths.shop,
+      ProductListMode.search => StorefrontPaths.search,
+      ProductListMode.collection =>
+        '${StorefrontPaths.collections}/${handle ?? ''}',
+    };
+    final params = <String, String>{
+      if (mode == ProductListMode.search && query.value.trim().isNotEmpty)
+        'q': query.value.trim(),
+      if (canPickCategory && category.value != 'All')
+        'category': category.value,
+      if (sort.value != StoreProductSort.newest) 'sort': sort.value.param,
+      ...?priceRange.value?.toParameters(),
+    };
+    final path = session.path(base);
+    return params.isEmpty
+        ? path
+        : Uri(path: path, queryParameters: params).toString();
+  }
+
+  /// [priceRange]'s bounds in the listings' currency, at today's rate.
+  Future<(double?, double?)> _priceBounds() async {
+    final range = priceRange.value;
+    if (range == null) return (null, null);
+    final store = session.store!;
+    final listing = _listingCurrency ??=
+        (await _products.storeProducts(store.id, limit: 1))
+                .firstOrNull
+                ?.currency ??
+            store.currencyCode;
+    double? convert(double? v) => v == null || range.currency == listing
+        ? v
+        : _currency
+            .convertMoney(Money.fromMajor(v, range.currency), listing)
+            .toMajor();
+
+    return (convert(range.min), convert(range.max));
+  }
+
+  Future<List<ProductModel>> _fetch({int offset = 0}) async {
+    final store = session.store!;
+    final (minPrice, maxPrice) = await _priceBounds();
+    final page = await _products.storeProducts(store.id,
+        keyword: query.value.trim(),
+        category: category.value,
+        sort: sort.value,
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+        offset: offset);
+    if (page.isNotEmpty) _listingCurrency ??= page.first.currency;
+    return page;
+  }
 
   Future<void> load() async {
     final store = session.store;
@@ -107,8 +238,7 @@ class ProductListController extends GetxController {
     isLoading.value = true;
     error.value = null;
     try {
-      final page = await _products.storeProducts(store.id,
-          keyword: query.value.trim(), category: category.value);
+      final page = await _fetch();
       items.assignAll(page);
       hasMore.value = page.length == storefrontPageSize;
     } catch (e) {
@@ -124,10 +254,7 @@ class ProductListController extends GetxController {
     if (store == null || !hasMore.value || isLoadingMore.value) return;
     isLoadingMore.value = true;
     try {
-      final page = await _products.storeProducts(store.id,
-          keyword: query.value.trim(),
-          category: category.value,
-          offset: items.length);
+      final page = await _fetch(offset: items.length);
       items.addAll(page);
       hasMore.value = page.length == storefrontPageSize;
     } catch (e) {
@@ -141,12 +268,46 @@ class ProductListController extends GetxController {
   void search(String text) {
     query.value = text;
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 350), load);
+    _debounce = Timer(const Duration(milliseconds: 350), _changed);
   }
 
   void selectCategory(String name) {
     category.value = name;
+    _changed();
+  }
+
+  void setSort(StoreProductSort value) {
+    if (value == sort.value) return;
+    sort.value = value;
+    _changed();
+  }
+
+  /// [min]/[max] in the visitor's display currency; both null clears the
+  /// range. Typed the wrong way round, they're swapped.
+  void setPriceRange(double? min, double? max) {
+    if (min != null && max != null && min > max) (min, max) = (max, min);
+    final range =
+        PriceRange(min: min, max: max, currency: _currency.code.value);
+    priceRange.value = range.isEmpty ? null : range;
+    _changed();
+  }
+
+  void clearFilters() {
+    priceRange.value = null;
+    if (canPickCategory) category.value = 'All';
+    _changed();
+  }
+
+  void _changed() {
+    _onPathChanged(currentPath);
     load();
+  }
+
+  /// Rewrites the address bar without navigating (web only).
+  static void _replaceBrowserUrl(String path) {
+    if (!kIsWeb) return;
+    SystemNavigator.routeInformationUpdated(
+        uri: Uri.parse(path), replace: true);
   }
 }
 
@@ -165,6 +326,7 @@ class ProductListPage extends StatelessWidget {
         slug: Get.parameters['slug'] ?? '',
         handle: Get.parameters['handle'],
         query: Get.parameters['q'],
+        parameters: Get.parameters,
       ),
       builder: (c) => Obx(() => StorefrontPage(
             title: c.notFound.value ? 'Not found' : c.title,
@@ -205,6 +367,17 @@ class ProductListPage extends StatelessWidget {
               child: AppErrorState(message: error, onRetry: c.load));
         }
         final items = List.of(c.items);
+        if (items.isEmpty && c.activeFilterCount > 0) {
+          return SliverToBoxAdapter(
+            child: EmptyState(
+              icon: Icons.filter_alt_off_outlined,
+              title: 'Nothing matches these filters',
+              message: 'Try a wider price range or another category.',
+              actionLabel: 'Clear filters',
+              onAction: c.clearFilters,
+            ),
+          );
+        }
         if (items.isEmpty) {
           final searching = c.mode == ProductListMode.search;
           return SliverToBoxAdapter(
@@ -278,7 +451,7 @@ class _Header extends StatelessWidget {
               return Text(style.heading(c.title),
                   style: style.headingStyle(textTheme.headlineSmall));
             }),
-          if (c.mode == ProductListMode.shop)
+          if (c.canPickCategory)
             Obx(() {
               final categories = ['All', ...c.session.categories];
               if (categories.length < 2) return const SizedBox.shrink();
@@ -304,6 +477,207 @@ class _Header extends StatelessWidget {
                 ),
               );
             }),
+          _Toolbar(controller: c),
+        ],
+      ),
+    );
+  }
+}
+
+/// Price filter on the left, sort on the right.
+class _Toolbar extends StatelessWidget {
+  const _Toolbar({required this.controller});
+  final ProductListController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Obx(() {
+        final range = c.priceRange.value;
+        // Each side shrinks (ellipsized) rather than overflow a narrow
+        // phone.
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: range == null
+                    ? OutlinedButton.icon(
+                        key: const ValueKey('product-price-filter'),
+                        onPressed: () => _editPrice(context),
+                        icon: const Icon(Icons.tune, size: 18),
+                        label: const Text('Price'),
+                      )
+                    : InputChip(
+                        key: const ValueKey('product-price-filter'),
+                        label: Text(priceRangeLabel(range),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onPressed: () => _editPrice(context),
+                        onDeleted: () => c.setPriceRange(null, null),
+                        deleteButtonTooltipMessage: 'Remove price filter',
+                      ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Flexible(
+              child: PopupMenuButton<StoreProductSort>(
+                key: const ValueKey('product-sort'),
+                tooltip: 'Sort',
+                initialValue: c.sort.value,
+                onSelected: c.setSort,
+                itemBuilder: (_) => [
+                  for (final s in StoreProductSort.values)
+                    PopupMenuItem(value: s, child: Text(s.label)),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.sort, size: 18),
+                      const SizedBox(width: AppSpacing.xs),
+                      Flexible(
+                        child: Text(c.sort.value.label,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  Future<void> _editPrice(BuildContext context) async {
+    final range = await showModalBottomSheet<(double?, double?)>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _PriceSheet(range: controller.priceRange.value),
+    );
+    if (range != null) controller.setPriceRange(range.$1, range.$2);
+  }
+}
+
+/// "KSh 500 – KSh 2,000", "From KSh 500" or "Up to KSh 2,000", in the
+/// currency the range was typed in.
+String priceRangeLabel(PriceRange range) {
+  String money(double v) =>
+      Formatters.money(Money.fromMajor(v, range.currency));
+  return switch ((range.min, range.max)) {
+    (final min?, final max?) => '${money(min)} – ${money(max)}',
+    (final min?, null) => 'From ${money(min)}',
+    (null, final max?) => 'Up to ${money(max)}',
+    (null, null) => 'Any price',
+  };
+}
+
+/// Min and max price, in the visitor's display currency. Pops
+/// `(min, max)`, both null to clear, or nothing if dismissed.
+class _PriceSheet extends StatefulWidget {
+  const _PriceSheet({required this.range});
+  final PriceRange? range;
+
+  @override
+  State<_PriceSheet> createState() => _PriceSheetState();
+}
+
+class _PriceSheetState extends State<_PriceSheet> {
+  final _currency = Get.find<CurrencyService>().code.value;
+
+  /// A range typed in another currency is shown converted into this one.
+  late final _min = TextEditingController(text: _start(widget.range?.min));
+  late final _max = TextEditingController(text: _start(widget.range?.max));
+
+  String _start(double? v) {
+    final range = widget.range;
+    if (v == null || range == null) return '';
+    final amount = range.currency == _currency
+        ? v
+        : Get.find<CurrencyService>()
+            .convertMoney(Money.fromMajor(v, range.currency), _currency)
+            .toMajor();
+    return amount == amount.roundToDouble()
+        ? amount.toStringAsFixed(0)
+        : amount.toStringAsFixed(2);
+  }
+
+  @override
+  void dispose() {
+    _min.dispose();
+    _max.dispose();
+    super.dispose();
+  }
+
+  static double? _parse(String text) {
+    final v = double.tryParse(text.replaceAll(',', '').trim());
+    return v == null || v < 0 ? null : v;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    InputDecoration field(String label) => InputDecoration(
+        labelText: label, prefixText: '${Currencies.of(_currency).symbol} ');
+    final digits = [
+      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+    ];
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg,
+          AppSpacing.lg + MediaQuery.viewInsetsOf(context).bottom),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Price', style: textTheme.titleLarge),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('price-min'),
+                  controller: _min,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: digits,
+                  decoration: field('Min'),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('price-max'),
+                  controller: _max,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: digits,
+                  decoration: field('Max'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, (null, null)),
+                child: const Text('Clear'),
+              ),
+              const Spacer(),
+              ElevatedButton(
+                key: const ValueKey('price-apply'),
+                onPressed: () => Navigator.pop(
+                    context, (_parse(_min.text), _parse(_max.text))),
+                child: const Text('Show results'),
+              ),
+            ],
+          ),
         ],
       ),
     );

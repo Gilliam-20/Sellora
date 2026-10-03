@@ -61,6 +61,9 @@ class SupabaseProductRepository extends GetxService
     String storeId, {
     String? keyword,
     String? category,
+    StoreProductSort sort = StoreProductSort.newest,
+    double? minPrice,
+    double? maxPrice,
     int offset = 0,
     int limit = storefrontPageSize,
   }) async {
@@ -71,8 +74,20 @@ class SupabaseProductRepository extends GetxService
     if (keyword != null && keyword.isNotEmpty) {
       query = query.ilike('title', '%${_escapeLike(keyword)}%');
     }
+    if (minPrice != null) query = query.gte('sell_price', minPrice);
+    if (maxPrice != null) query = query.lte('sell_price', maxPrice);
+    final (column, ascending) = switch (sort) {
+      StoreProductSort.newest => ('created_at', false),
+      StoreProductSort.bestSelling => ('sold_count', false),
+      StoreProductSort.priceLowHigh => ('sell_price', true),
+      StoreProductSort.priceHighLow => ('sell_price', false),
+      StoreProductSort.titleAz => ('title', true),
+    };
+    // `id` breaks ties, so equal prices or counts don't shuffle between
+    // pages.
     return _models(await query
-        .order('created_at', ascending: false)
+        .order(column, ascending: ascending)
+        .order('id', ascending: true)
         .range(offset, offset + limit - 1));
   }
 

@@ -38,8 +38,42 @@ class _CheckoutViewState extends State<CheckoutView> {
   final _cityCtrl = TextEditingController();
   final _provinceCtrl = TextEditingController();
   final _zipCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController(); // M-Pesa
+  // M-Pesa: the account's phone, when it's one M-Pesa can charge.
+  late final _phoneCtrl = TextEditingController(text: () {
+    final phone = Get.find<AuthRepository>().cachedUser?.phone;
+    return phone != null && Validators.mpesaPhone(phone) == null ? phone : '';
+  }());
   final _discountCtrl = TextEditingController();
+
+  /// Fills the address from the customer's last order here, once loaded.
+  Worker? _savedAddressWorker;
+
+  /// Whether the address form was filled from that order.
+  var _prefilled = false;
+
+  /// Only into an untouched form: never over what the buyer typed.
+  void _prefill(ShippingAddress? address) {
+    if (address == null || !mounted || _prefilled) return;
+    if (_line1Ctrl.text.isNotEmpty || _cityCtrl.text.isNotEmpty) return;
+    final country =
+        _countries.where((c) => c.code == address.countryCode).firstOrNull;
+    // A country the store no longer ships to would be refused anyway.
+    if (country == null) return;
+    if (address.fullName.isNotEmpty) _nameCtrl.text = address.fullName;
+    if (address.phone.isNotEmpty) _contactPhoneCtrl.text = address.phone;
+    _line1Ctrl.text = address.line1;
+    _line2Ctrl.text = address.line2 ?? '';
+    _cityCtrl.text = address.city;
+    _provinceCtrl.text = address.province ?? '';
+    _zipCtrl.text = address.zip ?? '';
+    _prefilled = true;
+    if (country.code != _countryCode) {
+      _selectCountry(country.code);
+      Get.find<CheckoutController>().refreshShippingEstimate(country.code);
+    } else {
+      setState(() {});
+    }
+  }
 
   /// Only the countries in the store's enabled shipping zones (see
   /// `StoreModel.shippingZones`), Kenya first. Falls back to every
@@ -74,13 +108,17 @@ class _CheckoutViewState extends State<CheckoutView> {
     // country dropdown.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        Get.find<CheckoutController>().refreshShippingEstimate(_countryCode);
+        final controller = Get.find<CheckoutController>();
+        controller.refreshShippingEstimate(_countryCode);
+        _prefill(controller.savedAddress.value);
+        _savedAddressWorker = ever(controller.savedAddress, _prefill);
       }
     });
   }
 
   @override
   void dispose() {
+    _savedAddressWorker?.dispose();
     for (final ctrl in [
       _nameCtrl,
       _contactPhoneCtrl,
@@ -220,6 +258,10 @@ class _CheckoutViewState extends State<CheckoutView> {
                 const SizedBox(height: AppSpacing.lg),
                 Text('Shipping address',
                     style: Theme.of(context).textTheme.titleMedium),
+                if (_prefilled)
+                  Text('Filled in from your last order. Check it\'s still '
+                      'right.',
+                      style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: AppSpacing.sm),
                 DropdownButtonFormField<String>(
                   value: _countryCode,

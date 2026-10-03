@@ -32,6 +32,35 @@ class CheckoutController extends GetxController {
   final isPlacingOrder = false.obs;
   final errorMessage = RxnString();
 
+  /// Where the customer's latest order at this store shipped, offered to
+  /// fill the address form (TODO §21). Null until loaded, and if there's
+  /// no earlier order.
+  final savedAddress = Rxn<ShippingAddress>();
+
+  @override
+  void onInit() {
+    super.onInit();
+    loadSavedAddress();
+  }
+
+  Future<void> loadSavedAddress() async {
+    final user = _authRepo.cachedUser;
+    // A customer belongs to one store. The cart's may not be set yet when
+    // checkout is the first page opened.
+    final storeId = user?.storeId ?? cartRepo.storeId;
+    if (user == null || storeId == null) return;
+    try {
+      final orders = await _orderRepo.buyerStoreOrders(user.uid, storeId);
+      savedAddress.value = orders
+          .map((o) => o.shippingAddress)
+          .where((a) => a.line1.isNotEmpty && a.city.isNotEmpty)
+          .firstOrNull;
+    } catch (e) {
+      // The buyer just types it in.
+      debugPrint('CheckoutController.loadSavedAddress: $e');
+    }
+  }
+
   /// Every CJ shipment type available for the whole cart to the currently
   /// selected destination, from one combined [ProductRepository.shippingOptions]
   /// call — the same call shape `createOrder` quotes from server-side, so a

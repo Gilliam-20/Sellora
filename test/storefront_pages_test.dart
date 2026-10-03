@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:sellora/core/i18n/money.dart';
 import 'package:sellora/data/models/notification_model.dart';
 import 'package:sellora/data/models/order_model.dart';
 import 'package:sellora/data/models/product_model.dart';
@@ -11,6 +12,7 @@ import 'package:sellora/data/models/store_page.dart';
 import 'package:sellora/data/models/user_model.dart';
 import 'package:sellora/data/repositories/auth_repository.dart';
 import 'package:sellora/data/repositories/cart_repository.dart';
+import 'package:sellora/data/repositories/discount_repository.dart';
 import 'package:sellora/data/repositories/notification_repository.dart';
 import 'package:sellora/data/repositories/order_repository.dart';
 import 'package:sellora/data/repositories/product_repository.dart';
@@ -18,10 +20,14 @@ import 'package:sellora/data/repositories/store_design_repository.dart';
 import 'package:sellora/data/repositories/store_page_repository.dart';
 import 'package:sellora/data/repositories/store_repository.dart';
 import 'package:sellora/data/services/currency_service.dart';
+import 'package:sellora/data/services/order_payment_provider.dart';
+import 'package:sellora/data/services/storage_service.dart';
 import 'package:sellora/l10n/generated/app_localizations.dart';
 import 'package:sellora/modules/auth/controllers/auth_controller.dart';
 import 'package:sellora/modules/buyer/buyer_binding.dart';
 import 'package:sellora/modules/buyer/cart/cart_view.dart';
+import 'package:sellora/modules/buyer/checkout/checkout_controller.dart';
+import 'package:sellora/modules/buyer/checkout/checkout_view.dart';
 import 'package:sellora/modules/buyer/orders/order_page.dart';
 import 'package:sellora/modules/buyer/product_details/product_details_controller.dart';
 import 'package:sellora/modules/buyer/product_details/product_details_view.dart';
@@ -31,6 +37,8 @@ import 'package:sellora/modules/seller/store_pages/store_pages_controller.dart';
 import 'package:sellora/modules/storefront/pages/product_list_page.dart';
 import 'package:sellora/modules/storefront/pages/store_page_view.dart';
 import 'package:sellora/modules/storefront/store_scope.dart';
+import 'package:sellora/modules/storefront/storefront_login_view.dart';
+import 'package:sellora/modules/storefront/storefront_register_view.dart';
 import 'package:sellora/modules/storefront/storefront_session.dart';
 
 final _store = StoreModel(
@@ -518,6 +526,270 @@ void main() {
       expect(find.text('This storefront could not be found.'), findsOneWidget);
     });
   });
+
+  group('customer experience (TODO §21)', () {
+    setUp(_registerAll);
+    tearDown(Get.reset);
+
+    test('sort and price range read from a link', () {
+      expect(
+          StoreProductSort.parse('price-asc'), StoreProductSort.priceLowHigh);
+      expect(StoreProductSort.parse(null), StoreProductSort.newest);
+      expect(StoreProductSort.parse('cheapest'), StoreProductSort.newest);
+      for (final s in StoreProductSort.values) {
+        expect(StoreProductSort.parse(s.param), s);
+      }
+
+      final both = PriceRange.fromParameters(
+          {'min': '100', 'max': '2500', 'cur': 'kes'});
+      expect((both?.min, both?.max, both?.currency), (100, 2500, 'KES'));
+      final from = PriceRange.fromParameters({'min': '10', 'cur': 'USD'});
+      expect((from?.min, from?.max), (10, null));
+      expect(PriceRange.fromParameters({'min': '-5', 'cur': 'KES'}), isNull);
+      expect(PriceRange.fromParameters({'min': 'abc', 'cur': 'KES'}), isNull);
+      expect(PriceRange.fromParameters({'min': '10', 'cur': 'XYZ'}), isNull);
+      expect(PriceRange.fromParameters({'min': '10'}), isNull);
+      expect(both!.toParameters(), {'min': '100', 'max': '2500', 'cur': 'KES'});
+    });
+
+    test('the shop starts from its link and keeps the link up to date',
+        () async {
+      final paths = <String>[];
+      final c = ProductListController(
+        mode: ProductListMode.shop,
+        slug: 'amina',
+        parameters: {
+          'sort': 'price-desc',
+          'min': '1000',
+          'max': '3000',
+          'cur': 'KES',
+          'category': 'home & living',
+        },
+        onPathChanged: paths.add,
+      );
+      c.onInit();
+      await pumpEventQueue();
+      expect(_products.lastSort, StoreProductSort.priceHighLow);
+      expect((_products.lastMinPrice, _products.lastMaxPrice), (1000, 3000));
+      expect(_products.lastCategory, 'Home & Living');
+      expect(c.activeFilterCount, 2);
+      expect(paths, isEmpty, reason: 'opening a link doesn\'t rewrite it');
+
+      c.setSort(StoreProductSort.bestSelling);
+      await pumpEventQueue();
+      expect(_products.lastSort, StoreProductSort.bestSelling);
+      expect(Uri.parse(paths.last).queryParameters, {
+        'category': 'Home & Living',
+        'sort': 'best-selling',
+        'min': '1000',
+        'max': '3000',
+        'cur': 'KES',
+      });
+
+      c.clearFilters();
+      await pumpEventQueue();
+      expect((_products.lastMinPrice, _products.lastMaxPrice), (null, null));
+      expect(_products.lastCategory, 'All');
+      expect(paths.last, '/s/amina/shop?sort=best-selling');
+
+      c.setSort(StoreProductSort.newest);
+      expect(paths.last, '/s/amina/shop');
+    });
+
+    test('a category the store doesn\'t have is ignored', () async {
+      final c = ProductListController(
+          mode: ProductListMode.shop,
+          slug: 'amina',
+          parameters: {'category': 'Garden'},
+          onPathChanged: (_) {});
+      c.onInit();
+      await pumpEventQueue();
+      expect(c.category.value, 'All');
+    });
+
+    test('a price range in another currency is converted', () async {
+      final c = ProductListController(
+          mode: ProductListMode.shop, slug: 'amina', onPathChanged: (_) {});
+      c.onInit();
+      await pumpEventQueue();
+      // Typed in dollars; the listings are in shillings (KES 130 = $1).
+      Get.find<CurrencyService>().code.value = 'USD';
+      c.setPriceRange(30, 10.5); // the wrong way round
+      await pumpEventQueue();
+      expect(c.priceRange.value?.min, 10.5);
+      expect(c.priceRange.value?.currency, 'USD');
+      expect(_products.lastMinPrice, 1365);
+      expect(_products.lastMaxPrice, 3900);
+      c.setPriceRange(null, null);
+      expect(c.priceRange.value, isNull);
+    });
+
+    test('search keeps its query in the link', () async {
+      final paths = <String>[];
+      final c = ProductListController(
+          mode: ProductListMode.search,
+          slug: 'amina',
+          query: 'lamp',
+          onPathChanged: paths.add);
+      c.onInit();
+      await pumpEventQueue();
+      c.setSort(StoreProductSort.priceLowHigh);
+      expect(paths.last, '/s/amina/search?q=lamp&sort=price-asc');
+    });
+
+    test('a collection\'s link keeps its handle', () async {
+      final paths = <String>[];
+      final c = ProductListController(
+          mode: ProductListMode.collection,
+          slug: 'amina',
+          handle: 'home-living',
+          onPathChanged: paths.add);
+      c.onInit();
+      await pumpEventQueue();
+      expect(c.canPickCategory, isFalse);
+      c.setSort(StoreProductSort.titleAz);
+      expect(paths.last, '/s/amina/collections/home-living?sort=title-asc');
+      expect(c.activeFilterCount, 0);
+    });
+
+    test('checkout offers the address of the last order here', () async {
+      _registerCheckout();
+      _auth.user = _buyer();
+      Get.find<CartRepository>().setStore('store-1');
+      _orders.history = [_order(id: 'o3'), _order(id: 'o1')];
+      final c = CheckoutController();
+      await c.loadSavedAddress();
+      expect(c.savedAddress.value?.line1, '1 Moi Ave');
+
+      _orders.history = const [];
+      final none = CheckoutController();
+      await none.loadSavedAddress();
+      expect(none.savedAddress.value, isNull);
+    });
+
+    Future<void> open(WidgetTester tester, String route,
+        {Size size = const Size(390, 844)}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(GetMaterialApp(
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        initialRoute: route,
+        getPages: [
+          GetPage(name: '/s/:slug', page: () => const Scaffold()),
+          GetPage(
+              name: '/s/:slug/shop',
+              page: () => const ProductListPage(mode: ProductListMode.shop)),
+          GetPage(
+              name: '/s/:slug/login', page: () => const StorefrontLoginView()),
+          GetPage(
+              name: '/s/:slug/register',
+              page: () => const StorefrontRegisterView()),
+          GetPage(
+              name: '/s/:slug/checkout',
+              page: () => const CheckoutView(),
+              binding: CheckoutBinding()),
+        ],
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the shop sorts and filters by price', (tester) async {
+      await open(tester, '/s/amina/shop?sort=price-asc');
+      expect(tester.takeException(), isNull);
+      expect(_products.lastSort, StoreProductSort.priceLowHigh);
+      expect(find.text('Price: low to high'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('product-sort')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Best selling').last);
+      await tester.pumpAndSettle();
+      expect(_products.lastSort, StoreProductSort.bestSelling);
+
+      await tester.tap(find.byKey(const ValueKey('product-price-filter')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('price-min')), '1,000');
+      await tester.enterText(find.byKey(const ValueKey('price-max')), '3000');
+      await tester.tap(find.byKey(const ValueKey('price-apply')));
+      await tester.pumpAndSettle();
+      expect((_products.lastMinPrice, _products.lastMaxPrice), (1000, 3000));
+      // The range shows as a chip that removes it.
+      expect(find.byType(InputChip), findsOneWidget);
+      await tester.tap(find.byTooltip('Remove price filter'));
+      await tester.pumpAndSettle();
+      expect(_products.lastMinPrice, isNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('sign-in is in the store\'s frame', (tester) async {
+      _registerAuth();
+      await open(tester, '/s/amina/login');
+      expect(tester.takeException(), isNull);
+      expect(find.text('Welcome back'), findsOneWidget);
+      expect(find.text('Amina\'s Store'), findsOneWidget); // the top bar
+      expect(find.text('Sign in to keep shopping at Amina\'s Store.'),
+          findsOneWidget);
+      // Show/hide password.
+      await tester.tap(find.byTooltip('Show password'));
+      await tester.pump();
+      expect(find.byTooltip('Hide password'), findsOneWidget);
+
+      await tester.tap(find.text('New here? Create an account'));
+      await tester.pumpAndSettle();
+      expect(find.text('Join Amina\'s Store'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('sign-in for an unknown store says so', (tester) async {
+      _registerAuth();
+      await open(tester, '/s/nope/login');
+      expect(find.text('This storefront could not be found.'), findsOneWidget);
+    });
+
+    testWidgets('checkout fills in the last address', (tester) async {
+      _registerCheckout();
+      _auth.user = _buyer();
+      _orders.history = [_order()];
+      await open(tester, '/s/amina/checkout', size: const Size(800, 1400));
+      expect(tester.takeException(), isNull);
+      expect(
+          find.text('Filled in from your last order. Check it\'s still '
+              'right.'),
+          findsOneWidget);
+      expect(find.widgetWithText(TextFormField, '1 Moi Ave'), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'Nairobi'), findsOneWidget);
+    });
+
+    testWidgets('checkout leaves the address empty with no earlier order',
+        (tester) async {
+      _registerCheckout();
+      _auth.user = _buyer();
+      await open(tester, '/s/amina/checkout', size: const Size(800, 1400));
+      expect(tester.takeException(), isNull);
+      expect(
+          find.textContaining('Filled in from your last order'), findsNothing);
+      expect(
+          find.widgetWithText(TextFormField, 'Street address'), findsOneWidget);
+    });
+  });
+}
+
+/// What the store sign-in pages add to [_registerAll].
+void _registerAuth() {
+  Get.put<StorageService>(_Storage());
+  Get.put(AuthController());
+}
+
+/// What checkout adds to [_registerAll].
+void _registerCheckout() {
+  Get.put<OrderPaymentProvider>(_Payments());
+  Get.put<DiscountRepository>(_Discounts());
 }
 
 // ---------------------------------------------------------------------------
@@ -579,6 +851,9 @@ class _Products implements ProductRepository {
   int listCalls = 0;
   String? lastCategory;
   String? lastKeyword;
+  StoreProductSort? lastSort;
+  double? lastMinPrice;
+  double? lastMaxPrice;
   final _all = [_product('p1'), _product('p2')];
 
   @override
@@ -589,9 +864,15 @@ class _Products implements ProductRepository {
   Future<List<ProductModel>> storeProducts(String storeId,
       {String? keyword,
       String? category,
+      StoreProductSort sort = StoreProductSort.newest,
+      double? minPrice,
+      double? maxPrice,
       int offset = 0,
       int limit = storefrontPageSize}) async {
     listCalls++;
+    lastSort = sort;
+    lastMinPrice = minPrice;
+    lastMaxPrice = maxPrice;
     lastCategory = category;
     lastKeyword = keyword;
     return offset == 0 ? _all : const [];
@@ -620,6 +901,12 @@ class _Auth implements AuthRepository {
 
 class _Orders implements OrderRepository {
   int lookups = 0;
+  List<OrderModel> history = const [];
+
+  @override
+  Future<List<OrderModel>> buyerStoreOrders(
+          String buyerId, String storeId) async =>
+      history;
 
   @override
   Future<OrderModel?> buyerOrder(String orderId) async {
@@ -652,6 +939,32 @@ class _Currency extends GetxService implements CurrencyService {
   String format(double amount, {String fromCode = 'USD'}) =>
       '${code.value} ${amount.toStringAsFixed(0)}';
 
+  /// KES 130 to the dollar.
+  @override
+  Money convertMoney(Money amount, String toCode) {
+    if (amount.currency == toCode) return amount;
+    final rate = toCode == 'KES' ? 130.0 : 1 / 130;
+    return Money.fromMajor(amount.toMajor() * rate, toCode);
+  }
+
+  @override
+  bool isConverted(String fromCode) => false;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Storage extends GetxService implements StorageService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Payments implements OrderPaymentProvider {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Discounts implements DiscountRepository {
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

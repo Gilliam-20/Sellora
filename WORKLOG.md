@@ -6,6 +6,76 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-04 — TODO §21: customer experience
+
+**Status:** done in code and tested. **No migration and no Edge Function change**, so this ships with
+the web build alone (after §20's `20261004000000_store_pages.sql`, as before). Sorting and the price
+filter read `storefront_products` columns it already exposes (`sell_price`, `sold_count`, `title`,
+`created_at`).
+
+**Why:** user request: "go to the todo and work on phase 21" (TODO.md §21 Customer experience).
+
+**Where it started:** §20 covered most of §21's list (browse, search, product page with variants and
+quantity, cart, checkout, pay, confirmation, tracking, order history). Missing were **filter** (only
+category chips on the shop) and **sort** (always newest first), and **create account** still
+happened on Meridian-styled sign-in/register pages outside the store's theme. Checkout made a
+returning customer retype their whole address.
+
+**Decisions (made here, reversible):**
+- **Sort options:** newest (default), best selling (`sold_count`), price low→high and high→low,
+  name A→Z. `id` is a second sort key so equal values don't shuffle between pages of 60.
+  `StoreProductSort` in `product_repository.dart`; `storeProducts` gained `sort`, `minPrice` and
+  `maxPrice`.
+- **Filters:** a price range everywhere, plus category chips on search as well as the shop (a
+  collection is one category already). No "on sale" filter, because sellers can't set a
+  compare-at price yet, so it would always be empty. No "in stock" filter, because `stock` is CJ's
+  assumed figure (`catalogSync.js`), not real inventory. No rating filter (reviews weren't ported).
+- **The URL holds the choices** (`?sort=`, `?category=`, `?min=&max=&cur=`, and `?q=` for search).
+  A page reads them on open. Each change rewrites the address bar in place on web
+  (`SystemNavigator.routeInformationUpdated(replace: true)`, as `main.dart` already does), so a
+  filtered list can be shared or refreshed. Known limit: GetX doesn't learn of the rewrite, so going
+  back from a product to the list puts the URL it was opened with back in the address bar. The
+  list itself keeps its filters.
+- **Price is typed in the buyer's display currency** and the URL records which (`cur`). The
+  controller converts the bounds into the listings' currency, learned from the first product (one
+  extra one-row read if a link opens with a range already set), at the current indicative rate. A
+  store with listings in two currencies would filter the minority approximately. Bounds typed the
+  wrong way round are swapped.
+- **Sign-in and register sit in `StorefrontFrame`** (new `StorefrontAuthScaffold`), like checkout:
+  the store's theme and name, no menu or cart. They no longer resolve the store themselves, so an
+  unknown store gets the same "could not be found" screen as every other storefront page. Added a
+  show/hide password toggle, autofill hints, and submit on Enter. Sign-in ↔ register swap in place
+  (`offNamed`) instead of stacking.
+- **Simpler checkout without new storage:** the address form is filled from the customer's most
+  recent order at this store (`buyerStoreOrders`, already RLS-scoped to their own orders), only
+  into an untouched form, and only if that country is still in the store's shipping zones. A note
+  asks them to check it. The M-Pesa field starts with the account phone when it's a valid Safaricom
+  number. Guest checkout was not attempted: `createOrder` needs a signed-in buyer, and buyer account
+  scoping is open decision #1.
+
+**What changed:** `product_repository.dart` and `supabase_product_repository.dart` (sort, price
+bounds). `product_list_page.dart`: `PriceRange`, the controller's sort/filter/URL state, a toolbar
+(price button or chip, sort menu), a price sheet, and a "Nothing matches these filters" state with
+Clear filters. New `shell/storefront_auth_scaffold.dart` (`StorefrontAuthScaffold`,
+`PasswordField`), with the login and register views rewritten on it. `CheckoutController.savedAddress`
+/ `loadSavedAddress`, and the prefill in `checkout_view.dart`. Three test fakes gained the new
+`storeProducts` parameters.
+
+**Tests:** `flutter analyze`: only the two existing infos. `flutter test`: the one failure is the
+known `seller_shell_controller_test` one. `storefront_pages_test` has a new §21 group (12): sort and
+price-range parsing, the shop starting from a link and rewriting it on each change, an unknown
+category ignored, currency conversion and swapped bounds, search and collection links, the saved
+address, and widget tests for sorting and the price sheet on a phone, the themed sign-in (password
+toggle, to register), an unknown store's sign-in, and checkout with and without an earlier order.
+The phone test caught the toolbar overflowing with a long sort label; both sides now shrink.
+`flutter build web` compiles. Not looked at in a browser, and not run against a real backend.
+
+**Not done:** guest checkout (decision #1), search by tag or description, saved addresses beyond
+"the last order", an in-stock filter (needs real inventory), a product count on the list (needs a
+count query).
+
+---
+
 ## 2026-10-04 — TODO §20: storefront
 
 **Status:** done in code and tested. **Not applied or deployed.** The new migration

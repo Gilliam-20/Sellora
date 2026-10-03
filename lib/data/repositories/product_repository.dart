@@ -27,6 +27,24 @@ class ListingRejected implements Exception {
 /// `offset`.
 const storefrontPageSize = 60;
 
+/// How a storefront's product list is ordered (TODO §21). [param] is its
+/// `?sort=` value in a shop, collection or search URL.
+enum StoreProductSort {
+  newest('newest', 'Newest'),
+  bestSelling('best-selling', 'Best selling'),
+  priceLowHigh('price-asc', 'Price: low to high'),
+  priceHighLow('price-desc', 'Price: high to low'),
+  titleAz('title-asc', 'Name: A to Z');
+
+  const StoreProductSort(this.param, this.label);
+  final String param;
+  final String label;
+
+  /// [newest] for a missing or unknown value.
+  static StoreProductSort parse(String? value) =>
+      values.where((s) => s.param == value).firstOrNull ?? newest;
+}
+
 abstract class ProductRepository {
   /// The full CJ Dropshipping-sourced catalog available to list from.
   /// [category] is a CJ category id (see [categories]), not a display name.
@@ -57,14 +75,18 @@ abstract class ProductRepository {
   /// Products a specific seller has listed in their own store.
   Future<List<ProductModel>> sellerListings(String sellerId);
 
-  /// Public, tenant-scoped products for one storefront, newest first, one
-  /// page of at most [limit] from [offset]. New features must use this
+  /// Public, tenant-scoped products for one storefront in [sort] order, one
+  /// page of at most [limit] from [offset]. [minPrice]/[maxPrice] bound
+  /// `sellPrice`, in the listings' own currency. New features must use this
   /// instead of querying a platform-wide listing feed. Buyer-facing:
   /// carries no cost prices.
   Future<List<ProductModel>> storeProducts(
     String storeId, {
     String? keyword,
     String? category,
+    StoreProductSort sort = StoreProductSort.newest,
+    double? minPrice,
+    double? maxPrice,
     int offset = 0,
     int limit = storefrontPageSize,
   });
