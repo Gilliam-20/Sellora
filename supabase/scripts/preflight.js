@@ -21,6 +21,7 @@ const path = require("node:path");
 // Every job a migration schedules. Kept in step with the migrations by
 // preflight.test.js.
 const EXPECTED_CRON_JOBS = Object.freeze([
+  "sellora-expire-client-errors",
   "sellora-expire-orders",
   "sellora-expire-rate-limits",
   "sellora-refresh-fx",

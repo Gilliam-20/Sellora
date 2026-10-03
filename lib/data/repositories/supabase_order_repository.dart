@@ -3,6 +3,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/network/dio_client.dart';
 import '../models/order_model.dart';
 import '../models/order_refund_model.dart';
+import '../models/order_timeline.dart';
 import '../services/supabase_service.dart';
 import 'order_repository.dart';
 
@@ -24,10 +25,11 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       'logistic_name, created_at, updated_at, payment_provider, tracking, '
       'refunded_amount, discount_code, discount_amount';
 
-  /// [columns] plus `seller_revenue` — what Sellora owes the seller, i.e.
-  /// their margin. Buyers can't read it; sellers and admin read it through
-  /// the `seller_orders` view.
-  static const sellerColumns = '$columns, seller_revenue';
+  /// [columns] plus what only the seller and admin read, through the
+  /// `seller_orders` view: `seller_revenue` (what Sellora owes the seller,
+  /// i.e. their margin), the fee base, and CJ's side of fulfilment.
+  static const sellerColumns = '$columns, seller_revenue, service_fee_base, '
+      'cj_order_status, cj_order_number';
 
   @override
   Future<OrderModel> placeOrder(OrderModel order) async {
@@ -142,6 +144,34 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
       'status': status.name,
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     }).eq('id', orderId);
+  }
+
+  @override
+  Future<OrderModel?> sellerOrder(String orderId) async {
+    final row = await _db.sellerOrders
+        .select(sellerColumns)
+        .eq('id', orderId)
+        .maybeSingle();
+    return row == null ? null : OrderModel.fromMap(fromRow(row));
+  }
+
+  /// `order_timeline` returns nothing for a caller who can't manage the
+  /// order, so a buyer or another seller just sees an empty history.
+  @override
+  Future<List<OrderTimelineEntry>> orderTimeline(String orderId) async {
+    final rows = await _db.client
+        .rpc('order_timeline', params: {'p_order_id': orderId});
+    return (rows as List)
+        .map((r) =>
+            OrderTimelineEntry.fromRow(Map<String, dynamic>.from(r as Map)))
+        .toList();
+  }
+
+  /// The author, role and time are stamped server-side
+  /// (`order_notes_stamp`), whatever is sent.
+  @override
+  Future<void> addOrderNote(String orderId, String body) async {
+    await _db.orderNotes.insert({'order_id': orderId, 'body': body.trim()});
   }
 
   /// Reads the admin-only `admin_order_refunds` view; anyone else gets no

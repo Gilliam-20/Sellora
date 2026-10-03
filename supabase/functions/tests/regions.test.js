@@ -1,6 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { REGION_CONFIG, resolveRegion } from "../_shared/regions.js";
+import {
+  REGION_CONFIG, SHIPPING_ZONES, resolveRegion, storeShipsTo,
+} from "../_shared/regions.js";
 
 describe("REGION_CONFIG", () => {
   test("maps Kenya to the kenya region in KES", () => {
@@ -40,5 +42,32 @@ describe("resolveRegion", () => {
 
   test("falls back to us/USD for missing input", () => {
     assert.deepEqual(resolveRegion(undefined), usFallback);
+  });
+});
+
+describe("storeShipsTo", () => {
+  test("ships to a country in one of the store's zones", () => {
+    assert.equal(storeShipsTo(["kenya"], "KE"), true);
+    assert.equal(storeShipsTo(["kenya", "eu"], "de"), true);
+  });
+
+  test("refuses a country outside the store's zones", () => {
+    assert.equal(storeShipsTo(["kenya"], "US"), false);
+    assert.equal(storeShipsTo(["us", "uk"], "FR"), false);
+  });
+
+  test("refuses an unconfigured country even though it would price as US", () => {
+    assert.equal(storeShipsTo(SHIPPING_ZONES, "ZZ"), false);
+    assert.equal(storeShipsTo(["us"], "CA"), false);
+  });
+
+  test("treats a store with no zones as shipping to every zone", () => {
+    assert.equal(storeShipsTo([], "GB"), true);
+    assert.equal(storeShipsTo(null, "KE"), true);
+  });
+
+  test("every zone is a region some country resolves to", () => {
+    const regions = new Set(Object.values(REGION_CONFIG).map((c) => c.region));
+    assert.deepEqual(new Set(SHIPPING_ZONES), regions);
   });
 });

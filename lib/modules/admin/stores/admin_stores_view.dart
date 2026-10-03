@@ -65,10 +65,19 @@ class AdminStoresView extends GetView<AdminStoresController> {
                             return ManifestStub(
                               code: '/s/${store.slug}',
                               title: store.name,
-                              subtitle: seller == null
-                                  ? 'Owner unknown · ${store.currencyCode}'
-                                  : '${seller.name} · ${_statusLabel(seller.sellerStatus)} · ${store.currencyCode}',
-                              accentColor: _statusColor(seller?.sellerStatus),
+                              subtitle: [
+                                if (store.isSuspended) 'Store suspended',
+                                if (seller == null)
+                                  'Owner unknown'
+                                else ...[
+                                  seller.name,
+                                  _statusLabel(seller.sellerStatus),
+                                ],
+                                store.currencyCode,
+                              ].join(' · '),
+                              accentColor: store.isSuspended
+                                  ? AppColors.danger
+                                  : _statusColor(seller?.sellerStatus),
                               onTap: () => _showDetail(context, store, seller),
                             );
                           },
@@ -86,7 +95,14 @@ class AdminStoresView extends GetView<AdminStoresController> {
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
-      builder: (context) => Padding(
+      isScrollControlled: true,
+      builder: (context) => _StoreDetailSheet(
+          store: store, seller: seller, buildBody: _detailBody),
+    );
+  }
+
+  Widget _detailBody(BuildContext context, StoreModel store, UserModel? seller) =>
+      Padding(
         padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xl),
         child: Column(
@@ -107,11 +123,16 @@ class AdminStoresView extends GetView<AdminStoresController> {
                 store.createdAt != null
                     ? Formatters.date(store.createdAt!)
                     : 'Unknown'),
+            _detailRow(
+                'Store status',
+                store.isSuspended
+                    ? 'Suspended${store.suspendedAt != null ? ' since ${Formatters.date(store.suspendedAt!)}' : ''}'
+                    : 'Live'),
+            if (store.isSuspended && store.suspensionReason != null)
+              _detailRow('Reason', store.suspensionReason!),
           ],
         ),
-      ),
-    );
-  }
+      );
 
   Widget _detailRow(String label, String value) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -139,4 +160,118 @@ class AdminStoresView extends GetView<AdminStoresController> {
         SellerStatus.suspended => AppColors.danger,
         null => AppColors.slate,
       };
+}
+
+/// The store's details plus the suspend/lift control. Stateful only for
+/// the reason field and the in-sheet error.
+class _StoreDetailSheet extends StatefulWidget {
+  const _StoreDetailSheet(
+      {required this.store, required this.seller, required this.buildBody});
+
+  final StoreModel store;
+  final UserModel? seller;
+  final Widget Function(BuildContext, StoreModel, UserModel?) buildBody;
+
+  @override
+  State<_StoreDetailSheet> createState() => _StoreDetailSheetState();
+}
+
+class _StoreDetailSheetState extends State<_StoreDetailSheet> {
+  final _reason = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit(bool suspend) async {
+    final controller = Get.find<AdminStoresController>();
+    final error = await controller.setSuspended(widget.store,
+        suspended: suspend, reason: _reason.text);
+    if (!mounted) return;
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
+    Navigator.of(context).pop();
+    Get.snackbar(
+      suspend ? 'Store suspended' : 'Suspension lifted',
+      suspend
+          ? '${widget.store.name} is offline: its catalog is hidden and checkout is closed.'
+          : '${widget.store.name} is live again.',
+      snackPosition: SnackPosition.BOTTOM,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = widget.store;
+    final controller = Get.find<AdminStoresController>();
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            widget.buildBody(context, store, widget.seller),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xl),
+              child: Obx(() {
+                final busy = controller.updatingStoreId.value == store.id;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!store.isSuspended) ...[
+                      Text(
+                        'Suspending hides this store\'s catalog and closes its '
+                        'checkout. The seller keeps their account and other '
+                        'stores; suspend the seller instead to stop everything.',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: AppColors.slate),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      TextField(
+                        controller: _reason,
+                        maxLength: 500,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Reason (the seller sees this)',
+                        ),
+                      ),
+                    ],
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: Text(_error!,
+                            style: const TextStyle(color: AppColors.danger)),
+                      ),
+                    store.isSuspended
+                        ? FilledButton.icon(
+                            onPressed: busy ? null : () => _submit(false),
+                            icon: const Icon(Icons.play_circle_outline),
+                            label: const Text('Lift suspension'),
+                          )
+                        : OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.danger),
+                            onPressed: busy ? null : () => _submit(true),
+                            icon: const Icon(Icons.block),
+                            label: const Text('Suspend store'),
+                          ),
+                  ],
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

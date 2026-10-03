@@ -15,6 +15,7 @@
  */
 import { db, must } from "./db.js";
 import * as cjApiModule from "./cjApi.js";
+import { DEFAULT_SERVICE_FEE_RATE, getFeeSettings } from "./fees.js";
 import { lineRefusal } from "./orders.js";
 import { logWarning } from "./logging.js";
 
@@ -36,7 +37,7 @@ const round2 = (n) => Math.round(n * 100) / 100;
  *   variant, which is what the import screen prices against), its variants
  *   with refreshed `costPrice`, and `below_cost`, `unavailable` or null.
  */
-function assessListing(listing, cjVariants) {
+function assessListing(listing, cjVariants, feeRate = DEFAULT_SERVICE_FEE_RATE) {
   const prices = new Map();
   for (const v of cjVariants || []) {
     const price = Number(v?.supplierPriceUsd);
@@ -59,6 +60,7 @@ function assessListing(listing, cjVariants) {
     supplierUnitPriceUsd: costPrice,
     retailUnitPriceUsd: Number(listing.sell_price),
     quantity: 1,
+    feeRate,
   });
   return { costPrice, variants, alert: refusal ? "below_cost" : null };
 }
@@ -70,7 +72,7 @@ function assessListing(listing, cjVariants) {
  * @param {number|null} costPrice
  * @return {{title: string, message: string}}
  */
-function alertNotice(alert, listing, costPrice) {
+function alertNotice(alert, listing, costPrice, feeRate = DEFAULT_SERVICE_FEE_RATE) {
   const name = String(listing.title || "A listed product").slice(0, 120);
   if (alert === "unavailable") {
     return {
@@ -83,7 +85,7 @@ function alertNotice(alert, listing, costPrice) {
     title: `Price below cost: ${name}`,
     message: `CJ's cost for "${name}" is now $${costPrice.toFixed(2)}. ` +
       `At your price of $${Number(listing.sell_price).toFixed(2)}, it doesn't ` +
-      "cover that cost plus Sellora's 7% fee, so checkout refuses it. " +
+      `cover that cost plus Sellora's ${round2(feeRate * 100)}% fee, so checkout refuses it. ` +
       "Raise the price or unlist it.",
   };
 }
@@ -98,7 +100,10 @@ function pace() {
  * @param {object=} deps Injectable for tests.
  * @return {Promise<object>} Counts for the job log.
  */
-async function syncListings({ cjApi = cjApiModule, wait = pace, batch = BATCH } = {}) {
+async function syncListings({
+  cjApi = cjApiModule, wait = pace, batch = BATCH, fees = getFeeSettings,
+} = {}) {
+  const { serviceFeeRate } = await fees();
   // Several stores can list the same CJ product, so over-fetch and dedupe.
   const queue = must(await db().from("products")
       .select("id")
@@ -130,7 +135,7 @@ async function syncListings({ cjApi = cjApiModule, wait = pace, batch = BATCH } 
         .eq("id", pid).eq("is_listed", true)) || [];
     for (const listing of listings) {
       summary.listings++;
-      const { costPrice, variants, alert } = assessListing(listing, cjVariants);
+      const { costPrice, variants, alert } = assessListing(listing, cjVariants, serviceFeeRate);
       const update = { variants, supplier_alert: alert, supplier_checked_at: checkedAt };
       if (costPrice !== null) update.cost_price = costPrice;
       must(await db().from("products").update(update)
@@ -140,7 +145,7 @@ async function syncListings({ cjApi = cjApiModule, wait = pace, batch = BATCH } 
         summary.alerts++;
         must(await db().from("notifications").insert({
           recipient_id: listing.seller_id,
-          ...alertNotice(alert, listing, costPrice),
+          ...alertNotice(alert, listing, costPrice, serviceFeeRate),
         }));
       } else if (!alert && listing.supplier_alert) {
         summary.cleared++;

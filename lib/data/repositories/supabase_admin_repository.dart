@@ -1,4 +1,6 @@
 import 'package:get/get.dart';
+import '../models/activity_models.dart';
+import '../models/platform_metrics_model.dart';
 import '../models/user_model.dart';
 import '../services/cj_dropshipping_service.dart';
 import '../services/supabase_service.dart';
@@ -24,6 +26,45 @@ class SupabaseAdminRepository extends GetxService implements AdminRepository {
   Future<void> setSellerStatus(String sellerId, SellerStatus status) async {
     await _db.profiles
         .update({'seller_status': status.name}).eq('uid', sellerId);
+  }
+
+  /// The `stores_guard_update` trigger lets only an admin write these.
+  @override
+  Future<void> setStoreSuspended(String storeId,
+      {required bool suspended, String? reason}) async {
+    await _db.stores.update({
+      'is_suspended': suspended,
+      'suspension_reason': suspended ? reason : null,
+      'suspended_at':
+          suspended ? DateTime.now().toUtc().toIso8601String() : null,
+    }).eq('id', storeId);
+  }
+
+  @override
+  Future<PlatformMetrics> platformMetrics({int days = 30}) async {
+    final result = await _db.client
+        .rpc('admin_platform_metrics', params: {'p_days': days});
+    return result is Map
+        ? PlatformMetrics.fromMap(Map<String, dynamic>.from(result))
+        : PlatformMetrics.empty;
+  }
+
+  @override
+  Future<List<AuditLogEntry>> auditLog({int limit = 100}) async {
+    final rows = await _db.auditLogs
+        .select()
+        .order('occurred_at', ascending: false)
+        .limit(limit);
+    return rows.map((r) => AuditLogEntry.fromMap(fromRow(r))).toList();
+  }
+
+  @override
+  Future<List<ClientErrorReport>> clientErrors({int limit = 200}) async {
+    final rows = await _db.clientErrors
+        .select()
+        .order('occurred_at', ascending: false)
+        .limit(limit);
+    return rows.map((r) => ClientErrorReport.fromMap(fromRow(r))).toList();
   }
 
   @override

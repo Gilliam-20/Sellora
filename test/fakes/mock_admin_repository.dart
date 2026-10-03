@@ -1,4 +1,6 @@
 import 'package:get/get.dart';
+import 'package:sellora/data/models/activity_models.dart';
+import 'package:sellora/data/models/platform_metrics_model.dart';
 import 'package:sellora/data/models/user_model.dart';
 import 'package:sellora/data/repositories/admin_repository.dart';
 
@@ -48,6 +50,43 @@ class MockAdminRepository extends GetxService implements AdminRepository {
     if (index != -1)
       _sellers[index] = _sellers[index].copyWith(sellerStatus: status);
   }
+
+  /// What [platformMetrics] returns; tests set it.
+  PlatformMetrics metrics = const PlatformMetrics(
+    days: 30,
+    lifetime: PlatformTotals(
+        gmvKes: 4000, serviceFeesKes: 280, refundsKes: 0, paidOrders: 1),
+    window: PlatformTotals(
+        gmvKes: 4000, serviceFeesKes: 280, refundsKes: 0, paidOrders: 1),
+    series: [],
+    subscriptions: SubscriptionHealth(active: 1, lapsed30d: 0, mrrKes: 3250),
+  );
+  int? lastMetricsDays;
+
+  /// Store id -> (suspended, reason), as [setStoreSuspended] last left it.
+  final storeSuspensions = <String, (bool, String?)>{};
+  final auditEntries = <AuditLogEntry>[];
+  final errorReports = <ClientErrorReport>[];
+
+  @override
+  Future<void> setStoreSuspended(String storeId,
+      {required bool suspended, String? reason}) async {
+    storeSuspensions[storeId] = (suspended, suspended ? reason : null);
+  }
+
+  @override
+  Future<PlatformMetrics> platformMetrics({int days = 30}) async {
+    lastMetricsDays = days;
+    return metrics;
+  }
+
+  @override
+  Future<List<AuditLogEntry>> auditLog({int limit = 100}) async =>
+      auditEntries.take(limit).toList();
+
+  @override
+  Future<List<ClientErrorReport>> clientErrors({int limit = 200}) async =>
+      errorReports.take(limit).toList();
 
   @override
   Future<int> syncCjCatalog() async {

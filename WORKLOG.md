@@ -6,6 +6,141 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-03 — TODO §13–15: import editor, seller order management, configurable service fee
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration
+`20261003000300_orders_import_fees.sql` joins rollout step 1 in TODO.md. The function must deploy
+after it (`createOrder` calls `service_fee_settings()` and writes `service_fee_base`), and the web
+build after the function (the seller order read names the new `seller_orders` columns).
+
+**Why:** user request: "go to the todo and work on 13 to 15" (TODO.md §13 Product import workflow,
+§14 Orders, §15 Successful order service fee).
+
+**Decisions (made here, reversible):**
+- The fee rate is an admin setting, not a constant: the `fees` row of `app_config`
+  (`{"serviceFeeRate": 0.07, "chargeOnShipping": false}`), bounded 0–30% by a check constraint and
+  audited on every change. Clients read it through `service_fee_settings()`, since the rest of
+  `app_config` (pricing margins) stays admin-only. No row means 7% on the goods only.
+- `chargeOnShipping` is §15's "unless explicitly configured". When on, the fee is also taken on
+  the buyer's shipping charge, out of the seller's share. Each order records which base it used
+  (`service_fee_base`) next to the existing `service_fee_rate` snapshot.
+- A seller may cancel an order nobody has paid for (`pending`/`failed`), as an admin already
+  could. Not one with a payment in flight, and never a paid one: that's a refund, which stays
+  admin-only.
+- The order timeline is the existing `audit_logs` trail (now also recording `tracking_number`)
+  plus a new append-only `order_notes` table. Notes are internal: the seller's and admin's, never
+  the buyer's.
+- The spec's `platformFee`/`serviceFeeAmount`/`sellerRevenue`/`currency` already existed on
+  `orders` (and `ledger_entries` books `PLATFORM_FEE` separately). `paymentFee` is a column but
+  stays 0: IntaSend's charge would come from the webhook, whose payload is still unverified.
+
+**What changed:**
+- **§15.** `_shared/fees.js` (`getFeeSettings`, 60 s cache, throws rather than guessing).
+  `createOrder`, `lineRefusal` and `syncListings` use the live rate; `splitServiceFee` takes
+  `{rate, shippingUsd}`. Admin → Plans has a "Service fee on sales" card. The import screen, My
+  listings' below-cost warning and the order detail read the live rate (`FeeRepository`).
+- **§14.** Orders tab: customer, date, total, payment and fulfilment badges, items, shipping and
+  channel; filter chips with counts; search by code/name/email/phone. New order detail
+  (`/seller/orders/detail`): customer and address, lines with variants, the payment breakdown
+  (products, discount, shipping, refunded, fee at its snapshotted rate and base, earnings), CJ
+  fulfilment state and order number, tracking and carrier scans, mark shipped/delivered, cancel
+  unpaid, and the timeline with a note box. `seller_orders` gains `service_fee_base`,
+  `cj_order_status` and `cj_order_number` (CJ's error text stays server-only).
+- **§13.** The import screen is now an editor: title, description (CJ's HTML cleaned to text,
+  which is how the storefront renders it), keep/drop images and choose the main one, per-variant
+  on/off and SKU, tags, and SEO title/description with a "Suggest" button and a search preview.
+  `products` gains `tags` (≤20, 1–40 chars), `seo_title` (≤120) and `seo_description` (≤320),
+  appended to `storefront_products`. The price floor counts only the variants left on.
+
+**Tests:** `flutter analyze` reports no new issues. `flutter test`: the one failure is the known
+`seller_shell_controller_test` one. New: `listing_text_test`, `seller_orders_test` (filters,
+labels, timeline lines, fee settings, order parsing). `supabase npm test`: 295 RLS checks (35 new:
+fee settings and audit, fee snapshot, seller cancel, notes, timeline, listing fields), 352 Deno
+steps (new `fees.test.js`, configurable-rate cases in `orders.test.js`).
+
+**Not done, needs a decision, an account or a model first:**
+- Assign collection (§13): collections don't exist (PHASE 5).
+- Partially fulfilled (§14): a CJ order ships as one parcel, so there's nothing partial to show.
+- Seller-initiated refunds: refunds stay admin-only; a "request a refund" flow needs a support
+  process decision.
+- `payment_fee`: needs IntaSend's real webhook payload. Related: `extractAmount` in
+  `_shared/intasendApi.js` reads `net_amount` before `value`. If IntaSend deducts its charge from
+  `net_amount`, every payment fails amount verification and is held for reconciliation. Check
+  this in the sandbox.
+- Editing tags/SEO after import (My listings has no editor for them yet), and searching the
+  storefront by tag.
+
+---
+
+## 2026-10-03 — PHASES 9–12: platform metrics, store suspension, zone enforcement, error log, l10n, runbook
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration
+`20261003000200_admin_platform.sql` joins rollout step 1 in TODO.md. The function must deploy after it
+(`createOrder` reads `stores.is_suspended`).
+
+**Why:** user request: "work on the todo phase 9 to 12, and finish". This pass took every open item in
+those phases that didn't need an owner decision, a live provider account or a model that doesn't exist
+yet. The rest are listed under "Not done" below.
+
+**What changed:**
+- **PHASE 9: dashboard currency bug.** The seller dashboard added up `orders.total` across orders
+  priced in different shopper currencies (KES + GBP + EUR as one number). Gross sales, net revenue,
+  AOV, the chart, top products and the period delta now convert each order into the store's currency
+  first, the way Customers already did. Also new: a **Sales by country** card (`CountrySales` in
+  `dashboard_models.dart`, pure and tested).
+- **PHASE 10: platform metrics.** The admin Overview had the same mixed-currency sum, and only over
+  the 200 newest orders a client can list. `admin_platform_metrics(days)` (admin-only SQL function)
+  sums every paid order in KES: `total_kes`, the fee as `service_fee_amount_usd × fx_rate`, and KES
+  refunds. It also returns a zero-filled daily series in Africa/Nairobi time and subscription health
+  (active, lapsed in 30 days, MRR normalized to 30 days). The Overview shows GMV, fees, MRR, ARR,
+  refunds and churn, and degrades to an inline error if the function is missing. The old "total
+  platform revenue" card is gone: it added lifetime fees to one month's MRR.
+- **PHASE 10: per-store suspension.** `stores.is_suspended`/`suspension_reason`/`suspended_at`, admin-only
+  through `stores_guard_update` (plus an insert guard). A suspended store drops out of
+  `storefront_products`, `createOrder` refuses it with the same vague 422 as a lapsed seller, the
+  storefront says it isn't open, and the seller's dashboard shows a banner with the reason. Admin →
+  Stores has Suspend/Lift with a required reason. `SupabaseStoreRepository` never writes these
+  fields, so a stale model can't lift a suspension.
+- **PHASE 10/12: Activity screen** (`/admin/activity`, from the Overview app bar): the
+  `audit_logs` trail, filterable by entity type, and app errors grouped by fingerprint.
+- **PHASE 11: server-side zone enforcement.** `storeShipsTo(zones, country)` in `_shared/regions.js`.
+  `createOrder` refuses a destination outside the store's `shipping_zones`, and refuses an
+  unconfigured country, which `resolveRegion` would silently have priced as US. A store with no
+  zones ships everywhere, the same fallback checkout uses.
+- **PHASE 11: ARB extraction started.** `l10n.yaml`, `lib/l10n/app_en.arb`, and
+  `generate: true` in pubspec. The generated `AppLocalizations` is committed under
+  `lib/l10n/generated/` and its delegate is in `AppLocales`. The storefront, cart and buyer-shell
+  strings are extracted, since those are what an overseas shopper reads. Still English only.
+- **PHASE 12: client error log.** `client_errors` (admin read) is written only through
+  `report_client_error`, which caps message, stack and context sizes and rate-limits per user
+  (30/h) and for all signed-out visitors together (300/h); over the limit it drops silently.
+  `sellora-expire-client-errors` keeps 30 days (added to preflight's `EXPECTED_CRON_JOBS`).
+  `ErrorReporter` (`lib/core/monitoring/`) hooks `FlutterError.onError` and
+  `PlatformDispatcher.onError` in release builds, sends each distinct message at most once per 5 minutes
+  and 20 per session, and never throws. `SELLORA_RELEASE` (dart-define) tags the build.
+- **PHASE 12: `docs/RUNBOOK.md`.** Release order (migrations → function → web) and why, rollback per
+  piece, secret rotation (including the Vault copy of `CRON_SECRET`), backups/staging, and a
+  symptom → where to look table.
+
+**Tests:** `flutter analyze` reports no new issues. `flutter test`: the one failure is the known
+`seller_shell_controller_test` one. New tests: `country_sales_test`, `error_reporter_test`,
+`activity_models_test` and `admin_stores_controller_test`; `admin_dashboard_controller_test` was
+rewritten for server metrics; the row-mapping test covers suspension fields. `supabase npm test`:
+260 RLS checks (27 new: suspension, metrics, client errors) and 343 Deno steps (new
+`storeShipsTo` cases).
+
+**Not done, needs a decision, an account or a model first:**
+- Role as a JWT claim (custom access token hook). It means rewriting every RLS policy that reads
+  `profiles.role`. That's its own migration and audit, not a side task.
+- A third-party crash/uptime service, PITR, a staging project: owner choices and dashboard steps
+  (the runbook says how).
+- Admin coupons/categories/themes/feature flags/platform settings: nothing in the app reads them
+  yet. Each needs a product decision on what it controls.
+- Device/conversion analytics (no session tracking), non-KES settlement, minor-unit persisted
+  amounts, the remaining ARB extraction and a second language.
+
+---
+
 ## 2026-10-03 — PHASE 9: discount codes, customer analytics, store sharing
 
 **Status:** done in code and tested. **Not applied or deployed.** The new migration joins the

@@ -58,5 +58,25 @@ void main() {
     expect(back.sellerId, 'u1');
     expect(back.shippingZones, ['kenya']);
     expect(back.createdAt, store.createdAt);
+    expect(back.isSuspended, isFalse);
+  });
+
+  test("a suspended store reads back, but a seller's write leaves it out", () {
+    final store = StoreModel.fromMap({
+      'id': 'store-u1',
+      'slug': 's',
+      'sellerId': 'u1',
+      'name': 'S',
+      'isSuspended': true,
+      'suspensionReason': 'Counterfeit listings',
+      'suspendedAt': '2026-10-03T09:00:00',
+    });
+    expect(store.isSuspended, isTrue);
+    expect(store.copyWith(tagline: 'hi').suspensionReason,
+        'Counterfeit listings');
+    final row = toRow(store.toMap(), omit: StoreModel.adminOwnedKeys);
+    expect(row.keys, isNot(contains('is_suspended')));
+    expect(row.keys, isNot(contains('suspension_reason')));
+    expect(row.keys, isNot(contains('suspended_at')));
   });
 }

@@ -77,7 +77,7 @@ describe("syncListings", () => {
       return { data: null, error: null };
     });
     setDb(db);
-    return { db, done: syncListings({ cjApi, wait: () => Promise.resolve() }) };
+    return { db, done: syncListings({ cjApi, wait: () => Promise.resolve(), fees: async () => ({ serviceFeeRate: 0.07 }) }) };
   };
   const listing = (over) => ({
     store_id: "s1", id: "p1", seller_id: "seller-1", title: "Lamp",

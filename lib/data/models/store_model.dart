@@ -17,6 +17,9 @@ class StoreModel {
     this.currencyCode = 'KES',
     this.shippingZones = allShippingZoneIds,
     this.createdAt,
+    this.isSuspended = false,
+    this.suspensionReason,
+    this.suspendedAt,
   });
 
   /// Every zone id `lib/core/i18n/countries.dart`'s `ShippingZone` defines,
@@ -57,11 +60,28 @@ class StoreModel {
   final String currencyCode;
 
   /// Ids of the `ShippingZone`s (server pricing regions) this store ships
-  /// to — checkout only offers countries in these zones. Enforced
-  /// client-side only for now: the adopted single-vendor `createOrder` has
-  /// no store concept to check it against (see WORKLOG.md, PHASE 11).
+  /// to — checkout only offers countries in these zones, and the server's
+  /// `createOrder` refuses any other destination (`storeShipsTo` in
+  /// supabase/functions/_shared/regions.js).
   final List<String> shippingZones;
   final DateTime? createdAt;
+
+  // ---- Set by an admin only (stores_guard_update) -------------------------
+  /// An admin has taken this store offline: its catalog is hidden and
+  /// checkout refuses it. The seller's account is untouched — that's
+  /// `UserModel.sellerStatus`.
+  final bool isSuspended;
+
+  /// Why, written for the seller to read (the row is public).
+  final String? suspensionReason;
+  final DateTime? suspendedAt;
+
+  /// Keys only an admin may write; the seller's own writes leave them out.
+  static const adminOwnedKeys = {
+    'isSuspended',
+    'suspensionReason',
+    'suspendedAt',
+  };
 
   /// Whether the seller has been through onboarding's store-setup step.
   bool get isSetUp => category != null && countryCode != null;
@@ -91,6 +111,9 @@ class StoreModel {
       currencyCode: currencyCode ?? this.currencyCode,
       shippingZones: shippingZones ?? this.shippingZones,
       createdAt: createdAt,
+      isSuspended: isSuspended,
+      suspensionReason: suspensionReason,
+      suspendedAt: suspendedAt,
     );
   }
 
@@ -112,6 +135,11 @@ class StoreModel {
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'] as String)
           : null,
+      isSuspended: map['isSuspended'] as bool? ?? false,
+      suspensionReason: map['suspensionReason'] as String?,
+      suspendedAt: map['suspendedAt'] != null
+          ? DateTime.tryParse(map['suspendedAt'] as String)
+          : null,
     );
   }
 
@@ -130,6 +158,9 @@ class StoreModel {
       'currencyCode': currencyCode,
       'shippingZones': shippingZones,
       'createdAt': createdAt?.toIso8601String(),
+      'isSuspended': isSuspended,
+      'suspensionReason': suspensionReason,
+      'suspendedAt': suspendedAt?.toIso8601String(),
     };
   }
 }

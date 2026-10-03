@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/formatters.dart';
@@ -16,7 +17,16 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Platform overview')),
+      appBar: AppBar(
+        title: const Text('Platform overview'),
+        actions: [
+          IconButton(
+            tooltip: 'Activity & errors',
+            icon: const Icon(Icons.history),
+            onPressed: () => Get.toNamed(Routes.adminActivity),
+          ),
+        ],
+      ),
       body: Obx(() {
         if (controller.isLoading.value) return const SelloraLoader();
         return RefreshIndicator(
@@ -29,7 +39,34 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
                   vertical: AppSpacing.md),
               children: [
                 const SectionHeader(title: 'Platform revenue'),
+                const SizedBox(height: 2),
+                Text(
+                  'All paid orders, in KES as charged. Seller GMV is the '
+                  'sellers\' money; service fees and subscriptions are '
+                  'Sellora\'s.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.slate),
+                ),
                 const SizedBox(height: AppSpacing.sm),
+                if (controller.metricsError.value != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline,
+                            color: AppColors.danger, size: 18),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                            child: Text(controller.metricsError.value!,
+                                style: Theme.of(context).textTheme.bodySmall)),
+                        TextButton(
+                            onPressed: controller.load,
+                            child: const Text('Retry')),
+                      ],
+                    ),
+                  ),
                 _statGrid([
                   ManifestStatCard(
                       label: 'Seller GMV',
@@ -47,11 +84,21 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
                           code: 'KES'),
                       accentColor: AppColors.horizonTeal),
                   ManifestStatCard(
-                      label: 'Total platform revenue',
-                      value: Formatters.currency(
-                          controller.totalPlatformRevenue,
+                      label: 'Subscription ARR',
+                      value: Formatters.currency(controller.subscriptionArr,
                           code: 'KES'),
                       accentColor: AppColors.adminAccent),
+                  ManifestStatCard(
+                      label: 'Refunded',
+                      value:
+                          Formatters.currency(controller.refunds, code: 'KES'),
+                      accentColor: AppColors.danger),
+                  ManifestStatCard(
+                      label: 'Seller churn (30d)',
+                      value: controller.churnRate == null
+                          ? '—'
+                          : '${(controller.churnRate! * 100).toStringAsFixed(1)}%',
+                      accentColor: AppColors.info),
                 ]),
                 const SizedBox(height: AppSpacing.lg),
                 const _PlatformTrendCard(),
@@ -80,8 +127,12 @@ class AdminDashboardView extends GetView<AdminDashboardController> {
                       value: '${controller.stores.length}',
                       accentColor: AppColors.cargoNavy),
                   ManifestStatCard(
-                      label: 'Total orders',
-                      value: '${controller.orders.length}',
+                      label: 'Suspended stores',
+                      value: '${controller.suspendedStoreCount}',
+                      accentColor: AppColors.danger),
+                  ManifestStatCard(
+                      label: 'Paid orders',
+                      value: '${controller.paidOrderCount}',
                       accentColor: AppColors.adminAccent),
                 ]),
                 const SizedBox(height: AppSpacing.lg),
@@ -197,7 +248,9 @@ class _PlatformTrendCard extends GetView<AdminDashboardController> {
             const SizedBox(height: AppSpacing.sm),
             SizedBox(
               height: 190,
-              child: hasValues
+              child: controller.isTrendLoading.value
+                  ? const SelloraLoader()
+                  : hasValues
                   ? LineChart(_chartData(points, metric, accent))
                   : Center(
                       child: Text(

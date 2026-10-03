@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kDebugMode, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -11,6 +12,7 @@ import 'app/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'core/i18n/app_locales.dart';
 import 'core/config/supabase_config.dart';
+import 'core/monitoring/error_reporter.dart';
 import 'core/utils/auth_link_error.dart';
 import 'data/repositories/auth_repository.dart';
 import 'data/services/auth_service.dart';
@@ -25,6 +27,21 @@ Future<void> main() async {
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.publishableKey,
   );
+
+  // Uncaught errors go to the client_errors table (admin → Activity).
+  // Debug builds keep them on the console only.
+  if (!kDebugMode) {
+    ErrorReporter(
+      send: (message, stack, context) => Supabase.instance.client.rpc(
+          'report_client_error',
+          params: {'p_message': message, 'p_stack': stack, 'p_context': context}),
+      context: () => {
+        'route': Get.currentRoute,
+        'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+        'release': AppConstants.release,
+      },
+    ).install();
+  }
 
   // A bad auth link (expired, already used) comes back as
   // `#error=...&error_code=...`, which supabase_flutter leaves in the URL -

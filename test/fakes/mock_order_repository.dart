@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:sellora/data/models/order_model.dart';
 import 'package:sellora/data/models/order_refund_model.dart';
+import 'package:sellora/data/models/order_timeline.dart';
 import 'package:sellora/data/repositories/order_repository.dart';
 
 class MockOrderRepository extends GetxService implements OrderRepository {
@@ -56,6 +57,39 @@ class MockOrderRepository extends GetxService implements OrderRepository {
     // silently corrupted a paid order's dashboard/analytics numbers the
     // moment a seller marked it shipped.
     if (index != -1) _orders[index] = _orders[index].copyWith(status: status);
+  }
+
+  @override
+  Future<OrderModel?> sellerOrder(String orderId) async =>
+      _orders.firstWhereOrNull((o) => o.id == orderId);
+
+  /// Notes recorded by [addOrderNote], keyed by order id.
+  final Map<String, List<String>> notes = {};
+
+  @override
+  Future<List<OrderTimelineEntry>> orderTimeline(String orderId) async {
+    final order = _orders.firstWhereOrNull((o) => o.id == orderId);
+    if (order == null) return const [];
+    return [
+      OrderTimelineEntry(
+        at: order.createdAt,
+        kind: 'created',
+        actorRole: 'buyer',
+        details: {'total': order.total, 'currency': order.currency},
+      ),
+      for (final body in notes[orderId] ?? const <String>[])
+        OrderTimelineEntry(
+          at: order.createdAt,
+          kind: 'note',
+          actorRole: 'seller',
+          details: {'body': body},
+        ),
+    ];
+  }
+
+  @override
+  Future<void> addOrderNote(String orderId, String body) async {
+    notes.putIfAbsent(orderId, () => []).add(body.trim());
   }
 
   /// Refunds recorded by [refundOrder], keyed by order id.

@@ -133,17 +133,21 @@ store-health/plan-usage card and a setup checklist. Discount codes (2026-10-03) 
 `orders_enforce_discount` trigger enforces usage limits at insert. The seller funds the discount, the
 7% fee is on the discounted goods total, and a code that would put the order below CJ cost is refused.
 Sellers manage codes and share their store link on `/seller/marketing`. `/seller/customers` derives
-customer analytics from `store_customers` plus the store's orders. Not started: free-shipping codes
-(owner call), collection/customer-group codes, automatic discounts, abandoned cart, campaigns,
-customer tags/notes, analytics by country/device/conversion.
+customer analytics from `store_customers` plus the store's orders. The dashboard converts each order
+into the store's currency before summing, and shows sales by destination country. Not started:
+free-shipping codes (owner call), collection/customer-group codes, automatic discounts, abandoned
+cart, campaigns, customer tags/notes, analytics by device/conversion (nothing records sessions).
 
-## PHASE 10 — Admin: first slice
+## PHASE 10 — Admin
 
 Overview shows the platform financial model (seller GMV kept apart from Sellora's service-fee revenue
-and subscription MRR/ARR, `TODO.md` §35), plus Sellers, Stores, Sync, Orders and Plans tabs. Seller
-suspension is `profiles.seller_status`; storefronts only show sellers in good standing. Not started:
-per-store suspension, refunds UI, coupons, categories, themes, feature flags, platform settings,
-reports/support, churn.
+and subscription MRR/ARR, `TODO.md` §35), computed by `admin_platform_metrics()` in KES over every
+paid order (`20261003000200_admin_platform.sql`), with refunds and 30-day seller churn. Tabs: Sellers,
+Stores, Sync, Orders (with refunds), Plans, plus an Activity screen (audit log, app errors) off the
+Overview. Seller suspension is `profiles.seller_status`. Store suspension is `stores.is_suspended`:
+admin-only (guard trigger), it hides the store from `storefront_products`, and `createOrder` refuses
+it. Not started: coupons, categories, themes, feature flags, platform settings, reports export,
+support.
 
 ## PHASE 11 — Internationalization: first slice
 
@@ -151,8 +155,11 @@ reports/support, churn.
 payment-method registry mirroring `supabase/functions/_shared/regions.js` (`test/countries_test.dart`
 fails on drift). `CurrencyService` converts from the server's `fx_rates`. Sellers pick shipping zones
 in Customize store; checkout offers only in-zone countries. `flutter_localizations` is wired (English
-only). Still open: server-side zone enforcement in `createOrder`, non-KES settlement, minor-unit
-persisted amounts, ARB string extraction.
+only). `createOrder` enforces the store's zones (`storeShipsTo` in `_shared/regions.js`) and
+refuses unconfigured countries. Strings are moving into `lib/l10n/app_en.arb` (`gen-l10n`, generated
+code committed under `lib/l10n/generated/`): storefront, cart and buyer shell so far. Still open:
+non-KES settlement, minor-unit persisted amounts, extracting the remaining screens, a second
+language.
 
 ## PHASE 12 — Security + production
 
@@ -162,9 +169,13 @@ See `SELLORA_SECURITY_AUDIT.md`. Enforced in the database: RLS on every table, g
 (`consume_rate_limit`). Admin is `app_metadata.role`, set only by `supabase/scripts/grant-admin.js`.
 `scripts/preflight.js` checks a rollout from outside.
 
-Still open: `seller`/`buyer` is still the `profiles.role` column, not a JWT claim; monitoring/crash
-reporting; backups (PITR) and a staging environment; deployment runbooks; the hosting decision for
-`build/web`; untrack `functions/node_modules` (goes with deleting `functions/`).
+Uncaught client errors are recorded in `client_errors` through the rate-limited
+`report_client_error` (`lib/core/monitoring/error_reporter.dart`, release builds only), kept 30 days
+by the `sellora-expire-client-errors` job. `docs/RUNBOOK.md` is the operations runbook.
+
+Still open: `seller`/`buyer` is still the `profiles.role` column, not a JWT claim; a third-party
+crash/uptime service; turning on PITR and creating a staging project (owner); the hosting decision
+for `build/web`; untrack `functions/node_modules` (goes with deleting `functions/`).
 
 ## Decisions still required
 

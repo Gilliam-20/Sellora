@@ -27,6 +27,9 @@ class ProductModel {
     this.stock = 0,
     this.discountPercent,
     this.supplierAlert,
+    this.tags = const [],
+    this.seoTitle,
+    this.seoDescription,
   });
 
   final String id;
@@ -64,10 +67,29 @@ class ProductModel {
   /// listingSync.js). Server-owned, so [toMap] never sends it back.
   final String? supplierAlert;
 
+  /// The seller's own labels for the listing: at most [maxTags], each 1-40
+  /// characters (the `products` check constraint enforces both).
+  final List<String> tags;
+
+  /// What search engines and link previews show, when the seller set it;
+  /// [title]/[description] otherwise. Capped at 120/320 characters in the
+  /// database.
+  final String? seoTitle;
+  final String? seoDescription;
+
+  static const maxTags = 20;
+
   double get margin => sellPrice - costPrice;
   double get marginPercent => costPrice == 0 ? 0 : (margin / costPrice) * 100;
 
   ProductModel copyWith({
+    String? title,
+    String? description,
+    String? imageUrl,
+    List<String>? images,
+    List<String>? tags,
+    String? seoTitle,
+    String? seoDescription,
     double? sellPrice,
     String? sellerId,
     String? storeId,
@@ -78,15 +100,15 @@ class ProductModel {
     return ProductModel(
       id: id,
       cjProductId: cjProductId,
-      title: title,
-      imageUrl: imageUrl,
-      images: images,
+      title: title ?? this.title,
+      imageUrl: imageUrl ?? this.imageUrl,
+      images: images ?? this.images,
       costPrice: costPrice,
       sellPrice: sellPrice ?? this.sellPrice,
       compareAtPrice: compareAtPrice,
       currency: currency,
       category: category,
-      description: description,
+      description: description ?? this.description,
       variants: variants ?? this.variants,
       sellerId: sellerId ?? this.sellerId,
       storeId: storeId ?? this.storeId,
@@ -96,6 +118,9 @@ class ProductModel {
       stock: stock ?? this.stock,
       discountPercent: discountPercent,
       supplierAlert: supplierAlert,
+      tags: tags ?? this.tags,
+      seoTitle: seoTitle ?? this.seoTitle,
+      seoDescription: seoDescription ?? this.seoDescription,
     );
   }
 
@@ -132,6 +157,9 @@ class ProductModel {
       stock: map['stock'] as int? ?? 0,
       discountPercent: map['discountPercent'] as int?,
       supplierAlert: map['supplierAlert'] as String?,
+      tags: List<String>.from(map['tags'] as List? ?? const []),
+      seoTitle: map['seoTitle'] as String?,
+      seoDescription: map['seoDescription'] as String?,
     );
   }
 
@@ -156,6 +184,9 @@ class ProductModel {
       'rating': rating,
       'stock': stock,
       'discountPercent': discountPercent,
+      'tags': tags,
+      'seoTitle': seoTitle,
+      'seoDescription': seoDescription,
     };
   }
 }

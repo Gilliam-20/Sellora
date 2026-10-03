@@ -13,6 +13,7 @@ flutter run -d chrome       # web
 flutter analyze             # lint — analysis_options.yaml adds prefer_single_quotes,
                             # always_declare_return_types, avoid_print, sort_child_properties_last
 dart format lib
+flutter gen-l10n            # regenerate lib/l10n/generated from lib/l10n/app_en.arb (also run by pub get)
 flutter build web           # output lands in build/web, where firebase.json's hosting points
 ```
 
@@ -52,6 +53,9 @@ The app reads its project URL and publishable key from `lib/core/config/supabase
 (`--dart-define=SUPABASE_URL=... --dart-define=SUPABASE_PUBLISHABLE_KEY=...` overrides). Any schema
 or policy change goes in a **new** migration file, with a matching check in
 `supabase/tests/rls.test.mjs`.
+
+`docs/RUNBOOK.md` is the release/rollback/incident runbook: migrations ship before the function,
+and the function before the web build.
 
 ### Firebase (what remains: hosting)
 

@@ -1,4 +1,5 @@
 import 'package:get/get.dart';
+import 'activity/admin_activity_controller.dart';
 import 'catalog_sync/admin_catalog_sync_controller.dart';
 import 'dashboard/admin_dashboard_controller.dart';
 import 'orders/admin_orders_controller.dart';
@@ -17,5 +18,12 @@ class AdminBinding extends Bindings {
     Get.lazyPut<AdminCatalogSyncController>(() => AdminCatalogSyncController());
     Get.lazyPut<AdminOrdersController>(() => AdminOrdersController());
     Get.lazyPut<AdminPlansController>(() => AdminPlansController());
+  }
+}
+
+class AdminActivityBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<AdminActivityController>(() => AdminActivityController());
   }
 }

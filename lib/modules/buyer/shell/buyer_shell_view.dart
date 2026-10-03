@@ -4,6 +4,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../core/widgets/adaptive_shell_scaffold.dart';
 import '../../../core/widgets/app_page.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import '../../../data/repositories/cart_repository.dart';
 import '../../storefront/storefront_view.dart';
 import '../cart/cart_view.dart';
@@ -28,6 +29,7 @@ class BuyerShellView extends GetView<BuyerShellController> {
   Widget build(BuildContext context) {
     final cart = Get.find<CartRepository>();
     final notifications = Get.find<NotificationCenter>();
+    final l10n = AppLocalizations.of(context);
 
     return Obx(() {
       final scope = controller.scope;
@@ -36,17 +38,16 @@ class BuyerShellView extends GetView<BuyerShellController> {
       // flight or failed outright (mirrors SellerShellView's own guard).
       if (scope.current.value == null) {
         if (scope.isResolving.value) {
-          return const Scaffold(
-              body: AppLoadingState(label: 'Loading store…'));
+          return Scaffold(
+              body: AppLoadingState(label: l10n.storeLoading));
         }
         return Scaffold(
           body: Center(
             child: EmptyState(
               icon: Icons.storefront_outlined,
-              title: 'We couldn\'t load this store',
-              message: scope.errorMessage.value ??
-                  'This storefront could not be found.',
-              actionLabel: 'Try again',
+              title: l10n.storeLoadFailedTitle,
+              message: scope.errorMessage.value ?? l10n.storeNotFound,
+              actionLabel: l10n.tryAgain,
               onAction: controller.resolveStore,
             ),
           ),
@@ -58,8 +59,8 @@ class BuyerShellView extends GetView<BuyerShellController> {
         onDestinationSelected: controller.changeTab,
         tabs: _tabs,
         destinations: [
-          const ShellDestination(
-              icon: Icon(Icons.storefront_outlined), label: 'Shop'),
+          ShellDestination(
+              icon: const Icon(Icons.storefront_outlined), label: l10n.navShop),
           ShellDestination(
             icon: Obx(
               () => Badge(
@@ -70,10 +71,11 @@ class BuyerShellView extends GetView<BuyerShellController> {
                 child: const Icon(Icons.shopping_bag_outlined),
               ),
             ),
-            label: 'Cart',
+            label: l10n.navCart,
           ),
-          const ShellDestination(
-              icon: Icon(Icons.receipt_long_outlined), label: 'Orders'),
+          ShellDestination(
+              icon: const Icon(Icons.receipt_long_outlined),
+              label: l10n.navOrders),
           ShellDestination(
             icon: Obx(
               () => Badge(
@@ -82,10 +84,11 @@ class BuyerShellView extends GetView<BuyerShellController> {
                 child: const Icon(Icons.notifications_outlined),
               ),
             ),
-            label: 'Alerts',
+            label: l10n.navAlerts,
           ),
-          const ShellDestination(
-              icon: Icon(Icons.person_outline), label: 'Profile'),
+          ShellDestination(
+              icon: const Icon(Icons.person_outline),
+              label: l10n.navProfile),
         ],
       );
     });

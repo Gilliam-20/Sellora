@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show DateTimeRange;
 import 'package:get/get.dart';
+import '../../../core/i18n/money.dart';
 import '../../../data/models/order_model.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/models/subscription_plan_model.dart';
@@ -8,6 +9,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/order_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/subscription_repository.dart';
+import '../../../data/services/currency_service.dart';
 import '../../storefront/store_scope.dart';
 import 'dashboard_models.dart';
 
@@ -18,7 +20,9 @@ class SellerDashboardController extends GetxController {
     SubscriptionRepository? subscriptionRepository,
     AuthRepository? authRepository,
     StoreScope? storeScope,
-  })  : _orderRepo = orderRepository ?? Get.find<OrderRepository>(),
+    double Function(double amount, String currency)? toStoreCurrency,
+  })  : _toStoreCurrency = toStoreCurrency,
+        _orderRepo = orderRepository ?? Get.find<OrderRepository>(),
         _productRepo = productRepository ?? Get.find<ProductRepository>(),
         _subscriptionRepo =
             subscriptionRepository ?? Get.find<SubscriptionRepository>(),
@@ -30,6 +34,24 @@ class SellerDashboardController extends GetxController {
   final SubscriptionRepository _subscriptionRepo;
   final AuthRepository authRepo;
   final StoreScope _storeScope;
+  final double Function(double amount, String currency)? _toStoreCurrency;
+
+  /// Every amount on the dashboard is in this.
+  String get currencyCode => _storeScope.current.value?.currencyCode ?? 'KES';
+
+  /// Orders are priced in the shopper's currency (a Kenyan store selling
+  /// to the UK charges GBP); sums are only meaningful once each order is
+  /// in the store's.
+  double _inStoreCurrency(double amount, String currency) {
+    final convert = _toStoreCurrency;
+    if (convert != null) return convert(amount, currency);
+    if (currency == currencyCode) return amount;
+    return Get.find<CurrencyService>()
+        .convertMoney(Money.fromMajor(amount, currency), currencyCode)
+        .toMajor();
+  }
+
+  double _orderTotal(OrderModel o) => _inStoreCurrency(o.total, o.currency);
 
   final isLoading = true.obs;
 
@@ -47,6 +69,7 @@ class SellerDashboardController extends GetxController {
   final statusBreakdown = <OrderStatus, int>{}.obs;
   final topProducts = <TopProductStat>[].obs;
   final salesSeries = <SalesPoint>[].obs;
+  final salesByCountry = <CountrySales>[].obs;
 
   /// Percent change vs. the immediately preceding period of the same
   /// length. Null when there's nothing in the prior period to compare
@@ -180,8 +203,9 @@ class SellerDashboardController extends GetxController {
         .where((o) => o.paymentStatus == OrderPaymentStatus.paid)
         .toList();
 
-    grossSales.value = paid.fold(0.0, (sum, o) => sum + o.total);
-    netRevenue.value = paid.fold(0.0, (sum, o) => sum + o.sellerRevenue);
+    grossSales.value = paid.fold(0.0, (sum, o) => sum + _orderTotal(o));
+    netRevenue.value = paid.fold(
+        0.0, (sum, o) => sum + _inStoreCurrency(o.sellerRevenue, o.currency));
     orderCount.value = inRange.length;
     paidOrderCount.value = paid.length;
     averageOrderValue.value = paid.isEmpty ? 0 : grossSales.value / paid.length;
@@ -198,6 +222,7 @@ class SellerDashboardController extends GetxController {
 
     topProducts.value = _topProducts(paid);
     salesSeries.value = _salesSeries(paid, start, end);
+    salesByCountry.value = CountrySales.fromOrders(paid, _inStoreCurrency);
 
     final periodLength = end.difference(start);
     final prevEnd = start;
@@ -207,7 +232,7 @@ class SellerDashboardController extends GetxController {
             !o.createdAt.isBefore(prevStart) && o.createdAt.isBefore(prevEnd))
         .where((o) => o.paymentStatus == OrderPaymentStatus.paid)
         .toList();
-    final prevGross = previous.fold(0.0, (sum, o) => sum + o.total);
+    final prevGross = previous.fold(0.0, (sum, o) => sum + _orderTotal(o));
     grossSalesDeltaPercent.value = prevGross == 0
         ? null
         : (grossSales.value - prevGross) / prevGross * 100;
@@ -230,7 +255,8 @@ class SellerDashboardController extends GetxController {
           title: item.title,
           imageUrl: item.imageUrl,
           quantitySold: (existing?.quantitySold ?? 0) + item.quantity,
-          revenue: (existing?.revenue ?? 0) + item.total,
+          revenue: (existing?.revenue ?? 0) +
+              _inStoreCurrency(item.total, order.currency),
         );
       }
     }
@@ -262,7 +288,7 @@ class SellerDashboardController extends GetxController {
           : DateTime(
               order.createdAt.year, order.createdAt.month, order.createdAt.day);
       if (buckets.containsKey(key)) {
-        buckets[key] = buckets[key]! + order.total;
+        buckets[key] = buckets[key]! + _orderTotal(order);
       }
     }
     final keys = buckets.keys.toList()..sort();

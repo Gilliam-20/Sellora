@@ -31,4 +31,25 @@ function resolveRegion(countryCode) {
   return REGION_CONFIG[code] || FALLBACK_REGION;
 }
 
-export { REGION_CONFIG, resolveRegion };
+// Every zone a store can enable (stores.shipping_zones). Also the column's
+// default, and what a store with no zones at all is treated as having -
+// the same fallback checkout uses rather than offering no country.
+const SHIPPING_ZONES = Object.freeze(["kenya", "us", "uk", "eu"]);
+
+/**
+ * Whether a store with `shippingZones` enabled ships to `countryCode`.
+ * Only configured countries qualify: resolveRegion's US fallback prices an
+ * unknown country, but no store has agreed to ship there.
+ * @param {string[]|null|undefined} shippingZones The store's zone ids.
+ * @param {string} countryCode ISO 3166-1 alpha-2 country code.
+ * @return {boolean}
+ */
+function storeShipsTo(shippingZones, countryCode) {
+  const config = REGION_CONFIG[String(countryCode || "").trim().toUpperCase()];
+  if (!config) return false;
+  const zones = Array.isArray(shippingZones) && shippingZones.length ?
+    shippingZones : SHIPPING_ZONES;
+  return zones.includes(config.region);
+}
+
+export { REGION_CONFIG, SHIPPING_ZONES, resolveRegion, storeShipsTo };

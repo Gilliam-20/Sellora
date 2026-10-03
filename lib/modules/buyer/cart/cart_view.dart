@@ -8,6 +8,7 @@ import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../data/services/currency_service.dart';
+import '../../../l10n/generated/app_localizations.dart';
 import 'cart_controller.dart';
 
 class CartView extends GetView<CartController> {
@@ -15,8 +16,9 @@ class CartView extends GetView<CartController> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Your cart')),
+      appBar: AppBar(title: Text(l10n.cartTitle)),
       body: Obx(() {
         // Snapshot the RxList inside Obx's tracked scope — ListView's
         // itemBuilder runs later during layout, outside that scope, so
@@ -24,10 +26,10 @@ class CartView extends GetView<CartController> {
         // where GetX can no longer see it (see StorefrontView/BuyerOrdersView).
         final items = List.of(controller.cartRepo.items);
         if (items.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.shopping_bag_outlined,
-            title: 'Your cart is empty',
-            message: 'Products you add will show up here.',
+            title: l10n.cartEmptyTitle,
+            message: l10n.cartEmptyMessage,
           );
         }
         return ResponsiveCenter(
@@ -110,7 +112,7 @@ class CartView extends GetView<CartController> {
                               foregroundColor: AppColors.danger,
                               padding: EdgeInsets.zero,
                               minimumSize: const Size(0, 32)),
-                          child: const Text('Remove'),
+                          child: Text(l10n.cartRemove),
                         ),
                       ],
                     ),
@@ -124,7 +126,7 @@ class CartView extends GetView<CartController> {
       bottomNavigationBar: Obx(() {
         if (controller.cartRepo.items.isEmpty) return const SizedBox.shrink();
         return BottomActionBar(
-          label: 'Checkout',
+          label: l10n.cartCheckout,
           trailingText: Get.find<CurrencyService>().format(
               controller.cartRepo.subtotal,
               fromCode: controller.cartRepo.currency),

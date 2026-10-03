@@ -185,6 +185,11 @@ class OrderModel {
     this.logisticName,
     this.discountCode,
     this.discountAmount = 0,
+    this.serviceFeeBase = 'subtotal',
+    this.refundedAmount = 0,
+    this.tracking,
+    this.cjOrderStatus,
+    this.cjOrderNumber,
   });
 
   OrderModel copyWith({
@@ -226,6 +231,11 @@ class OrderModel {
       logisticName: logisticName ?? this.logisticName,
       discountCode: discountCode ?? this.discountCode,
       discountAmount: discountAmount ?? this.discountAmount,
+      serviceFeeBase: serviceFeeBase,
+      refundedAmount: refundedAmount,
+      tracking: tracking,
+      cjOrderStatus: cjOrderStatus,
+      cjOrderNumber: cjOrderNumber,
     );
   }
 
@@ -278,6 +288,30 @@ class OrderModel {
   final String? discountCode;
   final double discountAmount;
 
+  /// What [serviceFeeAmount] was charged on: `subtotal` (the goods, the
+  /// default) or `subtotal_and_shipping`, when an admin had configured the
+  /// fee to take shipping too. Snapshotted with the rate.
+  final String serviceFeeBase;
+
+  /// How much has been refunded to the buyer so far, in [currency].
+  final double refundedAmount;
+
+  /// The latest shipment snapshot from CJ and the carrier, or null before
+  /// the order ships.
+  final OrderTracking? tracking;
+
+  /// CJ's side of fulfilment (`NOT_PUSHED`, `PUSHING`, `PUSHED`, `FAILED`,
+  /// `NEEDS_RECONCILIATION`) and CJ's own order number. Only on the seller's
+  /// and admin's read (`seller_orders`); null for a buyer.
+  final String? cjOrderStatus;
+  final String? cjOrderNumber;
+
+  /// The seller's goods subtotal, before any discount: what the line items
+  /// add up to.
+  double get itemsSubtotal => items.fold(0, (sum, item) => sum + item.total);
+
+  int get itemCount => items.fold(0, (sum, item) => sum + item.quantity);
+
   factory OrderModel.fromMap(Map<String, dynamic> map) {
     return OrderModel(
       id: map['id'] as String,
@@ -310,6 +344,14 @@ class OrderModel {
       logisticName: map['logisticName'] as String?,
       discountCode: map['discountCode'] as String?,
       discountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0,
+      serviceFeeBase: map['serviceFeeBase'] as String? ?? 'subtotal',
+      refundedAmount: (map['refundedAmount'] as num?)?.toDouble() ?? 0,
+      tracking: map['tracking'] is Map
+          ? OrderTracking.fromMap(
+              Map<String, dynamic>.from(map['tracking'] as Map))
+          : null,
+      cjOrderStatus: map['cjOrderStatus'] as String?,
+      cjOrderNumber: map['cjOrderNumber'] as String?,
     );
   }
 
@@ -337,5 +379,65 @@ class OrderModel {
         'logisticName': logisticName,
         'discountCode': discountCode,
         'discountAmount': discountAmount,
+        'serviceFeeBase': serviceFeeBase,
+        'refundedAmount': refundedAmount,
       };
+}
+
+/// The `orders.tracking` snapshot `buildTracking` writes
+/// (supabase/functions/_shared/tracking.js). Every field is optional: CJ's
+/// response shapes aren't confirmed against a real account yet.
+class OrderTracking {
+  OrderTracking({
+    this.status,
+    this.trackingNumber,
+    this.trackingUrl,
+    this.carrier,
+    this.events = const [],
+  });
+
+  /// One of tracking.js's `SHIPMENT` values, e.g. `IN_TRANSIT`.
+  final String? status;
+  final String? trackingNumber;
+  final String? trackingUrl;
+  final String? carrier;
+
+  /// Newest first, as tracking.js sorts them.
+  final List<TrackingEvent> events;
+
+  String get statusLabel => switch (status) {
+        'PENDING' => 'With CJ, not yet shipped',
+        'IN_TRANSIT' => 'In transit',
+        'OUT_FOR_DELIVERY' => 'Out for delivery',
+        'DELIVERED' => 'Delivered',
+        'EXCEPTION' => 'Carrier reported a problem',
+        'CANCELLED' => 'Cancelled',
+        _ => 'Unknown',
+      };
+
+  factory OrderTracking.fromMap(Map<String, dynamic> map) => OrderTracking(
+        status: map['status'] as String?,
+        trackingNumber: map['trackingNumber'] as String?,
+        trackingUrl: map['trackingUrl'] as String?,
+        carrier: map['carrier'] as String?,
+        events: (map['events'] as List? ?? const [])
+            .whereType<Map>()
+            .map((e) => TrackingEvent.fromMap(Map<String, dynamic>.from(e)))
+            .toList(),
+      );
+}
+
+class TrackingEvent {
+  TrackingEvent({this.at, this.description = '', this.location});
+
+  /// As the carrier gave it; not always a parseable date.
+  final String? at;
+  final String description;
+  final String? location;
+
+  factory TrackingEvent.fromMap(Map<String, dynamic> map) => TrackingEvent(
+        at: map['at'] as String?,
+        description: map['description'] as String? ?? '',
+        location: map['location'] as String?,
+      );
 }

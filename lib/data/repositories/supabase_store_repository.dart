@@ -9,8 +9,16 @@ import 'store_repository.dart';
 class SupabaseStoreRepository extends GetxService implements StoreRepository {
   final SupabaseService _db = Get.find<SupabaseService>();
 
-  /// Set once at creation; the stores_guard_update trigger refuses changes.
-  static const _immutable = {'id', 'slug', 'sellerId', 'createdAt'};
+  /// Set once at creation, or admin-only; the stores_guard_update trigger
+  /// refuses the seller's change to either (a stale model would otherwise
+  /// try to lift a suspension).
+  static const _immutable = {
+    'id',
+    'slug',
+    'sellerId',
+    'createdAt',
+    ...StoreModel.adminOwnedKeys,
+  };
 
   @override
   Future<List<StoreModel>> allStores() async {
@@ -42,8 +50,11 @@ class SupabaseStoreRepository extends GetxService implements StoreRepository {
     // storeBySlug() check, this insert fails outright — no duplicate slug
     // and no half-created store.
     final row = await _db.stores
-        .insert(toRow(store.toMap()
-          ..removeWhere((key, value) => key == 'createdAt' && value == null)))
+        .insert(toRow(
+            store.toMap()
+              ..removeWhere(
+                  (key, value) => key == 'createdAt' && value == null),
+            omit: StoreModel.adminOwnedKeys))
         .select()
         .single();
     return StoreModel.fromMap(fromRow(row));

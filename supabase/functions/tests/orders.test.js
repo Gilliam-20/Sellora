@@ -205,6 +205,25 @@ describe("splitServiceFee", () => {
     assert.deepEqual(
         splitServiceFee(undefined), { serviceFeeAmountUsd: 0, sellerRevenueUsd: 0 });
   });
+
+  test("charges the configured rate, not the default", () => {
+    assert.deepEqual(splitServiceFee(100, 40, { rate: 0.05 }),
+        { serviceFeeAmountUsd: 5, sellerRevenueUsd: 55 });
+  });
+
+  test("takes shipping only when it's passed, and the seller funds that part", () => {
+    assert.deepEqual(splitServiceFee(100, 40, { rate: 0.07, shippingUsd: 10 }),
+        { serviceFeeAmountUsd: 7.7, sellerRevenueUsd: 52.3 });
+    assert.equal(splitServiceFee(100, 40, { shippingUsd: -10 }).serviceFeeAmountUsd, 7);
+  });
+});
+
+describe("lineRefusal at a configured rate", () => {
+  test("the price floor moves with the rate", () => {
+    const line = { supplierUnitPriceUsd: 9.5, retailUnitPriceUsd: 10, quantity: 1 };
+    assert.equal(lineRefusal(line), "below_cost");
+    assert.equal(lineRefusal({ ...line, feeRate: 0.05 }), null);
+  });
 });
 
 describe("lineRefusal", () => {

@@ -9,6 +9,7 @@ import {
   priceDiscount,
 } from "./discounts.js";
 import { badRequest, notFound, unprocessable } from "./errors.js";
+import { DEFAULT_SERVICE_FEE_RATE, getFeeSettings } from "./fees.js";
 import { getUsdToKesRate, getRate } from "./fx.js";
 import { getPricing, retailShippingPrice } from "./pricing.js";
 import { resolveRegion } from "./regions.js";
@@ -35,11 +36,13 @@ const PUSH_CLAIM_STALE_MS = 5 * 60 * 1000;
 // immediately - that's a real user choice.
 const DUPLICATE_ATTEMPT_WINDOW_MS = 2 * 60 * 1000;
 
-// Platform service fee: 7% of the product subtotal only - never shipping or
-// tax - snapshotted onto every order so a later change to this constant
-// can't retroactively change what a historical order owes its seller. See
+// Platform service fee: by default 7% of the product subtotal only - never
+// shipping or tax. The live rate is an admin setting (fees.js); each order
+// snapshots the rate and base it was charged, so a later change can't
+// retroactively change what a historical order owes its seller. This is the
+// default, used where no rate is passed. See
 // SELLORA_IMPLEMENTATION_PLAN.md's "Decisions on record".
-const SERVICE_FEE_RATE = 0.07;
+const SERVICE_FEE_RATE = DEFAULT_SERVICE_FEE_RATE;
 
 // How long an unpaid order stays payable. It carries a snapshot of CJ's
 // cost and the FX rate, so it can't be paid days later at stale prices;
@@ -89,9 +92,19 @@ async function createOrder({
   const discountCode = normalizeDiscountCode(rawCode);
 
   const store = must(await db().from("stores")
-      .select("id, seller_id").eq("id", storeId).maybeSingle());
+      .select("id, seller_id, shipping_zones, is_suspended").eq("id", storeId).maybeSingle());
   if (!store) throw notFound("Store not found");
   const sellerId = store.seller_id;
+  // An admin can take one store offline without suspending its seller.
+  if (store.is_suspended === true) {
+    logWarning("order_refused_store_suspended", { storeId, sellerId });
+    throw unprocessable(STORE_UNAVAILABLE);
+  }
+  // Checkout only offers the store's zones; this is the server's copy of
+  // that rule, so a crafted request can't make a seller ship elsewhere.
+  if (!storeShipsTo(store.shipping_zones, shippingAddress.countryCode)) {
+    throw unprocessable("This store doesn't ship to that country");
+  }
 
   // Standing and plan limits are the server's to enforce: a suspended or
   // lapsed seller, or one past their plan's order_limit, can't be sold
@@ -115,7 +128,8 @@ async function createOrder({
   // never trust a client-supplied currency.
   const { region: regionKey, currency } = resolveRegion(shippingAddress.countryCode);
 
-  const pricing = await getPricing();
+  const [pricing, fees] = await Promise.all([getPricing(), getFeeSettings()]);
+  const feeRate = fees.serviceFeeRate;
   const priced = await Promise.all(
       items.map(async (item) => {
         const [variant, listing, stock] = await Promise.all([
@@ -162,6 +176,7 @@ async function createOrder({
           retailUnitPriceUsd,
           quantity: item.quantity,
           available: stock?.[item.vid],
+          feeRate,
         });
         if (refusal === "below_cost") {
           logWarning("order_refused_below_cost", {
@@ -197,11 +212,12 @@ async function createOrder({
   // Payments sub-account work in SELLORA_IMPLEMENTATION_PLAN.md PHASE 8,
   // still gated on confirming its five API specifics against a real
   // account). This is the snapshot those payouts will eventually read.
-  const { serviceFeeAmountUsd, sellerRevenueUsd } =
-    splitServiceFee(chargedSubtotalUsd, supplierSubtotalUsd);
+  // Without the shipping charge, which isn't known yet: a code that sinks
+  // the goods below cost fails here, before the freight call.
+  const goodsOnly = splitServiceFee(chargedSubtotalUsd, supplierSubtotalUsd, { rate: feeRate });
   // Every line already covers its cost at full price (lineRefusal); a code
   // must not undo that, or Sellora would pay CJ more than the buyer paid.
-  if (discount && sellerRevenueUsd < 0) {
+  if (discount && goodsOnly.sellerRevenueUsd < 0) {
     logWarning("order_refused_discount_below_cost", {
       storeId, discountId: discount.id, discountUsd, supplierSubtotalUsd,
     });
@@ -244,6 +260,16 @@ async function createOrder({
   }
 
   const retailFreightUsd = retailShippingPrice(freightUsd, pricing, { regionKey });
+  // The fee takes the shipping charge too only when an admin configured it.
+  const { serviceFeeAmountUsd, sellerRevenueUsd } = fees.chargeOnShipping ?
+    splitServiceFee(chargedSubtotalUsd, supplierSubtotalUsd,
+        { rate: feeRate, shippingUsd: retailFreightUsd }) :
+    goodsOnly;
+  if (sellerRevenueUsd < 0) {
+    logWarning("order_refused_fee_below_cost", { storeId, supplierSubtotalUsd, retailFreightUsd });
+    throw unprocessable(discount ? DISCOUNT_MESSAGES.belowCost :
+      "This order can't be placed at the store's current prices");
+  }
   const totalUsd = round2(chargedSubtotalUsd + retailFreightUsd);
   // Sellora's own platform take: what the buyer paid, minus CJ's actual
   // costs, minus what's owed to the seller - i.e. the service fee plus the
@@ -291,7 +317,8 @@ async function createOrder({
     total: totalAmount,
     // The client-visible fee snapshot, in the order's own currency so it
     // reads against `total`. The USD originals are kept server-side below.
-    service_fee_rate: SERVICE_FEE_RATE,
+    service_fee_rate: feeRate,
+    service_fee_base: fees.chargeOnShipping ? "subtotal_and_shipping" : "subtotal",
     service_fee_amount: display(serviceFeeAmountUsd),
     seller_revenue: display(sellerRevenueUsd),
     shipping_fee: display(retailFreightUsd),
@@ -376,6 +403,7 @@ function clientView(order) {
     discountAmount: order.discountAmount,
     logisticName: order.logisticName,
     serviceFeeRate: order.serviceFeeRate,
+    serviceFeeBase: order.serviceFeeBase,
     serviceFeeAmount: order.serviceFeeAmount,
     expiresAt: order.expiresAt,
     items: order.items,
@@ -394,12 +422,16 @@ function clientView(order) {
  *   shipping (the fee is never charged on shipping - see SERVICE_FEE_RATE).
  * @param {number} supplierSubtotalUsd Sum of CJ's goods cost for the same
  *   lines, USD, excluding freight.
+ * @param {{rate: (number|undefined), shippingUsd: (number|undefined)}=} opts
+ *   The rate in force (fees.js), and the buyer's shipping charge when the
+ *   fee is configured to take shipping too (`chargeOnShipping`).
  * @return {{serviceFeeAmountUsd: number, sellerRevenueUsd: number}}
  */
-function splitServiceFee(retailSubtotalUsd, supplierSubtotalUsd) {
+function splitServiceFee(retailSubtotalUsd, supplierSubtotalUsd,
+    { rate = SERVICE_FEE_RATE, shippingUsd = 0 } = {}) {
   const positive = (value) => Number.isFinite(value) && value > 0 ? value : 0;
   const subtotal = positive(retailSubtotalUsd);
-  const serviceFeeAmountUsd = round2(subtotal * SERVICE_FEE_RATE);
+  const serviceFeeAmountUsd = round2((subtotal + positive(shippingUsd)) * positive(rate));
   const sellerRevenueUsd = round2(
       subtotal - positive(supplierSubtotalUsd) - serviceFeeAmountUsd);
   return { serviceFeeAmountUsd, sellerRevenueUsd };
@@ -422,12 +454,15 @@ const LINE_REFUSALS = Object.freeze({
  * Stock is checked only when CJ gave a readable count for this variant
  * (cjApi.getProductStock returns null for "unknown", never zeros).
  * @param {{supplierUnitPriceUsd: number, retailUnitPriceUsd: number,
- *   quantity: number, available: (number|undefined)}} line
+ *   quantity: number, available: (number|undefined),
+ *   feeRate: (number|undefined)}} line `feeRate` is the rate in force.
  * @return {string|null} A LINE_REFUSALS key, or null when the line is fine.
  */
-function lineRefusal({ supplierUnitPriceUsd, retailUnitPriceUsd, quantity, available }) {
+function lineRefusal({
+  supplierUnitPriceUsd, retailUnitPriceUsd, quantity, available, feeRate = SERVICE_FEE_RATE,
+}) {
   if (!Number.isFinite(retailUnitPriceUsd) || retailUnitPriceUsd <= 0) return "no_price";
-  if (round2(retailUnitPriceUsd * (1 - SERVICE_FEE_RATE)) < supplierUnitPriceUsd) {
+  if (round2(retailUnitPriceUsd * (1 - feeRate)) < supplierUnitPriceUsd) {
     return "below_cost";
   }
   if (Number.isFinite(available)) {

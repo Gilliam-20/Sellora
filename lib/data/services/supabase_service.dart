@@ -33,6 +33,15 @@ class SupabaseService extends GetxService {
   /// `seller_revenue`, which buyers can't read. Read-only.
   SupabaseQueryBuilder get sellerOrders => client.from('seller_orders');
 
+  /// Internal notes on an order: its seller's and admin's, never the
+  /// buyer's. Append-only; read alongside the rest of the order's history
+  /// through the `order_timeline` function.
+  SupabaseQueryBuilder get orderNotes => client.from('order_notes');
+
+  /// Platform settings (pricing, catalog sources, the service fee); admin
+  /// only. Sellers read the fee through `service_fee_settings()`.
+  SupabaseQueryBuilder get appConfig => client.from('app_config');
+
   /// Admin-only, read-only: an order's charged amount and refund state,
   /// which are server-only `orders` columns.
   SupabaseQueryBuilder get adminOrderRefunds =>
@@ -43,6 +52,13 @@ class SupabaseService extends GetxService {
   SupabaseQueryBuilder get discounts => client.from('discounts');
 
   SupabaseQueryBuilder get notifications => client.from('notifications');
+
+  /// Append-only record of who changed what; admin reads only.
+  SupabaseQueryBuilder get auditLogs => client.from('audit_logs');
+
+  /// Uncaught app errors; admin reads only. Written through the
+  /// `report_client_error` function, never directly.
+  SupabaseQueryBuilder get clientErrors => client.from('client_errors');
   SupabaseQueryBuilder get plans => client.from('subscription_plans');
   SupabaseQueryBuilder get billingHistory => client.from('billing_history');
   SupabaseQueryBuilder get subscriptions => client.from('subscriptions');

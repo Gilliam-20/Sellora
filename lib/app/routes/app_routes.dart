@@ -45,7 +45,9 @@ abstract class Routes {
   static const sellerSubscription = '/seller/subscription';
   static const sellerCustomers = '/seller/customers';
   static const sellerMarketing = '/seller/marketing';
+  static const sellerOrderDetail = '/seller/orders/detail';
 
   // Admin portal
   static const adminShell = '/admin';
+  static const adminActivity = '/admin/activity';
 }

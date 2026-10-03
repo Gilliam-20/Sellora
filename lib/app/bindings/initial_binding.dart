@@ -5,6 +5,8 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/cart_repository.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/discount_repository.dart';
+import '../../data/repositories/fee_repository.dart';
+import '../../data/repositories/supabase_fee_repository.dart';
 import '../../data/repositories/supabase_admin_repository.dart';
 import '../../data/repositories/supabase_customer_repository.dart';
 import '../../data/repositories/supabase_discount_repository.dart';
@@ -73,6 +75,7 @@ class InitialBinding extends Bindings {
     Get.put<AdminRepository>(SupabaseAdminRepository(), permanent: true);
     Get.put<FxRateRepository>(SupabaseFxRateRepository(), permanent: true);
     Get.put<DiscountRepository>(SupabaseDiscountRepository(), permanent: true);
+    Get.put<FeeRepository>(SupabaseFeeRepository(), permanent: true);
     Get.put<CustomerRepository>(SupabaseCustomerRepository(), permanent: true);
 
     // Fire-and-forget: display prices use FxRates.fallback until this lands.

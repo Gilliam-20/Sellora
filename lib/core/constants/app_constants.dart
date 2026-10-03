@@ -5,12 +5,14 @@ class AppConstants {
 
   static const String appName = 'Sellora';
 
-  /// The platform's cut of an order subtotal — 7%, applied to product
-  /// subtotal only (never shipping/tax unless explicitly configured).
-  /// Client-side display estimates only (e.g. showing a seller their
-  /// expected payout). The rate actually charged is `SERVICE_FEE_RATE` in
-  /// supabase/functions/_shared/orders.js, snapshotted onto each order at
-  /// creation — keep the two in step by hand.
+  /// The platform's default cut of an order subtotal — 7%, applied to
+  /// product subtotal only (never shipping/tax unless explicitly
+  /// configured). An admin can change the live rate (Admin → Plans), which
+  /// screens read through [FeeRepository]; this is the fallback until that
+  /// answers, and what the signed-out marketing page quotes. The rate
+  /// actually charged is read by supabase/functions/_shared/fees.js and
+  /// snapshotted onto each order at creation. Keep this in step with
+  /// `DEFAULT_SERVICE_FEE_RATE` there and `service_fee_settings()`.
   static const double platformServiceFeeRate = 0.07;
 
   /// Where the web build is hosted, for links shared from a non-web build
@@ -18,6 +20,11 @@ class AppConstants {
   /// `--dart-define=SELLORA_WEB_URL=https://...`.
   static const String webAppUrl = String.fromEnvironment('SELLORA_WEB_URL',
       defaultValue: 'https://sellora.app');
+
+  /// Which build an error report came from. Set it per deploy with
+  /// `--dart-define=SELLORA_RELEASE=<git sha or version>` (docs/RUNBOOK.md).
+  static const String release =
+      String.fromEnvironment('SELLORA_RELEASE', defaultValue: 'unversioned');
 }
 
 /// Backend endpoints: routes of Sellora's own `api` Supabase Edge Function

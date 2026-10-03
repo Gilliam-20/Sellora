@@ -12,6 +12,7 @@ import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/product_card.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../l10n/generated/app_localizations.dart';
 import '../buyer/shell/buyer_shell_controller.dart';
 import 'storefront_controller.dart';
 
@@ -53,7 +54,7 @@ class StorefrontView extends GetView<StorefrontController> {
             if (store == null) return const SizedBox.shrink();
             return IconButton(
               icon: const Icon(Icons.person_outline),
-              tooltip: 'Account',
+              tooltip: AppLocalizations.of(context).storefrontAccount,
               onPressed: () {
                 final user = Get.find<AuthRepository>().cachedUser;
                 final signedInHere = user != null &&
@@ -130,8 +131,10 @@ class StorefrontView extends GetView<StorefrontController> {
                 child: Obx(() {
                   final store = controller.scope.current.value;
                   return AppPageHeader(
-                    title: store?.name ?? 'Storefront',
-                    subtitle: store?.tagline ?? 'Products selected for you.',
+                    title: store?.name ??
+                        AppLocalizations.of(context).storefrontFallbackTitle,
+                    subtitle: store?.tagline ??
+                        AppLocalizations.of(context).storefrontFallbackTagline,
                   );
                 }),
               ),
@@ -145,7 +148,7 @@ class StorefrontView extends GetView<StorefrontController> {
               ),
               sliver: SliverToBoxAdapter(
                 child: AppSearchField(
-                  hintText: 'Search this store',
+                  hintText: AppLocalizations.of(context).storefrontSearchHint,
                   onChanged: controller.search,
                 ),
               ),
@@ -209,13 +212,25 @@ class StorefrontView extends GetView<StorefrontController> {
               // where GetX can no longer see it (and corrupt GetX's global
               // tracking state for every Obx built afterwards).
               final items = List.of(controller.items);
+              // An admin took the store offline: storefront_products hides
+              // its catalog. Deliberately vague, like createOrder's refusal.
+              if (controller.scope.current.value?.isSuspended == true) {
+                return SliverFillRemaining(
+                  child: EmptyState(
+                    icon: Icons.storefront_outlined,
+                    title: AppLocalizations.of(context).storefrontClosedTitle,
+                    message:
+                        AppLocalizations.of(context).storefrontClosedMessage,
+                  ),
+                );
+              }
               if (items.isEmpty) {
-                return const SliverFillRemaining(
+                return SliverFillRemaining(
                   child: EmptyState(
                     icon: Icons.inventory_2_outlined,
-                    title: 'No products are published yet',
+                    title: AppLocalizations.of(context).storefrontEmptyTitle,
                     message:
-                        'Check back soon for this store’s latest collection.',
+                        AppLocalizations.of(context).storefrontEmptyMessage,
                   ),
                 );
               }
@@ -252,7 +267,7 @@ class StorefrontView extends GetView<StorefrontController> {
                         ? const CircularProgressIndicator()
                         : OutlinedButton(
                             onPressed: controller.loadMore,
-                            child: const Text('Load more'),
+                            child: Text(AppLocalizations.of(context).loadMore),
                           ),
                   ),
                 ),

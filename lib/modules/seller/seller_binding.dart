@@ -5,6 +5,7 @@ import 'dashboard/seller_dashboard_controller.dart';
 import 'manage_variants/manage_variants_controller.dart';
 import 'marketing/seller_marketing_controller.dart';
 import 'my_listings/my_listings_controller.dart';
+import 'orders/seller_order_detail_controller.dart';
 import 'orders/seller_orders_controller.dart';
 import 'product_import/product_import_controller.dart';
 import 'shell/seller_shell_controller.dart';
@@ -62,5 +63,13 @@ class SellerMarketingBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<SellerMarketingController>(() => SellerMarketingController());
+  }
+}
+
+class SellerOrderDetailBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<SellerOrderDetailController>(
+        () => SellerOrderDetailController());
   }
 }

@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import '../../data/models/user_model.dart';
+import '../../modules/admin/activity/admin_activity_view.dart';
 import '../../modules/admin/admin_binding.dart';
 import '../../modules/admin/shell/admin_shell_view.dart';
 import '../../modules/auth/bindings/auth_binding.dart';
@@ -22,6 +23,7 @@ import '../../modules/onboarding/views/seller_onboarding_view.dart';
 import '../../modules/seller/customers/seller_customers_view.dart';
 import '../../modules/seller/manage_variants/manage_variants_view.dart';
 import '../../modules/seller/marketing/seller_marketing_view.dart';
+import '../../modules/seller/orders/seller_order_detail_view.dart';
 import '../../modules/seller/product_import/product_import_view.dart';
 import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
@@ -149,12 +151,24 @@ class AppPages {
       binding: SellerMarketingBinding(),
       middlewares: [RoleMiddleware(UserRole.seller)],
     ),
+    GetPage(
+      name: Routes.sellerOrderDetail,
+      page: () => const SellerOrderDetailView(),
+      binding: SellerOrderDetailBinding(),
+      middlewares: [RoleMiddleware(UserRole.seller)],
+    ),
 
     // ---- Admin portal -------------------------------------------------
     GetPage(
       name: Routes.adminShell,
       page: () => const AdminShellView(),
       binding: AdminBinding(),
+      middlewares: [RoleMiddleware(UserRole.admin)],
+    ),
+    GetPage(
+      name: Routes.adminActivity,
+      page: () => const AdminActivityView(),
+      binding: AdminActivityBinding(),
       middlewares: [RoleMiddleware(UserRole.admin)],
     ),
   ];

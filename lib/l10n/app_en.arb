@@ -1,0 +1,34 @@
+{
+  "@@locale": "en",
+
+  "storeLoading": "Loading store…",
+  "@storeLoading": {"description": "Shown while the storefront resolves its /s/:slug URL."},
+  "storeLoadFailedTitle": "We couldn't load this store",
+  "storeNotFound": "This storefront could not be found.",
+  "tryAgain": "Try again",
+
+  "navShop": "Shop",
+  "@navShop": {"description": "Buyer shell tab: the store's catalog."},
+  "navCart": "Cart",
+  "navOrders": "Orders",
+  "navAlerts": "Alerts",
+  "@navAlerts": {"description": "Buyer shell tab: notifications."},
+  "navProfile": "Profile",
+
+  "storefrontAccount": "Account",
+  "storefrontFallbackTitle": "Storefront",
+  "storefrontFallbackTagline": "Products selected for you.",
+  "storefrontSearchHint": "Search this store",
+  "storefrontClosedTitle": "This store isn’t open right now",
+  "@storefrontClosedTitle": {"description": "An admin has suspended the store. Deliberately vague: buyers aren't told why."},
+  "storefrontClosedMessage": "Please check back later.",
+  "storefrontEmptyTitle": "No products are published yet",
+  "storefrontEmptyMessage": "Check back soon for this store’s latest collection.",
+  "loadMore": "Load more",
+
+  "cartTitle": "Your cart",
+  "cartEmptyTitle": "Your cart is empty",
+  "cartEmptyMessage": "Products you add will show up here.",
+  "cartRemove": "Remove",
+  "cartCheckout": "Checkout"
+}

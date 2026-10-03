@@ -5,6 +5,7 @@ import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../data/models/order_model.dart';
+import '../../../data/models/store_model.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
@@ -21,8 +22,8 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
   @override
   Widget build(BuildContext context) {
     final user = controller.authRepo.cachedUser;
-    final currencyCode =
-        Get.find<StoreScope>().current.value?.currencyCode ?? 'KES';
+    final currencyCode = controller.currencyCode;
+    final store = Get.find<StoreScope>().current.value;
 
     return Scaffold(
       appBar: AppBar(title: Text(user?.storeName ?? 'Dashboard')),
@@ -44,6 +45,10 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
                       : 'Your subscription needs attention.',
                 ),
                 const SizedBox(height: AppSpacing.lg),
+                if (store != null && store.isSuspended) ...[
+                  _SuspendedBanner(store: store),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
                 if (!controller.hasProduct.value ||
                     !controller.hasPublishedProduct.value ||
                     !controller.hasCustomizedStore.value ||
@@ -97,6 +102,9 @@ class SellerDashboardView extends GetView<SellerDashboardController> {
                   _TopProductsCard(
                       controller: controller, currencyCode: currencyCode),
                 ],
+                const SizedBox(height: AppSpacing.lg),
+                _CountrySalesCard(
+                    controller: controller, currencyCode: currencyCode),
                 const SizedBox(height: AppSpacing.lg),
                 _StoreHealthCard(controller: controller),
                 const SizedBox(height: AppSpacing.lg),
@@ -618,6 +626,121 @@ class _OnboardingChecklist extends GetView<SellerDashboardController> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where paid orders in the selected range ship to, with each country's
+/// share of revenue as a bar.
+class _CountrySalesCard extends StatelessWidget {
+  const _CountrySalesCard(
+      {required this.controller, required this.currencyCode});
+  final SellerDashboardController controller;
+  final String currencyCode;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final countries = controller.salesByCountry;
+      final total = countries.fold(0.0, (sum, c) => sum + c.revenue);
+      return Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.cloud,
+          borderRadius: BorderRadius.circular(AppRadii.card),
+          border: Border.all(color: AppColors.hairline),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Sales by country',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.sm),
+            if (countries.isEmpty)
+              Text('No paid sales in this period yet.',
+                  style: Theme.of(context).textTheme.bodySmall)
+            else
+              for (final c in countries.take(6))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(c.countryName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium),
+                          ),
+                          Text(
+                              '${c.orders} order${c.orders == 1 ? '' : 's'}',
+                              style: Theme.of(context).textTheme.bodySmall),
+                          const SizedBox(width: AppSpacing.sm),
+                          Text(
+                              Formatters.currency(c.revenue,
+                                  code: currencyCode),
+                              style: Theme.of(context).textTheme.titleSmall),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: total == 0 ? 0 : c.revenue / total,
+                          minHeight: 4,
+                          backgroundColor: AppColors.mist,
+                          color: AppColors.cargoNavy,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+/// Shown while an admin has taken the store offline (`StoreModel.isSuspended`).
+class _SuspendedBanner extends StatelessWidget {
+  const _SuspendedBanner({required this.store});
+  final StoreModel store;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadii.card),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.block, color: AppColors.danger),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Your store is suspended',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 4),
+                Text(
+                  'Buyers can\'t see your products or check out until '
+                  'Sellora lifts the suspension.'
+                  '${store.suspensionReason != null ? ' Reason: ${store.suspensionReason}' : ''}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

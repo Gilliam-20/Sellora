@@ -1,5 +1,6 @@
 import '../models/order_model.dart';
 import '../models/order_refund_model.dart';
+import '../models/order_timeline.dart';
 
 abstract class OrderRepository {
   Future<OrderModel> placeOrder(OrderModel order);
@@ -18,6 +19,18 @@ abstract class OrderRepository {
   Future<List<OrderModel>> sellerOrders(String sellerId);
   Future<List<OrderModel>> allOrders(); // admin oversight
   Future<void> updateStatus(String orderId, OrderStatus status);
+
+  /// One order as its seller (or admin) sees it, or null if the caller
+  /// can't. For refreshing the order detail screen.
+  Future<OrderModel?> sellerOrder(String orderId);
+
+  /// The order's history, oldest first: creation, payment/fulfilment/CJ/
+  /// refund changes, and internal notes. Seller and admin only.
+  Future<List<OrderTimelineEntry>> orderTimeline(String orderId);
+
+  /// Adds an internal note to the order's timeline. The buyer never sees
+  /// it. Seller and admin only; notes can't be edited or deleted.
+  Future<void> addOrderNote(String orderId, String body);
 
   /// Admin only. An order's charged amount and refund history, or null if
   /// the caller can't see it.

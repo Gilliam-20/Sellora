@@ -5,7 +5,6 @@ import '../../../app/routes/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../app/theme/app_typography.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/responsive.dart';
 import '../../../core/widgets/common.dart';
@@ -18,13 +17,13 @@ enum _ListingAction { publish, pause }
 /// The listing sync's flag, in words, while it still applies. The sync
 /// refreshes `costPrice` from CJ, so a price the seller has since raised
 /// past the floor clears the warning here without waiting for the next run.
-String? _supplierIssue(ProductModel product) {
+String? _supplierIssue(ProductModel product, double feeRate) {
   switch (product.supplierAlert) {
     case 'unavailable':
       return 'CJ no longer offers this product. Buyers can\'t check it out.';
     case 'below_cost':
       final floor =
-          product.sellPrice * (1 - AppConstants.platformServiceFeeRate);
+          product.sellPrice * (1 - feeRate);
       if (floor >= product.costPrice) return null;
       return 'Below CJ\'s cost of ${Formatters.currency(product.costPrice)} '
           'plus the fee. Checkout refuses it until you raise the price.';
@@ -123,7 +122,8 @@ class MyListingsView extends GetView<MyListingsController> {
                                     ),
                                   ],
                                 ),
-                                if (_supplierIssue(product)
+                                if (_supplierIssue(
+                                        product, controller.feeRate.value)
                                     case final issue?) ...[
                                   const SizedBox(height: 2),
                                   Text(
