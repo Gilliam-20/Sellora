@@ -100,6 +100,23 @@ class SupabaseProductRepository extends GetxService
         .limit(limit));
   }
 
+  /// Reads the category column of up to 1000 listings; a store with more
+  /// would want a SQL function returning the distinct set.
+  @override
+  Future<List<String>> storeCategories(String storeId) async {
+    final rows = await _db.storefrontProducts
+        .select('category')
+        .eq('store_id', storeId)
+        .limit(1000);
+    final names = {
+      for (final r in rows)
+        if (r['category'] case final String c when c.trim().isNotEmpty)
+          c.trim(),
+    }.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return names;
+  }
+
   @override
   Future<List<ProductModel>> storefrontFeed({
     String? keyword,
@@ -139,8 +156,8 @@ class SupabaseProductRepository extends GetxService
         sellPrice: sellPrice);
     // Keyed (store_id, id), so re-listing the same catalog product in the
     // same store overwrites it, as the Firestore doc id did.
-    await _publishing(() => _db.products
-        .upsert(toRow(listed.toMap()), onConflict: 'store_id,id'));
+    await _publishing(() =>
+        _db.products.upsert(toRow(listed.toMap()), onConflict: 'store_id,id'));
   }
 
   @override

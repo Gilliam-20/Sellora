@@ -11,6 +11,10 @@ abstract class OrderRepository {
   /// customer of a single store.
   Future<List<OrderModel>> buyerStoreOrders(String buyerId, String storeId);
 
+  /// One of the signed-in buyer's own orders, or null if it isn't theirs
+  /// (RLS hides it). For the storefront's order confirmation page.
+  Future<OrderModel?> buyerOrder(String orderId);
+
   /// Every order placed against one store, for that store's own order
   /// queue. Reads `stores/{storeId}/orders` once `placeOrder` writes there;
   /// until that write-path migration lands this returns whatever the flat

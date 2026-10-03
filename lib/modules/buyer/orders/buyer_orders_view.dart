@@ -1,86 +1,126 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:sellora/data/models/order_model.dart';
-import '../../../app/theme/app_colors.dart';
+
 import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/utils/responsive.dart';
-import '../../../core/widgets/common.dart';
+import '../../../core/widgets/app_page.dart';
 import '../../../core/widgets/empty_state.dart';
-import '../../../core/widgets/manifest_stub.dart';
-import '../../../data/repositories/auth_repository.dart';
+import '../../../data/models/order_model.dart';
 import '../../../data/services/currency_service.dart';
+import '../../storefront/design/storefront_theme.dart';
+import '../../storefront/shell/storefront_links.dart';
+import '../../storefront/shell/storefront_page.dart';
 import 'buyer_orders_controller.dart';
 
+/// `/s/{slug}/account/orders`: the customer's order history with this
+/// store. Each order opens its own page.
 class BuyerOrdersView extends GetView<BuyerOrdersController> {
   const BuyerOrdersView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Your orders')),
-      body: Obx(() {
-        // Touch an observable unconditionally first — cachedUser below isn't
-        // reactive, so if the guest branch returned without this read, Obx
-        // would never find an observable to subscribe to and would throw.
-        final isLoading = controller.isLoading.value;
-        if (Get.find<AuthRepository>().cachedUser == null) {
-          return EmptyState(
-            icon: Icons.receipt_long_outlined,
-            title: 'Sign in to see your orders',
-            message: 'Create an account or sign in to track your purchases '
-                'from this store.',
-            actionLabel: 'Sign in',
-            onAction: () => Get.toNamed('/s/${Get.parameters['slug']}/login'),
-          );
-        }
-        if (isLoading) return const SelloraLoader();
-        // Snapshot the RxList once here, inside Obx's tracked scope — the
-        // ListView's itemBuilder runs later during layout, outside that
-        // scope, so indexing controller.orders directly there would read
-        // the observable where GetX can no longer see it.
-        final orders = List.of(controller.orders);
-        if (orders.isEmpty) {
-          return const EmptyState(
-            icon: Icons.receipt_long_outlined,
-            title: 'No orders yet',
-            message:
-                'Products you buy will show up here with live tracking status.',
-          );
-        }
-        return RefreshIndicator(
-          onRefresh: controller.loadOrders,
-          child: ResponsiveCenter(
-            maxWidth: 720,
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(
-                  horizontal: context.pageHorizontalPadding,
-                  vertical: AppSpacing.md),
-              itemCount: orders.length,
-              separatorBuilder: (_, __) =>
-                  const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (context, index) {
-                final order = orders[index];
-                return Obx(() {
-                  final total = Get.find<CurrencyService>()
-                      .format(order.total, fromCode: order.currency);
-                  return ManifestStub(
-                    code: order.code,
-                    title:
-                        '${order.items.length} item${order.items.length == 1 ? '' : 's'} · $total',
-                    subtitle: Formatters.date(order.createdAt),
-                    accentColor: AppColors.statusColor(order.status.name),
-                    trailing: StatusBadge(
-                      label: order.status.label,
-                      color: AppColors.statusColor(order.status.name),
-                    ),
+    final session = controller.session;
+    return StorefrontPage(
+      title: 'Your orders',
+      onRefresh: controller.loadOrders,
+      slivers: (context, store, design) {
+        final style = StoreStyle.of(context);
+        final textTheme = Theme.of(context).textTheme;
+        return [
+          SliverToBoxAdapter(
+            child: StorefrontContent(
+              maxWidth: 760,
+              child: Obx(() {
+                final isLoading = controller.isLoading.value;
+                final orders = List.of(controller.orders);
+                final heading = Text(style.heading('Your orders'),
+                    style: style.headingStyle(textTheme.headlineSmall));
+                Widget body;
+                if (session.customer == null && !isLoading) {
+                  body = EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'Sign in to see your orders',
+                    message: 'Create an account or sign in to track your '
+                        'purchases from this store.',
+                    actionLabel: 'Sign in',
+                    onAction: () => Get.toNamed(session.path(
+                        StorefrontPaths.loginThen(
+                            session.path(StorefrontPaths.orders)))),
                   );
-                });
-              },
+                } else if (isLoading) {
+                  body = const SizedBox(height: 200, child: AppLoadingState());
+                } else if (controller.error.value case final error?) {
+                  body = AppErrorState(
+                      message: error, onRetry: controller.loadOrders);
+                } else if (orders.isEmpty) {
+                  body = EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'No orders yet',
+                    message: 'What you buy here will show up with its '
+                        'delivery status.',
+                    actionLabel: 'Start shopping',
+                    onAction: () =>
+                        Get.offAllNamed(session.path(StorefrontPaths.shop)),
+                  );
+                } else {
+                  final currency = Get.find<CurrencyService>();
+                  body = Column(
+                    children: [
+                      for (final order in orders)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius:
+                                  BorderRadius.circular(style.largeRadius),
+                              onTap: () => Get.toNamed(session
+                                  .path(StorefrontPaths.order(order.id))),
+                              child: Ink(
+                                padding: const EdgeInsets.all(AppSpacing.md),
+                                decoration: style.panel(),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(order.code,
+                                              style: textTheme.titleSmall),
+                                          Text(
+                                              '${Formatters.date(order.createdAt)} · '
+                                              '${order.itemCount} item${order.itemCount == 1 ? '' : 's'} · '
+                                              '${currency.format(order.total, fromCode: order.currency)}',
+                                              style: textTheme.bodySmall),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(order.status.label,
+                                        style: textTheme.labelLarge),
+                                    const Icon(Icons.chevron_right),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    heading,
+                    const SizedBox(height: AppSpacing.md),
+                    body,
+                  ],
+                );
+              }),
             ),
           ),
-        );
-      }),
+        ];
+      },
     );
   }
 }

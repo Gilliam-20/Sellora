@@ -52,8 +52,10 @@ class CartRepository extends GetxService {
     }
   }
 
-  void updateQuantity(String productId, int quantity) {
-    final index = items.indexWhere((i) => i.product.id == productId);
+  /// Sets [item]'s line (its product and option) to [quantity], removing it
+  /// at zero. Two options of one product are separate lines.
+  void updateQuantity(CartItemModel item, int quantity) {
+    final index = items.indexOf(item);
     if (index == -1) return;
     if (quantity <= 0) {
       items.removeAt(index);
@@ -63,9 +65,7 @@ class CartRepository extends GetxService {
     }
   }
 
-  void remove(String productId) {
-    items.removeWhere((i) => i.product.id == productId);
-  }
+  void remove(CartItemModel item) => items.remove(item);
 
   void clear() => items.clear();
 }

@@ -233,7 +233,34 @@ class AuthController extends GetxController {
     if (slug == null && storeId != null) {
       slug = (await _storeRepo.storeById(storeId))?.slug;
     }
-    Get.offAllNamed(slug != null ? '/s/$slug' : Routes.marketing);
+    if (slug == null) {
+      Get.offAllNamed(Routes.marketing);
+      return;
+    }
+    Get.offAllNamed(storeReturnPath(slug, Get.parameters['return']));
+  }
+
+  /// Where a buyer goes after signing in to [slug]'s store: the page that
+  /// sent them (`?return=`, e.g. checkout) if it's one of this store's own,
+  /// else the store's homepage. Anything else is ignored, so a crafted
+  /// link can't send them off the store.
+  static String storeReturnPath(String slug, String? returnTo) {
+    final home = '/s/$slug';
+    if (returnTo == null ||
+        !returnTo.startsWith('$home/') ||
+        returnTo.contains('..')) {
+      return home;
+    }
+    final uri = Uri.tryParse(returnTo);
+    if (uri == null ||
+        uri.hasScheme ||
+        uri.hasAuthority ||
+        !uri.path.startsWith('$home/') ||
+        uri.path.startsWith('$home/login') ||
+        uri.path.startsWith('$home/register')) {
+      return home;
+    }
+    return returnTo;
   }
 
   /// The message to show for a sign-in/sign-up failure. Also used by

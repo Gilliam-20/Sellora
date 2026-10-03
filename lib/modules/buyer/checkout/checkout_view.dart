@@ -14,6 +14,8 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/services/currency_service.dart';
 import '../../storefront/store_scope.dart';
 import 'checkout_controller.dart';
+import '../../storefront/shell/storefront_links.dart';
+import '../../storefront/shell/storefront_page.dart';
 
 class CheckoutView extends StatefulWidget {
   const CheckoutView({super.key});
@@ -29,8 +31,8 @@ class _CheckoutViewState extends State<CheckoutView> {
   final _formKey = GlobalKey<FormState>();
   late final _nameCtrl =
       TextEditingController(text: Get.find<AuthRepository>().cachedUser?.name);
-  late final _contactPhoneCtrl = TextEditingController(
-      text: Get.find<AuthRepository>().cachedUser?.phone);
+  late final _contactPhoneCtrl =
+      TextEditingController(text: Get.find<AuthRepository>().cachedUser?.phone);
   final _line1Ctrl = TextEditingController();
   final _line2Ctrl = TextEditingController();
   final _cityCtrl = TextEditingController();
@@ -95,8 +97,15 @@ class _CheckoutViewState extends State<CheckoutView> {
     super.dispose();
   }
 
+  /// In the store's theme and on its own: no store menu, so nothing
+  /// leads away from paying.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => StorefrontFrame(
+        title: 'Checkout',
+        builder: (context, store, design) => _build(context),
+      );
+
+  Widget _build(BuildContext context) {
     final controller = Get.find<CheckoutController>();
     final user = Get.find<AuthRepository>().cachedUser;
     final slug = Get.parameters['slug'];
@@ -114,7 +123,8 @@ class _CheckoutViewState extends State<CheckoutView> {
           message: 'Your cart is saved — sign in as a customer of this '
               'store to finish checking out.',
           actionLabel: 'Sign in',
-          onAction: () => Get.toNamed('/s/$slug/login'),
+          onAction: () => Get.toNamed(
+              '/s/$slug/${StorefrontPaths.loginThen('/s/$slug/${StorefrontPaths.checkout}')}'),
         ),
       );
     }

@@ -5,13 +5,15 @@ import '../../data/models/product_model.dart';
 import '../../data/models/store_design.dart';
 import '../../data/repositories/product_repository.dart';
 import '../../data/repositories/store_design_repository.dart';
-import 'design/store_branding.dart';
 import 'store_scope.dart';
 
+/// The homepage's data: the catalog section's products (search, category,
+/// paging), the featured sections' products and newsletter sign-ups. The
+/// design itself comes from StorefrontSession, or from the builder in the
+/// preview.
 class StorefrontController extends GetxController {
-  /// [previewMode] is the store builder's preview: the design comes from
-  /// the builder (not the published copy), and nothing touches the browser
-  /// tab or the newsletter list.
+  /// [previewMode] is the store builder's preview: nothing is added to the
+  /// newsletter list.
   StorefrontController({this.previewMode = false});
 
   final bool previewMode;
@@ -20,10 +22,6 @@ class StorefrontController extends GetxController {
 
   final items = <ProductModel>[].obs;
   final isLoading = true.obs;
-
-  /// The design being rendered: the store's published one, or
-  /// `StoreDesign.starter` if it never published one.
-  final design = Rxn<StoreDesign>();
 
   /// Featured-section products, keyed by [_featuredKey].
   final featured = <String, List<ProductModel>>{}.obs;
@@ -50,16 +48,9 @@ class StorefrontController extends GetxController {
     load();
   }
 
-  @override
-  void onClose() {
-    if (!previewMode) resetStoreBranding();
-    super.onClose();
-  }
-
-  /// The store itself is resolved once by BuyerShellController (which gates
-  /// this whole tab tree on that resolution finishing) — this just reads
-  /// the already-resolved StoreScope.current, so filtering never re-triggers
-  /// a redundant slug lookup.
+  /// Reads the already-resolved StoreScope.current (StorefrontFrame builds
+  /// the homepage only once the store is loaded), so filtering never
+  /// re-triggers a slug lookup.
   Future<void> load() async {
     final store = scope.current.value;
     if (store == null) {
@@ -68,7 +59,6 @@ class StorefrontController extends GetxController {
       return;
     }
     isLoading.value = true;
-    if (!previewMode) await _loadDesign();
     final page = await _products.storeProducts(
       store.id,
       keyword: searchQuery.value,
@@ -79,21 +69,10 @@ class StorefrontController extends GetxController {
     isLoading.value = false;
   }
 
-  Future<void> _loadDesign() async {
-    final store = scope.current.value!;
-    StoreDesign? published;
-    try {
-      published =
-          await Get.find<StoreDesignRepository>().publishedDesign(store.id);
-    } catch (e) {
-      // The storefront still works on the starter layout.
-      debugPrint('StorefrontController: design load failed: $e');
-    }
-    final resolved = published ?? StoreDesign.starter(store);
-    design.value = resolved;
+  /// Pull to refresh: the featured sections as well as the catalog.
+  Future<void> refreshAll() {
     featured.clear();
-    applyStoreBranding(
-        title: store.name, faviconUrl: resolved.theme.faviconUrl);
+    return load();
   }
 
   /// Appends the next page of the current search/category.

@@ -6,6 +6,94 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-04 — TODO §20: storefront
+
+**Status:** done in code and tested. **Not applied or deployed.** The new migration
+`20261004000000_store_pages.sql` joins rollout step 1 in TODO.md and must land before this web build:
+the storefront reads `storefront_pages`. A failed read only hides the pages; the seller's editor can't
+save without the table. No Edge Function change: card payment now returns to the order page, which
+`ALLOWED_REDIRECT_ORIGINS` accepts because it checks origin only.
+
+**Why:** user request: "work on phase 20" (TODO.md §20 Storefront).
+
+**Where it started:** `/s/:slug` was a five-tab app shell (shop, cart, orders, alerts, profile), the
+same scaffold as the seller and admin portals. Only the home tab was in the store's theme. The
+product page took its product from navigation arguments, so a shared or refreshed product link broke.
+Checkout ended on the orders tab with a snackbar. There were no search, collections, order
+confirmation, about, contact or policy pages.
+
+**Decisions (made here, reversible):**
+- **The storefront is a site, not an app shell.** Each §20 page has its own route under `/s/:slug`
+  (`Routes.storefront*`, paths built by `StorefrontPaths` in `storefront_links.dart`). Each page sits
+  in `StorefrontFrame` (load the store, show loading/missing/closed, apply the theme, title the tab)
+  or `StorefrontPage` (the frame plus header, drawer and footer). The header has the store name
+  (back to home), search, the cart with its count, and account. The drawer has the seller's menu,
+  Shop all, Collections, Search, Your orders, and the store's pages. The tabbed `BuyerShellView` and
+  its controller are deleted.
+- **`StorefrontSession`** (permanent, in InitialBinding) loads the store, its published design, its
+  pages and its categories once, for whichever page is opened first. Concurrent `ensure()` calls share
+  one load. It also owns the browser tab's favicon: pages attach and detach, and the tab goes back to
+  Sellora's only when the last storefront page closes. `StoreScope` still holds the store itself.
+- **Checkout stays focused.** It renders in the store's theme but without the store header or menu.
+- **"Collections" are categories.** There's still no collection model (PHASE 5), so
+  `/collections` lists the categories that have listed products (`storeCategories`, read from up to
+  1000 listings), using a Collections section's image for a category where the seller set one.
+  `/collections/{handle}` resolves a slugged category name.
+- **Shop and search are one page type** (`ProductListPage`). Its controller belongs to the page
+  (`GetBuilder(global: false)`), not a route binding, because one collection can be opened on top of
+  another from the drawer, and each needs its own controller.
+- **Sellers write About, Contact and the four policies** (privacy, terms, shipping, refund) in Seller →
+  Store pages. They're stored in a new `store_pages` table (owner writes, column grants, bounded
+  lengths, contact email/phone allowed only on the contact page), and buyers read the
+  `storefront_pages` view, which applies the same standing rule as products and designs. **Nothing
+  is published on the seller's behalf.** Templates are offered, but a page exists only once saved,
+  and a template's `[bracketed]` blanks block publishing (saving it hidden is allowed). The editor
+  says the templates aren't legal advice. The contact page shows email, call and WhatsApp buttons.
+  There's no contact form, because messages would need an inbox.
+- **The order page is the confirmation.** Checkout lands on `/s/:slug/orders/{id}` with the placed
+  order ("Thank you", plus what checkout said about payment), and card payment returns there too.
+  Later it shows the order's status, payment, items, totals, address and tracking. It reads the order
+  through a new `OrderRepository.buyerOrder` (RLS: own orders only) and refuses an order from another
+  store.
+- **Sign-in comes back to where it was asked for:** `?return=` (checkout, an order, order history).
+  `AuthController.storeReturnPath` accepts only a path under the same store, with no `..` and not the
+  login or register pages.
+- **Links:** design links gained `collections`, `search` and `page:<kind>`, pickable in the builder.
+  On the homepage, category, section and catalog links still scroll in place. Elsewhere they go to
+  the collection, the homepage and the shop.
+
+**What changed:**
+- **Migration.** `store_pages` (+ touch trigger) and `storefront_pages`.
+- **App.** Models: `StorePage`, `StorePageKind`, `StorePageTemplates`. `StorePageRepository` + Supabase
+  implementation. `ProductRepository.storeCategories`, `OrderRepository.buyerOrder` (and the test
+  fake's). `StorefrontSession`, and `lib/modules/storefront/shell/` (frame, page, header, drawer,
+  footer, links). `lib/modules/storefront/pages/`: shop/search/collection, collections, store page.
+  The product, cart, checkout, order history and account screens were rewritten as storefront pages.
+  `OrderPage`. Seller → Store pages (`lib/modules/seller/store_pages/`, `/seller/store/pages`, linked
+  from Profile). `StorefrontController` no longer loads the design.
+- **Fixes along the way.** The cart's quantity and remove actions keyed on the product only, so two
+  options of one product changed together; they now act on the line. The product page adds to the
+  cart and stays (with a "View cart" action), and has "Buy now".
+
+**Tests:** `flutter analyze`: only the two existing infos. `flutter test`: the one failure is the
+known `seller_shell_controller_test` one. New `storefront_pages_test` (27): page validation and
+templates, links and handles, the return-path guard, cart lines per option, the session (single
+load, retry, customer), the product/collection/search/order controllers, the seller's page editor,
+and widget tests that open pages straight from a URL (policy page, unpublished page, product link
+then Buy now, collections, shop on phone and desktop, search from `?q=`, order confirmation, guest
+order and account, unknown store). The shop-page test caught a real crash: its title's `Obx` read no
+observable. `supabase npm test`: 393 RLS checks (17 new), 357 Deno steps. `flutter build web`
+compiles. Not looked at in a browser, and not run against a real backend.
+
+**Not done:**
+- Sign-in and register pages are still Meridian-styled, not the store's theme.
+- SEO: per-page titles are set, but meta descriptions and social cards need server-side rendering
+  (the app is a hash-routed SPA).
+- A real collection model, sorting the shop, related products, a contact form, a cookie banner.
+- Notifications are a plain page under the account, not themed beyond the frame.
+
+---
+
 ## 2026-10-04 — TODO §19: theme system
 
 **Status:** done in code and tested. **No migration and no Edge Function change**, so this ships with

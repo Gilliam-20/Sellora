@@ -20,21 +20,30 @@ abstract class Routes {
 
   static const sellerOnboarding = '/seller/onboarding';
 
-  // Public tenant storefront — also the buyer shell (shop/cart/orders/
-  // profile tabs). One URL serves guests and signed-in buyers alike, so
-  // signing in never changes the address. This remains separate from other
-  // portal routes so a later custom-domain resolver only has to populate
-  // StoreScope.
+  // Public tenant storefront (TODO §20): every page a customer sees lives
+  // under the store's own /s/:slug, each with its own URL so it can be
+  // shared, bookmarked or refreshed. One URL serves guests and signed-in
+  // buyers alike. Kept apart from the portal routes so a later
+  // custom-domain resolver only has to populate StorefrontSession.
+  // Paths are built with StorefrontPaths (storefront_links.dart).
   static const storefront = '/s/:slug';
+  static const storefrontShop = '/s/:slug/shop';
+  static const storefrontSearch = '/s/:slug/search';
+  static const storefrontCollections = '/s/:slug/collections';
+  static const storefrontCollection = '/s/:slug/collections/:handle';
+  static const storefrontCart = '/s/:slug/cart';
+  static const storefrontOrder = '/s/:slug/orders/:orderId';
+  static const storefrontAccount = '/s/:slug/account';
+  static const storefrontOrders = '/s/:slug/account/orders';
+  static const storefrontNotifications = '/s/:slug/account/notifications';
+  static const storefrontPage = '/s/:slug/pages/:page';
 
   // Store-scoped buyer auth — a buyer registers/signs in as a customer of
   // this specific store, never through Sellora's own (seller-only) login.
   static const storefrontLogin = '/s/:slug/login';
   static const storefrontRegister = '/s/:slug/register';
 
-  // Pushed on top of the storefront shell — still store-scoped, but their
-  // own back-stack entries rather than shell tabs.
-  static const storefrontProduct = '/s/:slug/product';
+  static const storefrontProduct = '/s/:slug/products/:productId';
   static const storefrontCheckout = '/s/:slug/checkout';
 
   // Seller portal
@@ -43,6 +52,7 @@ abstract class Routes {
   static const sellerManageVariants = '/seller/variants';
   static const sellerStoreCustomize = '/seller/store/customize';
   static const sellerStoreDesign = '/seller/store/design';
+  static const sellerStorePages = '/seller/store/pages';
   static const sellerSubscription = '/seller/subscription';
   static const sellerCustomers = '/seller/customers';
   static const sellerMarketing = '/seller/marketing';

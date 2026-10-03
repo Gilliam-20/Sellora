@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_metrics.dart';
 import '../../../data/models/store_design.dart';
+import '../../../data/models/store_page.dart';
 import 'store_builder_controller.dart';
 
 /// Editors for [SettingDef]s: one widget per [SettingKind], so every
@@ -162,7 +163,8 @@ class ImageField extends StatelessWidget {
 }
 
 /// Picks where a link goes: home, all products, a category, a section on
-/// the page, or a web address (http/https only).
+/// the page, one of the storefront's pages, or a web address (http/https
+/// only).
 class LinkPicker extends StatelessWidget {
   const LinkPicker({
     super.key,
@@ -184,6 +186,9 @@ class LinkPicker extends StatelessWidget {
     LinkKind.catalog: 'All products',
     LinkKind.category: 'A category',
     LinkKind.section: 'A section on the page',
+    LinkKind.collections: 'Collections page',
+    LinkKind.search: 'Search page',
+    LinkKind.page: 'About, contact or a policy',
     LinkKind.url: 'A web address',
   };
 
@@ -214,6 +219,9 @@ class LinkPicker extends StatelessWidget {
             LinkKind.section => sections.isEmpty
                 ? LinkTarget.catalog
                 : LinkTarget.section(sections.first.id),
+            LinkKind.collections => LinkTarget.collections,
+            LinkKind.search => LinkTarget.search,
+            LinkKind.page => LinkTarget.page(StorePageKind.about),
             LinkKind.url => LinkTarget.url('https://example.com'),
           }),
         ),
@@ -238,6 +246,22 @@ class LinkPicker extends StatelessWidget {
             ],
             onChanged: (id) {
               if (id != null) onChanged(LinkTarget.section(id));
+            },
+          ),
+        if (v?.kind == LinkKind.page)
+          DropdownButtonFormField<StorePageKind>(
+            key: ValueKey('$fieldId.page'),
+            value: StorePageKind.parse(v!.value),
+            decoration: const InputDecoration(
+                labelText: 'Page',
+                helperText: 'Write it in Store pages. Until it\'s published, '
+                    'the link says the page isn\'t available.'),
+            items: [
+              for (final k in StorePageKind.values)
+                DropdownMenuItem(value: k, child: Text(k.defaultTitle)),
+            ],
+            onChanged: (k) {
+              if (k != null) onChanged(LinkTarget.page(k));
             },
           ),
         if (v?.kind == LinkKind.url)

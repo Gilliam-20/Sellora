@@ -79,6 +79,10 @@ abstract class ProductRepository {
     int limit = 8,
   });
 
+  /// The categories [storeId]'s listed products are in, A–Z: the store's
+  /// collections until there's a collection model.
+  Future<List<String>> storeCategories(String storeId);
+
   /// All active listings across all sellers, paged like [storeProducts] —
   /// the retired shared-marketplace feed.
   Future<List<ProductModel>> storefrontFeed({

@@ -113,8 +113,17 @@ theming the product/cart/checkout pages, design history beyond draft/live.
 cart; product detail and checkout live at `/s/:slug/product` and `/s/:slug/checkout`, with checkout
 requiring sign-in at submit. The old flat `/buyer` shell is gone.
 
-Not started: collections, a `CustomerModel` reading `store_customers`, an order-detail/tracking screen,
-a multi-store switcher, search/SEO beyond the keyword/category filter.
+2026-10-04 (TODO §20): the storefront as its own site. One route per page under `/s/:slug` (see
+`Routes.storefront*` and `StorefrontPaths`); `StorefrontSession` loads the store, published design,
+pages and categories once for whichever page is opened first; `StorefrontFrame`/`StorefrontPage`
+(`lib/modules/storefront/shell/`) give every page the store's theme, header, drawer and footer. New
+pages: shop, search, collections (categories) and one collection, a deep-linkable product page, the
+cart, the order confirmation/detail page, account and order history, and the seller-written About,
+Contact and policy pages (`store_pages`, `storefront_pages`, Seller → Store pages). The tabbed buyer
+shell is deleted.
+
+Not started: a real collection model, a `CustomerModel` reading `store_customers`, a multi-store
+switcher, SEO (needs server-rendered meta tags), sign-in/register in the store's theme.
 
 ## PHASE 8 — Payments + orders: done in code, never run live
 

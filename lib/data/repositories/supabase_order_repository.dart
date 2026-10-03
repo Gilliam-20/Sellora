@@ -108,6 +108,13 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   }
 
   @override
+  Future<OrderModel?> buyerOrder(String orderId) async {
+    final row =
+        await _db.orders.select(columns).eq('id', orderId).maybeSingle();
+    return row == null ? null : OrderModel.fromMap(fromRow(row));
+  }
+
+  @override
   Future<List<OrderModel>> storeOrders(String storeId) async {
     final rows = await _db.sellerOrders
         .select(sellerColumns)
@@ -159,8 +166,8 @@ class SupabaseOrderRepository extends GetxService implements OrderRepository {
   /// order, so a buyer or another seller just sees an empty history.
   @override
   Future<List<OrderTimelineEntry>> orderTimeline(String orderId) async {
-    final rows = await _db.client
-        .rpc('order_timeline', params: {'p_order_id': orderId});
+    final rows =
+        await _db.client.rpc('order_timeline', params: {'p_order_id': orderId});
     return (rows as List)
         .map((r) =>
             OrderTimelineEntry.fromRow(Map<String, dynamic>.from(r as Map)))

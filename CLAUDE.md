@@ -167,8 +167,11 @@ store rather than global Sellora accounts, and the shared buyer feed goes away.
 
 The design is written up — see `WORKLOG.md` for the decisions, the open questions, and a link to the
 full document. What's built avoids the still-open questions (#1 buyer account scoping, #4
-multi-store-per-seller, #5 white-label depth): `StoreScope` resolves `/s/:slug`, which is now the buyer
-shell itself (`lib/modules/buyer/`; the old flat `/buyer` feed is gone), and `products`/`orders` are
+multi-store-per-seller, #5 white-label depth): every storefront page lives under
+`/s/:slug` with its own URL (`Routes.storefront*`, paths built by `StorefrontPaths`), each wrapped in
+`StorefrontFrame`/`StorefrontPage` (`lib/modules/storefront/shell/`), which loads the store, its
+published design, pages and categories through `StorefrontSession` and applies its theme. The old
+tabbed buyer shell and the flat `/buyer` feed are gone. Also `products`/`orders` are
 keyed by `store_id` in Postgres. `SELLORA_IMPLEMENTATION_PLAN.md` holds the phased plan and
 `SELLORA_SECURITY_AUDIT.md` the current audit — check them and `WORKLOG.md`'s latest entry before
 extending the model.

@@ -17,6 +17,7 @@ import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/services/currency_service.dart';
 import '../../../data/services/order_payment_provider.dart';
+import '../../storefront/shell/storefront_links.dart';
 
 class CheckoutController extends GetxController {
   final CartRepository cartRepo = Get.find<CartRepository>();
@@ -194,7 +195,9 @@ class CheckoutController extends GetxController {
   }) async {
     final user = _authRepo.cachedUser;
     if (user == null || cartRepo.items.isEmpty) return;
-    if (!Countries.resolve(address.countryCode).paymentMethods.contains(method) ||
+    if (!Countries.resolve(address.countryCode)
+            .paymentMethods
+            .contains(method) ||
         !_payments.supports(method)) {
       errorMessage.value =
           '${method.label} isn\'t available for this shipping country.';
@@ -269,21 +272,23 @@ class CheckoutController extends GetxController {
         phone: method == PaymentMethodType.mpesa
             ? Formatters.toMpesaFormat(mpesaPhone ?? '')
             : null,
-        // Back to the storefront (hash routing), not this checkout page —
-        // the cart is already cleared by then.
+        // Back to the order's page (hash routing), not this checkout
+        // page — the cart is already cleared by then.
         redirectUrl: kIsWeb
             ? Uri.base
-                .replace(fragment: '/s/${Get.parameters['slug'] ?? ''}')
+                .replace(
+                    fragment: '/s/${Get.parameters['slug'] ?? ''}/'
+                        '${StorefrontPaths.order(order.id)}')
                 .toString()
             : null,
       );
       switch (started) {
         case PaymentPromptSent():
-          _onOrderPlaced(order.code,
+          _onOrderPlaced(order,
               'Order ${order.code} placed — complete the ${method.label} prompt on your phone to finish payment.');
         case PaymentRedirect(:final url):
           await launchUrl(url, mode: LaunchMode.externalApplication);
-          _onOrderPlaced(order.code,
+          _onOrderPlaced(order,
               'Order ${order.code} placed — finish paying in the page that just opened.');
       }
     } catch (e) {
@@ -295,13 +300,15 @@ class CheckoutController extends GetxController {
     }
   }
 
-  void _onOrderPlaced(String code, String message) {
+  /// On to the order's confirmation page, which says what happens next.
+  void _onOrderPlaced(OrderModel order, String message) {
     cartRepo.clear();
     final slug = Get.parameters['slug'];
     Get.offAllNamed(
-      slug != null && slug.isNotEmpty ? '/s/$slug' : Routes.marketing,
-      arguments: {'tab': 2},
+      slug != null && slug.isNotEmpty
+          ? '/s/$slug/${StorefrontPaths.order(order.id)}'
+          : Routes.marketing,
+      arguments: {'placed': order, 'message': message},
     );
-    Get.snackbar('Order placed', message);
   }
 }

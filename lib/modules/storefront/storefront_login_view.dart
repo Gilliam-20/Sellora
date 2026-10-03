@@ -5,6 +5,7 @@ import '../../core/utils/responsive.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/common.dart';
 import '../auth/controllers/auth_controller.dart';
+import 'shell/storefront_links.dart';
 import 'store_scope.dart';
 
 /// A buyer's sign-in as a customer of one specific store — reached only
@@ -150,8 +151,8 @@ class _StorefrontLoginViewState extends State<StorefrontLoginView> {
                     const SizedBox(height: AppSpacing.lg),
                     Center(
                       child: TextButton(
-                        onPressed: () =>
-                            Get.toNamed('/s/${store.slug}/register'),
+                        onPressed: () => Get.toNamed(StorefrontPaths.keepReturn(
+                            '/s/${store.slug}/register')),
                         child: const Text('New here? Create an account'),
                       ),
                     ),

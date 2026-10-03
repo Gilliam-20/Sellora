@@ -5,6 +5,7 @@ import '../../core/utils/responsive.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/common.dart';
 import '../auth/controllers/auth_controller.dart';
+import 'shell/storefront_links.dart';
 import 'store_scope.dart';
 
 /// A buyer registers as a customer of one specific store — reached only
@@ -142,7 +143,9 @@ class _StorefrontRegisterViewState extends State<StorefrontRegisterView> {
                     const SizedBox(height: AppSpacing.md),
                     Center(
                       child: TextButton(
-                        onPressed: () => Get.offNamed('/s/${store.slug}/login'),
+                        onPressed: () => Get.offNamed(
+                            StorefrontPaths.keepReturn(
+                                '/s/${store.slug}/login')),
                         child: const Text('Already have an account? Sign in'),
                       ),
                     ),

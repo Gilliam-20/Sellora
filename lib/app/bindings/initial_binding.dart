@@ -18,6 +18,8 @@ import '../../data/repositories/supabase_product_repository.dart';
 import '../../data/repositories/supabase_store_repository.dart';
 import '../../data/repositories/store_design_repository.dart';
 import '../../data/repositories/supabase_store_design_repository.dart';
+import '../../data/repositories/store_page_repository.dart';
+import '../../data/repositories/supabase_store_page_repository.dart';
 import '../../data/repositories/supabase_subscription_repository.dart';
 import '../../data/repositories/order_repository.dart';
 import '../../data/repositories/notification_repository.dart';
@@ -32,6 +34,7 @@ import '../../data/services/intasend_service.dart';
 import '../../data/services/storage_service.dart';
 import '../../modules/storefront/store_scope.dart';
 import '../../modules/notifications/notification_center.dart';
+import '../../modules/storefront/storefront_session.dart';
 
 /// Everything the whole app needs for its entire lifetime is registered
 /// here, once, as `permanent: true` — services and every repository.
@@ -61,6 +64,8 @@ class InitialBinding extends Bindings {
     Get.put<StoreRepository>(SupabaseStoreRepository(), permanent: true);
     Get.put<StoreDesignRepository>(SupabaseStoreDesignRepository(),
         permanent: true);
+    Get.put<StorePageRepository>(SupabaseStorePageRepository(),
+        permanent: true);
     Get.put<AuthRepository>(SupabaseAuthRepository(), permanent: true);
 
     Get.put(CjDropshippingService(), permanent: true);
@@ -89,5 +94,7 @@ class InitialBinding extends Bindings {
     // registered after it.
     Get.put(StoreScope(), permanent: true);
     Get.put(NotificationCenter(), permanent: true);
+    // The storefront a visitor is in; after everything it reads.
+    Get.put(StorefrontSession(), permanent: true);
   }
 }

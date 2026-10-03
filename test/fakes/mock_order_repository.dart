@@ -63,6 +63,10 @@ class MockOrderRepository extends GetxService implements OrderRepository {
   Future<OrderModel?> sellerOrder(String orderId) async =>
       _orders.firstWhereOrNull((o) => o.id == orderId);
 
+  @override
+  Future<OrderModel?> buyerOrder(String orderId) async =>
+      _orders.firstWhereOrNull((o) => o.id == orderId);
+
   /// Notes recorded by [addOrderNote], keyed by order id.
   final Map<String, List<String>> notes = {};
 

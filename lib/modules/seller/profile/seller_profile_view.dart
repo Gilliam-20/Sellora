@@ -63,6 +63,14 @@ class SellerProfileView extends StatelessWidget {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.policy_outlined),
+              title: const Text('Store pages'),
+              subtitle: const Text('About, contact, policies'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Get.toNamed(Routes.sellerStorePages),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.storefront_outlined),
               title: const Text('Store details'),
               subtitle: const Text('Name, logo, shipping zones'),
@@ -107,8 +115,7 @@ class SellerProfileView extends StatelessWidget {
               child: const Text('Sign out'),
             ),
             const SizedBox(height: AppSpacing.sm),
-            DeleteAccountButton(
-                onDeleted: () => Get.offAllNamed(Routes.login)),
+            DeleteAccountButton(onDeleted: () => Get.offAllNamed(Routes.login)),
           ],
         ),
       ),

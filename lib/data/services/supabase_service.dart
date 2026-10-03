@@ -32,6 +32,12 @@ class SupabaseService extends GetxService {
   SupabaseQueryBuilder get storefrontDesigns =>
       client.from('storefront_designs');
 
+  /// A storefront's About, Contact and policy pages; the owner writes.
+  SupabaseQueryBuilder get storePages => client.from('store_pages');
+
+  /// Published pages of open storefronts; what buyers read. Read-only.
+  SupabaseQueryBuilder get storefrontPages => client.from('storefront_pages');
+
   /// Emails collected by a storefront's newsletter section; owner reads.
   SupabaseQueryBuilder get newsletterSubscribers =>
       client.from('newsletter_subscribers');

@@ -10,6 +10,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/product_card.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/models/store_design.dart';
+import '../../../data/models/store_page.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../storefront_controller.dart';
 import 'storefront_theme.dart';
@@ -27,6 +28,8 @@ class StorefrontRenderer extends StatefulWidget {
     this.onOpenProduct,
     this.selectedSectionId,
     this.onSelectSection,
+    this.onNavigate,
+    this.pages = const [],
   });
 
   final StorefrontController controller;
@@ -38,6 +41,14 @@ class StorefrontRenderer extends StatefulWidget {
   /// The builder outlines this section and reports taps on any section.
   final String? selectedSectionId;
   final void Function(String sectionId)? onSelectSection;
+
+  /// Follows a link to another storefront page (collections, search, an
+  /// About or policy page). Null in the builder preview, where they don't
+  /// go anywhere.
+  final void Function(LinkTarget target)? onNavigate;
+
+  /// The store's published pages, linked from the footer.
+  final List<StorePage> pages;
 
   @override
   State<StorefrontRenderer> createState() => StorefrontRendererState();
@@ -77,6 +88,10 @@ class StorefrontRendererState extends State<StorefrontRenderer> {
       case LinkKind.url:
         await launchUrl(Uri.parse(target.value),
             mode: LaunchMode.externalApplication);
+      case LinkKind.collections:
+      case LinkKind.search:
+      case LinkKind.page:
+        widget.onNavigate?.call(target);
     }
   }
 
@@ -104,7 +119,7 @@ class StorefrontRendererState extends State<StorefrontRenderer> {
     final design = widget.design;
     final pad = centeredSliverPadding(context);
     return RefreshIndicator(
-      onRefresh: widget.controller.load,
+      onRefresh: widget.controller.refreshAll,
       child: CustomScrollView(
         controller: _scroll,
         cacheExtent: 2000,
@@ -128,6 +143,7 @@ class StorefrontRendererState extends State<StorefrontRenderer> {
             child: _Footer(
                 footer: design.footer,
                 storeName: widget.controller.scope.current.value?.name ?? '',
+                pages: widget.pages,
                 onTap: (l) => openLink(l.target)),
           ),
         ],
@@ -913,9 +929,13 @@ class _RichText extends StatelessWidget {
 
 class _Footer extends StatelessWidget {
   const _Footer(
-      {required this.footer, required this.storeName, required this.onTap});
+      {required this.footer,
+      required this.storeName,
+      required this.pages,
+      required this.onTap});
   final FooterSettings footer;
   final String storeName;
+  final List<StorePage> pages;
   final void Function(StoreLink link) onTap;
 
   @override
@@ -952,6 +972,18 @@ class _Footer extends StatelessWidget {
               ],
             ),
           ],
+          if (pages.isNotEmpty)
+            Wrap(
+              spacing: AppSpacing.xs,
+              children: [
+                for (final page in pages)
+                  TextButton(
+                      onPressed: () => onTap(StoreLink(
+                          label: page.title,
+                          target: LinkTarget.page(page.kind))),
+                      child: Text(page.title)),
+              ],
+            ),
           if (footer.social.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.sm),
             Wrap(

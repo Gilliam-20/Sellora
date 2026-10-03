@@ -858,5 +858,34 @@ ok('newsletter: nor anon', (await as('anon', 'select id from newsletter_subscrib
 ok("newsletter: another seller can't delete from it", (await as(seller2, 'delete from newsletter_subscribers returning id')).rows.length === 0);
 ok('newsletter: the owner removes a subscriber', (await as(seller1, 'delete from newsletter_subscribers returning id')).rows.length === 1);
 
+// ---- 20261004000000_store_pages.sql: TODO §20.
+console.log('store pages');
+const page = (who, kind, extra = {}) => as(who,
+  'insert into store_pages (store_id, kind, title, body, email, phone) values ($1, $2, $3, $4, $5, $6)',
+  [extra.store ?? st1, kind, extra.title ?? 'Refunds', extra.body ?? 'Returns within 14 days.', extra.email ?? null, extra.phone ?? null]);
+ok('pages: nothing is public before the seller writes it', (await as('anon', 'select kind from storefront_pages where store_id = $1', [st1])).rows.length === 0);
+await page(seller1, 'refund');
+await page(seller1, 'contact', { title: 'Contact us', email: 'help@amina.co', phone: '+254 711 000000' });
+r = await as('anon', 'select kind, email from storefront_pages where store_id = $1 order by kind', [st1]);
+ok('pages: buyers read what the owner saved', r.rows.length === 2 && r.rows[0].email === 'help@amina.co', JSON.stringify(r.rows));
+ok('pages: not for another store', await throws(() => page(seller2, 'about')));
+ok('pages: a buyer cannot write one', await throws(() => page(buyer, 'about')));
+ok('pages: only the six kinds', await throws(() => page(seller1, 'cookies')));
+ok('pages: a title is required', await throws(() => page(seller1, 'about', { title: '  ' })));
+ok('pages: the body is bounded', await throws(() => page(seller1, 'terms', { body: 'x'.repeat(20001) })));
+ok('pages: contact details only on the contact page', await throws(() => page(seller1, 'about', { email: 'a@b.co' })));
+ok('pages: a malformed email is refused', await throws(() => as(seller1, "update store_pages set email = 'nope' where store_id = $1 and kind = 'contact'", [st1])));
+ok("pages: another seller can't edit them", (await as(seller2, "update store_pages set body = 'x' where store_id = $1 returning kind", [st1])).rows.length === 0);
+ok('pages: nor delete them', (await as(seller2, 'delete from store_pages where store_id = $1 returning kind', [st1])).rows.length === 0);
+ok("pages: another seller can't read them directly", (await as(seller2, 'select kind from store_pages where store_id = $1', [st1])).rows.length === 0);
+await as(seller1, "update store_pages set is_published = false where store_id = $1 and kind = 'refund'", [st1]);
+ok('pages: an unpublished page is hidden', (await as('anon', "select kind from storefront_pages where store_id = $1 and kind = 'refund'", [st1])).rows.length === 0);
+ok('pages: the owner still reads it', (await as(seller1, "select kind from store_pages where store_id = $1 and kind = 'refund'", [st1])).rows.length === 1);
+ok('pages: a page cannot be moved to another store', await throws(() => as(seller1, 'update store_pages set store_id = $2 where store_id = $1', [st1, st2])));
+await as(admin, 'update stores set is_suspended = true where id = $1', [st1]);
+ok('pages: a suspended store shows none', (await as('anon', 'select kind from storefront_pages where store_id = $1', [st1])).rows.length === 0);
+await as(admin, 'update stores set is_suspended = false where id = $1', [st1]);
+ok('pages: the owner deletes one', (await as(seller1, "delete from store_pages where store_id = $1 and kind = 'refund' returning kind", [st1])).rows.length === 1);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

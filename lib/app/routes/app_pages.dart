@@ -13,9 +13,13 @@ import '../../modules/auth/views/seller_terms_view.dart';
 import '../../modules/auth/views/role_select_view.dart';
 import '../../modules/auth/views/splash_view.dart';
 import '../../modules/buyer/buyer_binding.dart';
+import '../../modules/buyer/cart/cart_view.dart';
 import '../../modules/buyer/checkout/checkout_view.dart';
+import '../../modules/buyer/orders/buyer_orders_view.dart';
+import '../../modules/buyer/orders/order_page.dart';
 import '../../modules/buyer/product_details/product_details_view.dart';
-import '../../modules/buyer/shell/buyer_shell_view.dart';
+import '../../modules/buyer/profile/buyer_profile_view.dart';
+import '../../modules/notifications/notifications_view.dart';
 import '../../modules/marketing/marketing_controller.dart';
 import '../../modules/marketing/marketing_view.dart';
 import '../../modules/onboarding/bindings/seller_onboarding_binding.dart';
@@ -29,10 +33,15 @@ import '../../modules/seller/seller_binding.dart';
 import '../../modules/seller/shell/seller_shell_view.dart';
 import '../../modules/seller/store_customize/store_customize_view.dart';
 import '../../modules/seller/store_builder/store_builder_view.dart';
+import '../../modules/seller/store_pages/store_pages_view.dart';
 import '../../modules/seller/subscription/seller_subscription_view.dart';
+import '../../modules/storefront/pages/product_list_page.dart';
+import '../../modules/storefront/pages/store_page_view.dart';
+import '../../modules/storefront/shell/storefront_page.dart';
 import '../../modules/storefront/storefront_binding.dart';
 import '../../modules/storefront/storefront_login_view.dart';
 import '../../modules/storefront/storefront_register_view.dart';
+import '../../modules/storefront/storefront_view.dart';
 import 'app_routes.dart';
 import 'role_middleware.dart';
 
@@ -62,17 +71,75 @@ class AppPages {
         name: Routes.resetPassword,
         page: () => const ResetPasswordView(),
         binding: AuthBinding()),
-    GetPage(
-        name: Routes.authLinkError, page: () => const AuthLinkErrorView()),
+    GetPage(name: Routes.authLinkError, page: () => const AuthLinkErrorView()),
     GetPage(
       name: Routes.deleteAccount,
       page: () => const DeleteAccountView(),
       binding: DeleteAccountBinding(),
     ),
+    // ---- Storefront (TODO §20) ------------------------------------------
+    // Guest-reachable throughout: checkout, the order page and the order
+    // history ask for sign-in themselves rather than through a middleware,
+    // so a guest can still browse and fill a cart.
     GetPage(
       name: Routes.storefront,
-      page: () => const BuyerShellView(),
-      bindings: [StorefrontBinding(), BuyerBinding()],
+      page: () => const StorefrontView(),
+      binding: StorefrontBinding(),
+    ),
+    GetPage(
+      name: Routes.storefrontShop,
+      page: () => const ProductListPage(mode: ProductListMode.shop),
+    ),
+    GetPage(
+      name: Routes.storefrontSearch,
+      page: () => const ProductListPage(mode: ProductListMode.search),
+    ),
+    GetPage(
+      name: Routes.storefrontCollections,
+      page: () => const CollectionsPage(),
+    ),
+    GetPage(
+      name: Routes.storefrontCollection,
+      page: () => const ProductListPage(mode: ProductListMode.collection),
+    ),
+    GetPage(
+      name: Routes.storefrontProduct,
+      page: () => const ProductDetailsView(),
+      binding: ProductDetailsBinding(),
+    ),
+    GetPage(
+      name: Routes.storefrontCart,
+      page: () => const CartView(),
+      binding: CartBinding(),
+    ),
+    GetPage(
+      name: Routes.storefrontCheckout,
+      page: () => const CheckoutView(),
+      binding: CheckoutBinding(),
+    ),
+    GetPage(
+      name: Routes.storefrontOrder,
+      page: () => const OrderPage(),
+      binding: OrderPageBinding(),
+    ),
+    GetPage(
+      name: Routes.storefrontAccount,
+      page: () => const BuyerProfileView(),
+    ),
+    GetPage(
+      name: Routes.storefrontOrders,
+      page: () => const BuyerOrdersView(),
+      binding: BuyerOrdersBinding(),
+    ),
+    GetPage(
+      name: Routes.storefrontNotifications,
+      page: () => StorefrontFrame(
+          title: 'Notifications',
+          builder: (_, __, ___) => const NotificationsView()),
+    ),
+    GetPage(
+      name: Routes.storefrontPage,
+      page: () => const StorePageView(),
     ),
     GetPage(
       name: Routes.storefrontLogin,
@@ -90,23 +157,6 @@ class AppPages {
       page: () => const SellerOnboardingView(),
       binding: SellerOnboardingBinding(),
       middlewares: [RoleMiddleware(UserRole.seller)],
-    ),
-
-    // ---- Buyer portal ------------------------------------------------
-    // Pushed on top of the storefront shell (Routes.storefront above) —
-    // still store-scoped via the shared :slug segment, own back-stack
-    // entries. Guest-reachable for browsing/cart; CheckoutView gates its
-    // own submit step behind sign-in rather than a route middleware, since
-    // a guest should still be able to view a product and their cart.
-    GetPage(
-      name: Routes.storefrontProduct,
-      page: () => const ProductDetailsView(),
-      binding: ProductDetailsBinding(),
-    ),
-    GetPage(
-      name: Routes.storefrontCheckout,
-      page: () => const CheckoutView(),
-      binding: CheckoutBinding(),
     ),
 
     // ---- Seller portal ------------------------------------------------
@@ -144,6 +194,12 @@ class AppPages {
       name: Routes.sellerStoreDesign,
       page: () => const StoreBuilderView(),
       binding: StoreBuilderBinding(),
+      middlewares: [RoleMiddleware(UserRole.seller)],
+    ),
+    GetPage(
+      name: Routes.sellerStorePages,
+      page: () => const StorePagesView(),
+      binding: StorePagesBinding(),
       middlewares: [RoleMiddleware(UserRole.seller)],
     ),
     GetPage(

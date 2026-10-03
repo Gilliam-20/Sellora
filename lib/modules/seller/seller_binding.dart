@@ -12,6 +12,7 @@ import 'shell/seller_shell_controller.dart';
 import '../storefront/storefront_controller.dart';
 import 'store_builder/store_builder_controller.dart';
 import 'store_customize/store_customize_controller.dart';
+import 'store_pages/store_pages_controller.dart';
 import 'subscription/seller_subscription_controller.dart';
 
 class SellerBinding extends Bindings {
@@ -63,6 +64,13 @@ class StoreBuilderBinding extends Bindings {
     Get.lazyPut<StorefrontController>(
         () => StorefrontController(previewMode: true),
         tag: StoreBuilderController.previewTag);
+  }
+}
+
+class StorePagesBinding extends Bindings {
+  @override
+  void dependencies() {
+    Get.lazyPut<StorePagesController>(() => StorePagesController());
   }
 }
 

@@ -1,4 +1,5 @@
 import 'store_model.dart';
+import 'store_page.dart';
 
 /// A storefront's design (TODO §18): Store → Theme → Sections → Blocks →
 /// Settings. One document per store, stored as JSON in `store_designs`
@@ -417,16 +418,30 @@ class ThemePalette {
 // Links
 // ---------------------------------------------------------------------------
 
-enum LinkKind { home, catalog, category, section, url }
+enum LinkKind {
+  home,
+  catalog,
+  category,
+  section,
+  url,
+  collections,
+  search,
+  page
+}
 
 /// Where a button or menu item goes. Serialized as one string:
-/// `home`, `catalog`, `category:Fashion`, `section:<id>` or
-/// `url:https://...`.
+/// `home`, `catalog`, `category:Fashion`, `section:<id>`,
+/// `url:https://...`, or (TODO §20) one of the storefront's own pages:
+/// `collections`, `search`, `page:refund`.
 class LinkTarget {
   const LinkTarget._(this.kind, [this.value = '']);
 
   static const home = LinkTarget._(LinkKind.home);
   static const catalog = LinkTarget._(LinkKind.catalog);
+  static const collections = LinkTarget._(LinkKind.collections);
+  static const search = LinkTarget._(LinkKind.search);
+  factory LinkTarget.page(StorePageKind page) =>
+      LinkTarget._(LinkKind.page, page.id);
   factory LinkTarget.category(String name) =>
       LinkTarget._(LinkKind.category, name.trim());
   factory LinkTarget.section(String id) => LinkTarget._(LinkKind.section, id);
@@ -449,6 +464,10 @@ class LinkTarget {
     return switch (head) {
       'home' => home,
       'catalog' => catalog,
+      'collections' => collections,
+      'search' => search,
+      'page' when StorePageKind.parse(rest) != null =>
+        LinkTarget.page(StorePageKind.parse(rest)!),
       'category' when rest.trim().isNotEmpty => LinkTarget.category(rest),
       'section' when rest.isNotEmpty => LinkTarget.section(rest),
       'url' => url(rest),
@@ -456,9 +475,7 @@ class LinkTarget {
     };
   }
 
-  String serialize() => kind == LinkKind.home || kind == LinkKind.catalog
-      ? kind.name
-      : '${kind.name}:$value';
+  String serialize() => value.isEmpty ? kind.name : '${kind.name}:$value';
 
   /// For the editor: "Shop all", "Category: Fashion", the URL...
   String get describe => switch (kind) {
@@ -467,6 +484,10 @@ class LinkTarget {
         LinkKind.category => 'Category: $value',
         LinkKind.section => 'A section on this page',
         LinkKind.url => value,
+        LinkKind.collections => 'Collections page',
+        LinkKind.search => 'Search page',
+        LinkKind.page =>
+          StorePageKind.parse(value)?.defaultTitle ?? 'A store page',
       };
 
   @override
