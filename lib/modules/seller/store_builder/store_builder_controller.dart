@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/utils/image_data_url.dart';
 import '../../../data/models/product_model.dart';
 import '../../../data/models/store_design.dart';
+import '../../../data/models/store_theme.dart';
 import '../../../data/repositories/product_repository.dart';
 import '../../../data/repositories/store_design_repository.dart';
 import '../../../data/repositories/store_repository.dart';
@@ -23,6 +24,11 @@ class RootPanel extends BuilderPanel {
 
 class ThemePanel extends BuilderPanel {
   const ThemePanel();
+}
+
+/// The theme gallery (TODO §19), reached from [ThemePanel].
+class ThemeLibraryPanel extends BuilderPanel {
+  const ThemeLibraryPanel();
 }
 
 class AnnouncementPanel extends BuilderPanel {
@@ -50,7 +56,7 @@ class BlockPanel extends BuilderPanel {
 
 enum PreviewDevice { desktop, mobile }
 
-/// The store builder (TODO §18): edits a working copy of the store's
+/// The store builder (TODO §18, themes §19): edits a working copy of the store's
 /// design, saves it as the draft, and publishes the draft to the live
 /// storefront. The preview renders the working copy with the storefront's
 /// own renderer.
@@ -153,12 +159,16 @@ class StoreBuilderController extends GetxController {
 
   void back() => panel.value = switch (panel.value) {
         BlockPanel(:final sectionId) => SectionPanel(sectionId),
+        ThemeLibraryPanel() => const ThemePanel(),
         _ => const RootPanel(),
       };
 
   void _edit(StoreDesign Function(StoreDesign d) change) {
     final d = design.value;
-    if (d != null) design.value = change(d);
+    if (d == null) return;
+    design.value = change(d);
+    // Undoing a theme now would throw this edit away too.
+    beforeTheme.value = null;
   }
 
   // ---- Theme, announcement, menu, footer ---------------------------------
@@ -167,7 +177,42 @@ class StoreBuilderController extends GetxController {
 
   void applyPalette(ThemePalette p) => _edit((d) => d.copyWith(
       theme: d.theme.copyWith(
-          accentHex: p.accent, backgroundHex: p.background, textHex: p.text)));
+          accentHex: p.accent,
+          backgroundHex: p.background,
+          surfaceHex: p.surface,
+          textHex: p.text)));
+
+  // ---- Themes ---------------------------------------------------------------
+
+  /// The design as it was before the last [applyTheme], for [undoTheme].
+  final beforeTheme = Rxn<StoreDesign>();
+
+  StoreTheme get currentTheme =>
+      StoreTheme.byId(design.value?.themeId ?? StoreDesign.defaultThemeId);
+
+  /// The theme to suggest for this store's category.
+  StoreTheme get suggestedTheme =>
+      StoreTheme.suggestedFor(scope.current.value?.category);
+
+  /// Restyles the working copy with [theme]; with [homepage], also swaps
+  /// the homepage sections for the theme's starter layout. Nothing is
+  /// saved, and [undoTheme] puts the previous design back.
+  void applyTheme(StoreTheme theme, {bool homepage = false}) {
+    final d = design.value;
+    final store = scope.current.value;
+    if (d == null || store == null) return;
+    beforeTheme.value = d;
+    design.value = theme.applyTo(d, store: store, homepage: homepage);
+    // A section being edited may be gone.
+    if (homepage) open(const ThemePanel());
+  }
+
+  void undoTheme() {
+    final before = beforeTheme.value;
+    if (before == null) return;
+    design.value = before;
+    beforeTheme.value = null;
+  }
 
   void setAnnouncement(AnnouncementBar bar) =>
       _edit((d) => d.copyWith(announcement: bar));
@@ -433,6 +478,7 @@ class StoreBuilderController extends GetxController {
     } else if (store != null) {
       design.value = StoreDesign.starter(store);
     }
+    beforeTheme.value = null;
     open(const RootPanel());
   }
 
@@ -441,6 +487,7 @@ class StoreBuilderController extends GetxController {
     final published = record.value?.published;
     if (published == null) return;
     design.value = published;
+    beforeTheme.value = null;
     open(const RootPanel());
   }
 }

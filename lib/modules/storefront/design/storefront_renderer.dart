@@ -162,8 +162,9 @@ class StorefrontRendererState extends State<StorefrontRenderer> {
   List<Widget> _section(
       BuildContext context, StoreSection section, EdgeInsets pad) {
     final h = pad.horizontal / 2;
-    Widget boxed(Widget child, {double top = AppSpacing.lg}) => SliverPadding(
-          padding: EdgeInsets.fromLTRB(h, top, h, 0),
+    final style = StoreStyle.of(context);
+    Widget boxed(Widget child) => SliverPadding(
+          padding: EdgeInsets.fromLTRB(h, style.sectionGap, h, 0),
           sliver: SliverToBoxAdapter(child: _frame(section, child)),
         );
 
@@ -205,10 +206,12 @@ class StorefrontRendererState extends State<StorefrontRenderer> {
                 );
               }
               return SliverGrid(
-                gridDelegate: productGridDelegate(),
+                gridDelegate: productGridDelegate(
+                    childAspectRatio: style.productCard.tileAspectRatio),
                 delegate: SliverChildBuilderDelegate(
                   (context, i) => ProductCard(
                     product: products[i],
+                    style: style.productCard,
                     onTap: () => widget.onOpenProduct?.call(products[i]),
                   ),
                   childCount: products.length,
@@ -247,9 +250,10 @@ class StorefrontRendererState extends State<StorefrontRenderer> {
     final controller = widget.controller;
     final l10n = AppLocalizations.of(context);
     final h = pad.horizontal / 2;
+    final style = StoreStyle.of(context);
     return [
       SliverPadding(
-        padding: EdgeInsets.fromLTRB(h, AppSpacing.lg, h, 0),
+        padding: EdgeInsets.fromLTRB(h, style.sectionGap, h, 0),
         sliver: SliverToBoxAdapter(
           child: _frame(
             section,
@@ -332,10 +336,12 @@ class StorefrontRendererState extends State<StorefrontRenderer> {
         return SliverPadding(
           padding: EdgeInsets.fromLTRB(h, AppSpacing.md, h, AppSpacing.md),
           sliver: SliverGrid(
-            gridDelegate: productGridDelegate(),
+            gridDelegate: productGridDelegate(
+                childAspectRatio: style.productCard.tileAspectRatio),
             delegate: SliverChildBuilderDelegate(
               (context, index) => ProductCard(
                 product: items[index],
+                style: style.productCard,
                 onTap: () => widget.onOpenProduct?.call(items[index]),
               ),
               childCount: items.length,
@@ -376,7 +382,9 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (text.trim().isEmpty) return const SizedBox.shrink();
-    return Text(text, style: Theme.of(context).textTheme.headlineSmall);
+    final style = StoreStyle.of(context);
+    return Text(style.heading(text),
+        style: style.headingStyle(Theme.of(context).textTheme.headlineSmall));
   }
 }
 
@@ -482,6 +490,7 @@ class _Hero extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    final style = StoreStyle.of(context);
     final mobile = context.screenWidth < 600;
     final height = switch (section.text('height')) {
           'small' => 240.0,
@@ -495,17 +504,21 @@ class _Hero extends StatelessWidget {
     final fg = hasImage ? Colors.white : scheme.onPrimary;
     final button = section.text('buttonLabel');
 
-    return SizedBox(
-      height: height,
+    // The height is a minimum: a long name or text on a phone grows the
+    // hero rather than overflowing it.
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: height),
       child: Stack(
-        fit: StackFit.expand,
+        fit: StackFit.passthrough,
         children: [
+          Positioned.fill(
+            child: hasImage
+                ? _DesignImage(url: imageUrl)
+                : ColoredBox(color: scheme.primary),
+          ),
           if (hasImage)
-            _DesignImage(url: imageUrl, height: height)
-          else
-            ColoredBox(color: scheme.primary),
-          if (hasImage)
-            const DecoratedBox(
+            const Positioned.fill(
+                child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
@@ -513,7 +526,7 @@ class _Hero extends StatelessWidget {
                   colors: [Color(0xAA000000), Color(0x22000000)],
                 ),
               ),
-            ),
+            )),
           Padding(
             padding: EdgeInsets.symmetric(
                 horizontal: horizontal + AppSpacing.md,
@@ -524,9 +537,10 @@ class _Hero extends StatelessWidget {
                   ? CrossAxisAlignment.center
                   : CrossAxisAlignment.start,
               children: [
-                Text(section.text('heading'),
+                Text(style.heading(section.text('heading')),
                     textAlign: centered ? TextAlign.center : TextAlign.start,
-                    style: (mobile
+                    style: style
+                        .headingStyle(mobile
                             ? textTheme.headlineMedium
                             : textTheme.displaySmall)
                         ?.copyWith(color: fg)),
@@ -569,6 +583,7 @@ class _CollectionList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final radius = BorderRadius.circular(StoreStyle.of(context).smallRadius);
     final tiles = section.blocks.where(
         (b) => (b.settings['category'] as String? ?? '').trim().isNotEmpty);
     return Column(
@@ -589,12 +604,12 @@ class _CollectionList extends StatelessWidget {
                   width: width,
                   child: InkWell(
                     onTap: () => onOpen(b.settings['category'] as String),
-                    borderRadius: BorderRadius.circular(AppRadii.stub),
+                    borderRadius: radius,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(AppRadii.stub),
+                          borderRadius: radius,
                           child: AspectRatio(
                             aspectRatio: 1,
                             child: _DesignImage(
@@ -628,11 +643,12 @@ class _Banners extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final radius = StoreStyle.of(context).largeRadius;
     Widget banner(SectionBlock b) {
       final s = b.settings;
       final button = s['buttonLabel'] as String? ?? '';
       return ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadii.card),
+        borderRadius: BorderRadius.circular(radius),
         child: SizedBox(
           height: 220,
           child: Stack(
@@ -711,6 +727,7 @@ class _Testimonials extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    final style = StoreStyle.of(context);
     final quotes = section.blocks
         .where((b) => (b.settings['quote'] as String? ?? '').trim().isNotEmpty);
     return Column(
@@ -730,10 +747,12 @@ class _Testimonials extends StatelessWidget {
                 Container(
                   width: width,
                   padding: const EdgeInsets.all(AppSpacing.md),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(AppRadii.stub),
-                  ),
+                  // A flat theme tints the quote; the others use its card.
+                  decoration: style.panel(
+                      radius: style.smallRadius,
+                      color: style.cardStyle == CardStyle.flat
+                          ? scheme.primary.withValues(alpha: 0.06)
+                          : null),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -812,7 +831,7 @@ class _NewsletterState extends State<_Newsletter> {
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: scheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadii.card),
+        borderRadius: BorderRadius.circular(StoreStyle.of(context).largeRadius),
       ),
       child: Column(
         children: [

@@ -7,8 +7,10 @@ import '../../../app/theme/app_metrics.dart';
 import '../../../core/utils/color_utils.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/models/store_design.dart';
+import '../../../data/models/store_theme.dart';
 import 'setting_fields.dart';
 import 'store_builder_controller.dart';
+import 'theme_thumbnail.dart';
 
 /// The builder's side panel: whichever editor [StoreBuilderController.panel]
 /// names.
@@ -22,7 +24,8 @@ class BuilderPanelView extends GetView<StoreBuilderController> {
       if (design == null) return const SizedBox.shrink();
       return switch (controller.panel.value) {
         RootPanel() => _RootPanel(design: design),
-        ThemePanel() => _ThemePanel(theme: design.theme),
+        ThemePanel() => _ThemePanel(design: design),
+        ThemeLibraryPanel() => _ThemeLibraryPanel(design: design),
         AnnouncementPanel() => _AnnouncementPanel(bar: design.announcement),
         NavigationPanel() => _PanelScaffold(
             title: 'Menu',
@@ -169,7 +172,8 @@ class _RootPanel extends GetView<StoreBuilderController> {
         nav(
             Icons.palette_outlined,
             'Theme',
-            '${design.theme.headingFont} / ${design.theme.bodyFont}',
+            '${StoreTheme.byId(design.themeId).name} · '
+                '${design.theme.headingFont} / ${design.theme.bodyFont}',
             const ThemePanel()),
         nav(
             Icons.campaign_outlined,
@@ -283,12 +287,36 @@ class _AddSectionSheet extends GetView<StoreBuilderController> {
 // ---------------------------------------------------------------------------
 
 class _ThemePanel extends GetView<StoreBuilderController> {
-  const _ThemePanel({required this.theme});
-  final ThemeSettings theme;
+  const _ThemePanel({required this.design});
+  final StoreDesign design;
+
+  ThemeSettings get theme => design.theme;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final current = StoreTheme.byId(design.themeId);
+    Widget segmented<T>(String label, List<T> values, T selected,
+            String Function(T) name, ValueChanged<T> set) =>
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: textTheme.labelMedium),
+              const SizedBox(height: AppSpacing.xs),
+              SegmentedButton<T>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final v in values)
+                    ButtonSegment(value: v, label: Text(name(v))),
+                ],
+                selected: {selected},
+                onSelectionChanged: (v) => set(v.first),
+              ),
+            ],
+          ),
+        );
     DropdownButtonFormField<String> font(
             String label, String value, ValueChanged<String> set) =>
         DropdownButtonFormField<String>(
@@ -306,8 +334,11 @@ class _ThemePanel extends GetView<StoreBuilderController> {
 
     return _PanelScaffold(
       title: 'Theme',
-      subtitle: 'Colors, fonts and buttons across your storefront.',
+      subtitle: 'Colors, fonts and layout style across your storefront.',
       children: [
+        const _ThemeUndoBanner(),
+        _CurrentThemeCard(theme: current, design: design),
+        const SizedBox(height: AppSpacing.md),
         Text('Color palettes', style: textTheme.labelMedium),
         const SizedBox(height: AppSpacing.xs),
         Wrap(
@@ -335,6 +366,12 @@ class _ThemePanel extends GetView<StoreBuilderController> {
             fieldId: 'background',
             onChanged: (h) =>
                 controller.setTheme(theme.copyWith(backgroundHex: h))),
+        _HexField(
+            label: 'Cards and panels',
+            hex: theme.surfaceHex,
+            fieldId: 'surface',
+            onChanged: (h) =>
+                controller.setTheme(theme.copyWith(surfaceHex: h))),
         _HexField(
             label: 'Text',
             hex: theme.textHex,
@@ -365,6 +402,37 @@ class _ThemePanel extends GetView<StoreBuilderController> {
               controller.setTheme(theme.copyWith(buttonShape: s.first)),
         ),
         const SizedBox(height: AppSpacing.md),
+        segmented('Corners', CornerStyle.values, theme.corners, (v) => v.label,
+            (v) => controller.setTheme(theme.copyWith(corners: v))),
+        segmented('Cards', CardStyle.values, theme.cardStyle, (v) => v.label,
+            (v) => controller.setTheme(theme.copyWith(cardStyle: v))),
+        segmented(
+            'Product photos',
+            ImageShape.values,
+            theme.imageShape,
+            (v) => v.label,
+            (v) => controller.setTheme(theme.copyWith(imageShape: v))),
+        segmented(
+            'Space between sections',
+            SectionSpacing.values,
+            theme.spacing,
+            (v) => v.label,
+            (v) => controller.setTheme(theme.copyWith(spacing: v))),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Center the store name'),
+          value: theme.centeredHeader,
+          onChanged: (on) =>
+              controller.setTheme(theme.copyWith(centeredHeader: on)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Capital-letter headings'),
+          value: theme.uppercaseHeadings,
+          onChanged: (on) =>
+              controller.setTheme(theme.copyWith(uppercaseHeadings: on)),
+        ),
+        const SizedBox(height: AppSpacing.sm),
         ImageField(
           label: 'Favicon',
           url: theme.faviconUrl,
@@ -378,16 +446,246 @@ class _ThemePanel extends GetView<StoreBuilderController> {
     );
   }
 
-  /// Text that's hard to read on the background, by WCAG's 4.5:1.
+  /// Text that's hard to read on the background or on cards, by WCAG's
+  /// 4.5:1.
   static String? _contrastWarning(ThemeSettings t) {
-    final bg = hexToColor(t.backgroundHex), fg = hexToColor(t.textHex);
-    if (bg == null || fg == null) return null;
-    final a = bg.computeLuminance(), b = fg.computeLuminance();
-    final ratio = (a > b ? a + 0.05 : b + 0.05) / (a > b ? b + 0.05 : a + 0.05);
-    return ratio < 4.5
-        ? 'Text and background are hard to tell apart '
-            '(contrast ${ratio.toStringAsFixed(1)}:1, aim for 4.5:1).'
-        : null;
+    final fg = hexToColor(t.textHex);
+    if (fg == null) return null;
+    for (final (name, hex) in [
+      ('background', t.backgroundHex),
+      ('cards', t.surfaceHex),
+    ]) {
+      final bg = hexToColor(hex);
+      if (bg == null) continue;
+      final a = bg.computeLuminance(), b = fg.computeLuminance();
+      final ratio =
+          (a > b ? a + 0.05 : b + 0.05) / (a > b ? b + 0.05 : a + 0.05);
+      if (ratio < 4.5) {
+        return 'Text is hard to read on the $name '
+            '(contrast ${ratio.toStringAsFixed(1)}:1, aim for 4.5:1).';
+      }
+    }
+    return null;
+  }
+}
+
+/// The theme the design was styled from, with the way to the gallery and
+/// to its newer version, if there is one.
+class _CurrentThemeCard extends GetView<StoreBuilderController> {
+  const _CurrentThemeCard({required this.theme, required this.design});
+  final StoreTheme theme;
+  final StoreDesign design;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.hairline),
+        borderRadius: BorderRadius.circular(AppRadii.stub),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 7,
+            // The design's own settings: what the store looks like now.
+            child: ThemeThumbnail(settings: design.theme),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Based on ${theme.name}', style: textTheme.titleSmall),
+                Text(
+                    'Version ${design.themeVersion}. Changes below are yours '
+                    'and stay when you save.',
+                    style: textTheme.bodySmall),
+                if (StoreTheme.hasUpdate(design)) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                      '${theme.name} version ${theme.version} is out. '
+                      'Updating restyles your store and keeps your sections.',
+                      style: textTheme.bodySmall
+                          ?.copyWith(color: AppColors.cargoNavy)),
+                  TextButton(
+                    onPressed: () => controller.applyTheme(theme),
+                    child: Text('Update to version ${theme.version}'),
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.xs),
+                OutlinedButton.icon(
+                  onPressed: () => controller.open(const ThemeLibraryPanel()),
+                  icon: const Icon(Icons.style_outlined),
+                  label: const Text('Change theme'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Applied X · Undo", right after a theme is applied.
+class _ThemeUndoBanner extends GetView<StoreBuilderController> {
+  const _ThemeUndoBanner();
+
+  @override
+  Widget build(BuildContext context) => Obx(() {
+        if (controller.beforeTheme.value == null) {
+          return const SizedBox.shrink();
+        }
+        return Container(
+          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: const EdgeInsets.only(left: AppSpacing.sm),
+          decoration: BoxDecoration(
+            color: AppColors.horizonTeal.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(AppRadii.stub),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                    '${controller.currentTheme.name} applied. Not saved yet.',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ),
+              TextButton(
+                  onPressed: controller.undoTheme, child: const Text('Undo')),
+            ],
+          ),
+        );
+      });
+}
+
+/// The theme gallery: every theme's thumbnail, what it's like, and the two
+/// ways to apply it.
+class _ThemeLibraryPanel extends GetView<StoreBuilderController> {
+  const _ThemeLibraryPanel({required this.design});
+  final StoreDesign design;
+
+  @override
+  Widget build(BuildContext context) {
+    final suggested = controller.suggestedTheme;
+    return _PanelScaffold(
+      title: 'Themes',
+      subtitle: 'A theme sets colors, fonts and layout style. Your text, '
+          'photos, menu and footer stay.',
+      children: [
+        const _ThemeUndoBanner(),
+        for (final theme in StoreTheme.all)
+          _ThemeCard(
+            theme: theme,
+            current: StoreTheme.byId(design.themeId).id == theme.id,
+            suggested: theme.id == suggested.id,
+          ),
+      ],
+    );
+  }
+}
+
+class _ThemeCard extends GetView<StoreBuilderController> {
+  const _ThemeCard(
+      {required this.theme, required this.current, required this.suggested});
+  final StoreTheme theme;
+  final bool current;
+  final bool suggested;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    Widget tag(String text, Color color) => Container(
+          margin: const EdgeInsets.only(left: AppSpacing.xs),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(AppRadii.stub),
+          ),
+          child: Text(text, style: textTheme.labelSmall),
+        );
+
+    return Container(
+      key: ValueKey('theme.${theme.id}'),
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      decoration: BoxDecoration(
+        border: Border.all(
+            color: current ? AppColors.cargoNavy : AppColors.hairline,
+            width: current ? 2 : 1),
+        borderRadius: BorderRadius.circular(AppRadii.stub),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 10,
+            child: ThemeThumbnail(settings: theme.settings),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                        child: Text(theme.name, style: textTheme.titleSmall)),
+                    if (current) tag('Current', AppColors.cargoNavy),
+                    if (suggested && !current)
+                      tag('Suggested for your store', AppColors.manifestGold),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(theme.description, style: textTheme.bodySmall),
+                Text(
+                    '${theme.settings.headingFont} / '
+                    '${theme.settings.bodyFont} · v${theme.version}',
+                    style:
+                        textTheme.labelSmall?.copyWith(color: AppColors.slate)),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => controller.applyTheme(theme),
+                      child: Text(current ? 'Reset style' : 'Use this style'),
+                    ),
+                    TextButton(
+                      onPressed: () => _withHomepage(context),
+                      child: const Text('Use with its homepage'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _withHomepage(BuildContext context) async {
+    final ok = await Get.dialog<bool>(AlertDialog(
+      title: Text('Use ${theme.name} with its homepage?'),
+      content: const Text(
+          'This replaces your homepage sections with the theme\'s starter '
+          'layout, filled in with your store name, tagline and banner. Your '
+          'menu, announcement bar and footer stay. You can undo it until you '
+          'make another change, and nothing is live until you publish.'),
+      actions: [
+        TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Get.back(result: true),
+            child: const Text('Replace homepage')),
+      ],
+    ));
+    if (ok == true) controller.applyTheme(theme, homepage: true);
   }
 }
 

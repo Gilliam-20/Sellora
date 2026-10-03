@@ -98,7 +98,13 @@ Store design (`lib/modules/seller/store_builder/`) edits a draft and publishes i
 `publish_store_design()`, `storefront_designs`). A store that never published shows
 `StoreDesign.starter`: its banner as a hero, then the catalog.
 
-Still open: real collections (the collections section opens a category), multiple themes (§19),
+2026-10-04 (TODO §19): themes. `StoreTheme` (`lib/data/models/store_theme.dart`) defines General
+Store, Minimal, Modern, Fashion and Electronics in code: version, drawn thumbnail (`ThemeThumbnail`),
+settings including the new layout style (`StoreStyle` in the renderer) and a starter homepage. The
+builder's Theme panel applies one, with or without its homepage. No database change.
+
+Still open: real collections (the collections section opens a category), admin-managed themes and a
+per-store theme library,
 theming the product/cart/checkout pages, design history beyond draft/live.
 
 ## PHASE 7 — Customer storefront: core flow done

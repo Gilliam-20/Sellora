@@ -6,6 +6,81 @@ without re-deriving the reasoning.
 
 ---
 
+## 2026-10-04 — TODO §19: theme system
+
+**Status:** done in code and tested. **No migration and no Edge Function change**, so this ships with
+the web build alone. It still needs §18's `20261003000600_store_builder.sql` applied first.
+
+**Why:** user request: "work on todo phase19" (TODO.md §19 Theme system).
+
+**Where it started:** §18 gave every store one design document with a `themeId` field nobody read,
+and theme settings that covered colors, two fonts, button shape and favicon. Every storefront had the
+same layout style.
+
+**Decisions (made here, reversible):**
+- **Themes are defined in code** (`StoreTheme` in `lib/data/models/store_theme.dart`), not in a table.
+  A theme only combines settings the renderer already draws, so adding one needs no migration and
+  can't name anything the storefront can't render. Admin-managed themes (TODO §34 "themes") would
+  need a table, plus a check that every value is one the app knows.
+- **Theme model:** id, name, version, description, settings (colors, typography, buttons, layout
+  style), a starter homepage built from the store's own name, tagline and banner, and the store
+  categories it suits. **The thumbnail is drawn** from the settings (`ThemeThumbnail`: header, hero,
+  a row of cards), so it can't drift from what the theme does and there are no image assets.
+- **The five initial themes:** General Store (the §18 look, so existing designs are unchanged),
+  Minimal, Modern, Fashion and Electronics. Each passes 4.5:1 text contrast on the background and on
+  cards, and on its accent buttons. Their starter homepages hold only the store's own words, or
+  neutral headings the seller edits. They have no testimonials, offers or delivery promises, because
+  those would be made-up claims.
+- **"Multiple themes" means the platform offers several, and a store applies one.** Applying copies
+  the theme's settings into the store's design, which then belongs to the seller. Later edits to a
+  theme in code don't change anyone's storefront. Instead a higher `version` makes the builder offer
+  "Update to version N" (`StoreDesign.themeVersion`). A per-store library of several saved designs
+  (Shopify's "theme library") is not built: it needs more than one design row per store.
+- **Two ways to apply:** "Use this style" restyles and keeps every section. "Use with its homepage"
+  also replaces the homepage sections, after a confirmation. The menu, announcement bar, footer and
+  favicon always stay. Undo works until the next edit. Nothing is live until Publish.
+- **Layout style is new theme settings**, read by the renderer through a `StoreStyle` theme extension:
+  surface (card) color, corners (square/soft/rounded), cards (flat/outlined/shadow), product photo
+  shape (square/portrait/landscape), section spacing, centered header and capital-letter headings.
+  All seven are editable in Theme after applying. A document saved before today has none of them and
+  reads exactly as before: surface = background, the rest defaults, and `themeId: meridian` aliases
+  to General Store.
+- **The store's category picks a suggested theme** (fashion → Fashion, electronics → Electronics,
+  and so on), labelled in the gallery. Nothing is applied automatically.
+
+**What changed:**
+- **Model.** `StoreTheme`. `ThemeSettings` gained `surfaceHex`, `corners`, `cardStyle`, `imageShape`,
+  `spacing`, `centeredHeader` and `uppercaseHeadings` (stored under `theme.style` and
+  `theme.colors.surface`), each read defensively. `StoreDesign` gained `themeVersion`. Palettes
+  carry a surface color, so Midnight's cards are dark too.
+- **Renderer.** `StorefrontTheme` sets the surface on cards, inputs and chips, centers the app bar
+  title when asked, and adds `StoreStyle`. The renderer uses it for spacing, radii, quote panels and
+  title case. `ProductCard` takes a `ProductCardStyle`, and the grid sizes tiles for the photo shape.
+- **Builder.** Theme now opens with the current theme (thumbnail, version, update offer) and "Change
+  theme". That leads to a gallery of the five, marked Current or Suggested. Style controls follow the
+  existing color and font fields. The contrast warning now also checks text on cards.
+- **Two layout bugs fixed** that the new per-theme render tests found. Both were in §18 code, and
+  real fonts only made them rarer. A product card overflowed its tile by a few pixels with a two-line
+  title, a compare-at price and a sales count: the photo now takes the height the text leaves. A
+  "Small" hero overflowed on a phone with a two-line name and a tagline: the hero height is now a
+  minimum.
+
+**Tests:** `flutter analyze`: only the two existing infos. `flutter test`: the one failure is the
+known `seller_shell_controller_test` one. New `store_theme_test` (24): the five themes' contrast,
+fonts and publishable homepages with a JSON round trip, legacy documents, hostile style values,
+apply-keeps-content, suggestions, update offers, controller apply/undo, and every theme rendered
+with products and its thumbnail at phone and desktop widths with no layout errors.
+`flutter build web` compiles. Not looked at in a browser. Google Fonts aren't loaded in widget tests,
+so the type in each theme was only seen in code.
+
+**Not done:**
+- Admin-managed themes, and themes as data (see above).
+- A per-store theme library (several saved designs, one live).
+- Product detail, cart and checkout still render in Meridian rather than the store's theme (from §18).
+- A real screenshot thumbnail. The drawn one shows style, not the seller's photos.
+
+---
+
 ## 2026-10-03 — TODO §18: store builder
 
 **Status:** done in code and tested. **Not applied or deployed.** The new migration

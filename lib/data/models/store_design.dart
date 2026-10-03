@@ -15,6 +15,7 @@ import 'store_model.dart';
 class StoreDesign {
   const StoreDesign({
     this.themeId = defaultThemeId,
+    this.themeVersion = 1,
     this.theme = const ThemeSettings(),
     this.announcement = const AnnouncementBar(),
     this.navigation = const [],
@@ -23,12 +24,14 @@ class StoreDesign {
   });
 
   static const schemaVersion = 1;
-  static const defaultThemeId = 'meridian';
+  static const defaultThemeId = 'general';
   static const maxSections = 40;
   static const maxNavLinks = 8;
 
-  /// The theme this design started from (TODO §19 adds more than one).
+  /// The theme this design was last styled from (`StoreTheme.byId`), and
+  /// that theme's version then, so the builder can offer its updates.
   final String themeId;
+  final int themeVersion;
   final ThemeSettings theme;
   final AnnouncementBar announcement;
   final List<StoreLink> navigation;
@@ -64,6 +67,7 @@ class StoreDesign {
 
   StoreDesign copyWith({
     String? themeId,
+    int? themeVersion,
     ThemeSettings? theme,
     AnnouncementBar? announcement,
     List<StoreLink>? navigation,
@@ -72,6 +76,7 @@ class StoreDesign {
   }) =>
       StoreDesign(
         themeId: themeId ?? this.themeId,
+        themeVersion: themeVersion ?? this.themeVersion,
         theme: theme ?? this.theme,
         announcement: announcement ?? this.announcement,
         navigation: navigation ?? this.navigation,
@@ -126,7 +131,14 @@ class StoreDesign {
       sections.add(section);
     }
     return StoreDesign(
-      themeId: map['themeId'] as String? ?? defaultThemeId,
+      themeId: switch (map['themeId']) {
+        final String id when id.isNotEmpty => _clip(id, 40),
+        _ => defaultThemeId,
+      },
+      themeVersion: switch (map['themeVersion']) {
+        final int v when v > 0 => v,
+        _ => 1,
+      },
       theme: ThemeSettings.fromMap(_map(map['theme'])),
       announcement: AnnouncementBar.fromMap(_map(map['announcement'])),
       navigation: _links(map['navigation'], maxNavLinks),
@@ -138,6 +150,7 @@ class StoreDesign {
   Map<String, dynamic> toMap() => {
         'schemaVersion': schemaVersion,
         'themeId': themeId,
+        'themeVersion': themeVersion,
         'theme': theme.toMap(),
         'announcement': announcement.toMap(),
         'navigation': [for (final l in navigation) l.toMap()],
@@ -189,14 +202,85 @@ class StoreFont {
       all.any((f) => f.family == family) ? family as String : fallback;
 }
 
+/// How rounded cards, images and panels are (buttons have [ButtonShape]).
+enum CornerStyle {
+  sharp('sharp', 'Square', 0, 0),
+  soft('soft', 'Soft', 8, 4),
+  round('round', 'Rounded', 18, 6);
+
+  const CornerStyle(this.id, this.label, this.large, this.small);
+  final String id;
+  final String label;
+
+  /// Cards, banners and panels.
+  final double large;
+
+  /// Collection tiles and quotes.
+  final double small;
+
+  static CornerStyle parse(Object? id) =>
+      values.firstWhere((v) => v.id == id, orElse: () => round);
+}
+
+/// How product cards and panels sit on the page.
+enum CardStyle {
+  flat('flat', 'Flat'),
+  outlined('outlined', 'Outlined'),
+  raised('raised', 'Shadow');
+
+  const CardStyle(this.id, this.label);
+  final String id;
+  final String label;
+
+  static CardStyle parse(Object? id) =>
+      values.firstWhere((v) => v.id == id, orElse: () => flat);
+}
+
+/// The shape of product photos in grids, as width / height.
+enum ImageShape {
+  square('square', 'Square', 1),
+  portrait('portrait', 'Portrait', 3 / 4),
+  landscape('landscape', 'Landscape', 4 / 3);
+
+  const ImageShape(this.id, this.label, this.aspectRatio);
+  final String id;
+  final String label;
+  final double aspectRatio;
+
+  static ImageShape parse(Object? id) =>
+      values.firstWhere((v) => v.id == id, orElse: () => square);
+}
+
+/// The vertical gap between homepage sections.
+enum SectionSpacing {
+  compact('compact', 'Compact', 16),
+  comfortable('comfortable', 'Comfortable', 24),
+  airy('airy', 'Airy', 48);
+
+  const SectionSpacing(this.id, this.label, this.gap);
+  final String id;
+  final String label;
+  final double gap;
+
+  static SectionSpacing parse(Object? id) =>
+      values.firstWhere((v) => v.id == id, orElse: () => comfortable);
+}
+
 class ThemeSettings {
   const ThemeSettings({
     this.accentHex = defaultAccent,
     this.backgroundHex = '#FCFCFB',
+    this.surfaceHex = '#FCFCFB',
     this.textHex = '#14161F',
     this.headingFont = 'Fraunces',
     this.bodyFont = 'Inter',
     this.buttonShape = ButtonShape.pill,
+    this.corners = CornerStyle.round,
+    this.cardStyle = CardStyle.flat,
+    this.imageShape = ImageShape.square,
+    this.spacing = SectionSpacing.comfortable,
+    this.centeredHeader = false,
+    this.uppercaseHeadings = false,
     this.faviconUrl,
   });
 
@@ -205,10 +289,23 @@ class ThemeSettings {
 
   final String accentHex;
   final String backgroundHex;
+
+  /// Product cards, quotes, inputs: whatever sits on the background.
+  final String surfaceHex;
   final String textHex;
   final String headingFont;
   final String bodyFont;
   final ButtonShape buttonShape;
+  final CornerStyle corners;
+  final CardStyle cardStyle;
+  final ImageShape imageShape;
+  final SectionSpacing spacing;
+
+  /// The store name centered in the header, rather than at the start.
+  final bool centeredHeader;
+
+  /// Section titles in capitals, letter-spaced.
+  final bool uppercaseHeadings;
 
   /// Shown in the browser tab on the web storefront.
   final String? faviconUrl;
@@ -216,34 +313,59 @@ class ThemeSettings {
   ThemeSettings copyWith({
     String? accentHex,
     String? backgroundHex,
+    String? surfaceHex,
     String? textHex,
     String? headingFont,
     String? bodyFont,
     ButtonShape? buttonShape,
+    CornerStyle? corners,
+    CardStyle? cardStyle,
+    ImageShape? imageShape,
+    SectionSpacing? spacing,
+    bool? centeredHeader,
+    bool? uppercaseHeadings,
     String? faviconUrl,
     bool clearFavicon = false,
   }) =>
       ThemeSettings(
         accentHex: accentHex ?? this.accentHex,
         backgroundHex: backgroundHex ?? this.backgroundHex,
+        surfaceHex: surfaceHex ?? this.surfaceHex,
         textHex: textHex ?? this.textHex,
         headingFont: headingFont ?? this.headingFont,
         bodyFont: bodyFont ?? this.bodyFont,
         buttonShape: buttonShape ?? this.buttonShape,
+        corners: corners ?? this.corners,
+        cardStyle: cardStyle ?? this.cardStyle,
+        imageShape: imageShape ?? this.imageShape,
+        spacing: spacing ?? this.spacing,
+        centeredHeader: centeredHeader ?? this.centeredHeader,
+        uppercaseHeadings: uppercaseHeadings ?? this.uppercaseHeadings,
         faviconUrl: clearFavicon ? null : faviconUrl ?? this.faviconUrl,
       );
 
+  /// A document saved before themes (TODO §19) has no surface or style,
+  /// and reads as today's look: surface = background, the defaults.
   factory ThemeSettings.fromMap(Map<String, dynamic> map) {
     final colors = _map(map['colors']);
     final type = _map(map['typography']);
+    final style = _map(map['style']);
     const d = ThemeSettings();
+    final background = _validHex(colors['background']) ?? d.backgroundHex;
     return ThemeSettings(
       accentHex: _validHex(colors['accent']) ?? d.accentHex,
-      backgroundHex: _validHex(colors['background']) ?? d.backgroundHex,
+      backgroundHex: background,
+      surfaceHex: _validHex(colors['surface']) ?? background,
       textHex: _validHex(colors['text']) ?? d.textHex,
       headingFont: StoreFont.valid(type['heading'], d.headingFont),
       bodyFont: StoreFont.valid(type['body'], d.bodyFont),
       buttonShape: ButtonShape.parse(map['buttonShape']),
+      corners: CornerStyle.parse(style['corners']),
+      cardStyle: CardStyle.parse(style['cards']),
+      imageShape: ImageShape.parse(style['productImage']),
+      spacing: SectionSpacing.parse(style['spacing']),
+      centeredHeader: style['header'] == 'center',
+      uppercaseHeadings: style['uppercaseHeadings'] == true,
       faviconUrl: safeUrl(map['faviconUrl']),
     );
   }
@@ -254,29 +376,40 @@ class ThemeSettings {
         'colors': {
           'accent': accentHex,
           'background': backgroundHex,
+          'surface': surfaceHex,
           'text': textHex,
         },
         'typography': {'heading': headingFont, 'body': bodyFont},
         'buttonShape': buttonShape.id,
+        'style': {
+          'corners': corners.id,
+          'cards': cardStyle.id,
+          'productImage': imageShape.id,
+          'spacing': spacing.id,
+          'header': centeredHeader ? 'center' : 'left',
+          'uppercaseHeadings': uppercaseHeadings,
+        },
         'faviconUrl': faviconUrl,
       };
 }
 
 /// Ready-made color sets for the theme editor.
 class ThemePalette {
-  const ThemePalette(this.name, this.accent, this.background, this.text);
+  const ThemePalette(
+      this.name, this.accent, this.background, this.surface, this.text);
   final String name;
   final String accent;
   final String background;
+  final String surface;
   final String text;
 
   static const all = [
-    ThemePalette('Meridian', '#303F9F', '#FCFCFB', '#14161F'),
-    ThemePalette('Ink', '#14161F', '#FFFFFF', '#14161F'),
-    ThemePalette('Terracotta', '#C0573E', '#FBF6F1', '#2B1D16'),
-    ThemePalette('Forest', '#2F6B4F', '#F5F8F4', '#15231B'),
-    ThemePalette('Ocean', '#1F9E92', '#F3FAF9', '#102624'),
-    ThemePalette('Midnight', '#FFC107', '#14161F', '#F1F3F2'),
+    ThemePalette('Meridian', '#303F9F', '#FCFCFB', '#FCFCFB', '#14161F'),
+    ThemePalette('Ink', '#14161F', '#FFFFFF', '#FFFFFF', '#14161F'),
+    ThemePalette('Terracotta', '#C0573E', '#FBF6F1', '#FFFFFF', '#2B1D16'),
+    ThemePalette('Forest', '#2F6B4F', '#F5F8F4', '#FFFFFF', '#15231B'),
+    ThemePalette('Ocean', '#1F9E92', '#F3FAF9', '#FFFFFF', '#102624'),
+    ThemePalette('Midnight', '#FFC107', '#14161F', '#1F2230', '#F1F3F2'),
   ];
 }
 
