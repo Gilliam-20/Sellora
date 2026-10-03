@@ -183,6 +183,8 @@ ok('seller cannot delete plans', (await as(seller1, "delete from subscription_pl
 ok('admin deletes plans', (await as(admin, "delete from subscription_plans where id = 'premium' returning id")).rows.length === 1);
 r = (await as('anon', "select price_kes, listing_limit, order_limit, store_limit, support_level, is_popular, is_active, features from subscription_plans where id = 'growth'")).rows[0];
 ok('plans: Growth is seeded with the §16 terms', Number(r?.price_kes) === 4000 && r.listing_limit === 500 && r.order_limit === 1000 && r.store_limit === 3 && r.support_level === 'priority' && r.is_popular && r.is_active && r.features.advancedAnalytics === true, JSON.stringify(r));
+r = (await as('anon', "select listing_limit, order_limit, store_limit from subscription_plans where id = 'starter'")).rows[0];
+ok('plans: Starter is 25 listed products, 100 orders, 1 store', r?.listing_limit === 25 && r.order_limit === 100 && r.store_limit === 1, JSON.stringify(r));
 r = (await as('anon', "select listing_limit, order_limit, store_limit from subscription_plans where id = 'pro'")).rows[0];
 ok('plans: Pro is unlimited listings and orders, 10 stores', r?.listing_limit === -1 && r.order_limit === -1 && r.store_limit === 10, JSON.stringify(r));
 r = await as(admin, `update subscription_plans set listing_limit = 75, support_level = 'dedicated', is_active = false, sort_order = 5,
@@ -200,7 +202,7 @@ ok('plans: features must be an object', await throws(() => as(admin, "update sub
 ok('plans: a blank name is refused', await throws(() => as(admin, "update subscription_plans set name = '  ' where id = 'starter'")));
 ok('plans: an id that is not a slug is refused', await throws(() => as(admin, "insert into subscription_plans (id, name) values ('Big Plan!', 'Big')")));
 ok('plans: more than 12 perks are refused', await throws(() => as(admin, "update subscription_plans set perks = $1 where id = 'starter'", [Array.from({ length: 13 }, (_, i) => 'perk ' + i)])));
-await as('postgres', `update subscription_plans set listing_limit = 50, support_level = 'standard', is_active = true, sort_order = 10,
+await as('postgres', `update subscription_plans set listing_limit = 25, support_level = 'standard', is_active = true, sort_order = 10,
   features = '{"customDomain": false, "advancedAnalytics": false}' where id = 'starter'`);
 ok('client cannot write billing history', await throws(() => as(seller1, "insert into billing_history (seller_id, plan_id) values ($1, 'basic')", [S1])));
 r = await as('anon', "select rates from fx_rates where id = 'current'");

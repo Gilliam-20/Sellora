@@ -873,7 +873,7 @@ Initial suggested limits:
 
 Starter:
 
-* 50 products
+* 25 products
 * 100 orders/month
 * 1 store
 

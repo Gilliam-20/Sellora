@@ -47,7 +47,7 @@ insert into public.subscription_plans (
   listing_limit, order_limit, store_limit,
   support_level, is_popular, sort_order, features, perks)
 values
-  ('starter', 'Starter', 1300, 10, 30, 50, 100, 1,
+  ('starter', 'Starter', 1300, 10, 30, 25, 100, 1,
    'standard', false, 10,
    '{"customDomain": false, "advancedAnalytics": false}', '{}'),
   ('growth', 'Growth', 4000, 31, 30, 500, 1000, 3,

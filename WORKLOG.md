@@ -57,7 +57,7 @@ contradict the real limits, and nothing bounded a value.
 
 **Tests:** `flutter analyze` reports no new issues. `flutter test`: the one failure is the known
 `seller_shell_controller_test` one. New: `plan_config_test` (model, text, form validation, admin
-controller). `supabase npm test`: 309 RLS checks (14 new: seed, every-field edit, audit, each
+controller). `supabase npm test`: 310 RLS checks (15 new: seed, every-field edit, audit, each
 constraint), 357 Deno steps (new `retiredPlanRefusal` cases).
 
 **Not done:**
